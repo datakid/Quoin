@@ -42,7 +42,7 @@ function mask(line) {
   return { code: out, comment, open: inStr };
 }
 
-function logicalLines(text) {
+export function logicalLines(text) {
   const physical = text.split(/\r\n|\r|\n/);
   const out = [];
   const problems = [];
@@ -70,7 +70,7 @@ function logicalLines(text) {
   return { lines: out, problems };
 }
 
-function splitStatements(code) {
+export function splitStatements(code) {
   const protectedCode = code.replace(/:=/g, '\u0001');
   const parts = [];
   let depth = 0;

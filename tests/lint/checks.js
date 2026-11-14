@@ -22,10 +22,68 @@ const jsFiles = all.filter((p) => ['.js', '.mjs'].includes(extname(p)));
 const shipped = (p) => /^(index\.html|sw\.js|src\/|styles\/|manifest\.webmanifest|public\/[^/]+\.svg)/.test(rel(p));
 const srcJs = jsFiles.filter((p) => rel(p).startsWith('src/') || rel(p) === 'sw.js');
 
-function parseJs(file) {
+function parseSource(text) {
   const comments = [];
-  const ast = parse(read(file), { ecmaVersion: 'latest', sourceType: 'module', locations: true, onComment: comments, allowHashBang: true });
+  const ast = parse(text, { ecmaVersion: 'latest', sourceType: 'module', locations: true, onComment: comments, allowHashBang: true });
   return { ast, comments };
+}
+
+function parseJs(file) {
+  return parseSource(read(file));
+}
+
+const realComments = (text, comments) => comments.filter((c) => !(c.start === 0 && text.startsWith('#!')));
+
+const lineOf = (text, index) => text.slice(0, index).split('\n').length;
+
+function markerLines(text, marker) {
+  const out = [];
+  let i = text.indexOf(marker);
+  while (i >= 0) {
+    out.push(lineOf(text, i));
+    i = text.indexOf(marker, i + marker.length);
+  }
+  return out;
+}
+
+function hashCommentLines(text, { quotes }) {
+  const out = [];
+  text.split('\n').forEach((line, n) => {
+    let quote = null;
+    for (let k = 0; k < line.length; k++) {
+      const ch = line[k];
+      if (quote) {
+        if (ch === quote) quote = null;
+        continue;
+      }
+      if (quotes && (ch === '"' || ch === "'")) {
+        quote = ch;
+        continue;
+      }
+      if (ch === '#' && (k === 0 || /\s/.test(line[k - 1]))) {
+        out.push(n + 1);
+        break;
+      }
+    }
+  });
+  return out;
+}
+
+export const COMMENT_CHECKED = ['.js', '.mjs', '.css', '.html', '.svg', '.yml', '.yaml'];
+
+export function isCommentChecked(relPath) {
+  return COMMENT_CHECKED.includes(extname(relPath)) || relPath.split('/').pop() === '_headers';
+}
+
+export function commentFindings(relPath, text) {
+  const ext = extname(relPath);
+  const msg = 'comment';
+  if (ext === '.js' || ext === '.mjs') return realComments(text, parseSource(text).comments).map((c) => ({ line: c.loc.start.line, msg }));
+  if (ext === '.css') return markerLines(text, '/*').map((line) => ({ line, msg }));
+  if (ext === '.html' || ext === '.svg') return markerLines(text, '<!--').map((line) => ({ line, msg }));
+  if (ext === '.yml' || ext === '.yaml') return hashCommentLines(text, { quotes: true }).map((line) => ({ line, msg }));
+  if (relPath.split('/').pop() === '_headers') return text.split('\n').flatMap((l, n) => (l.trimStart().startsWith('#') ? [{ line: n + 1, msg }] : []));
+  return [];
 }
 
 function visit(node, fn, parent = null) {
@@ -89,14 +147,9 @@ export function runAll() {
     }
   }
 
-  for (const [f, { comments }] of parsed) for (const c of comments) add('T-LINT-1', f, c.loc.start.line, 'comment');
-  for (const f of all.filter((p) => ['.css'].includes(extname(p)))) {
-    const text = read(f);
-    const i = text.indexOf('/*');
-    if (i >= 0) add('T-LINT-1', f, text.slice(0, i).split('\n').length, 'comment');
-  }
-  for (const f of all.filter((p) => ['.html', '.svg'].includes(extname(p)) && !rel(p).startsWith('node_modules'))) {
-    if (read(f).includes('<!--')) add('T-LINT-1', f, 0, 'comment');
+  for (const [f, { comments }] of parsed) for (const c of realComments(read(f), comments)) add('T-LINT-1', f, c.loc.start.line, 'comment');
+  for (const f of all.filter((p) => !['.js', '.mjs'].includes(extname(p)) && isCommentChecked(rel(p)))) {
+    for (const c of commentFindings(rel(f), read(f))) add('T-LINT-1', f, c.line, c.msg);
   }
   for (const f of all.filter((p) => extname(p) === '.webmanifest')) {
     try {

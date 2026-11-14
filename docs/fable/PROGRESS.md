@@ -33,6 +33,17 @@ Not re-verified: the plan's §2 table (G1 to G17) has not been re-checked row by
 ### F0-02 Fable docs folder
 Result: Partly done. `01_PLAN.md` is a verbatim copy of the plan. `00_FABLE.md` is Blocked.
 
+### F0-03 Layer lint rules
+Layer: lint
+Files: tests/lint/checks.js, tests/unit/lint-rules.test.js
+Do: add T-LINT-18 (no DOM or worker globals in `src/batch`), T-LINT-19 (import direction from the plan's §5.2 table, and `resolve` never imports `execute` or `verify`) and T-LINT-20 (`btoa`, `atob`, `base64Encode`, `base64Decode` only inside `src/core`), each as an exported pure function over a path and its source. Wired into `runAll` for `src/` and `sw.js`. Nothing else in `checks.js` changed.
+Test that fails without it: eight new cases in `tests/unit/lint-rules.test.js` (17 pass with the change; 0 pass without it). A temporary file under `src/batch/resolve` was flagged by all three rules, then removed.
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: T-LINT-19 names one existing edge as allowed: `src/ui/wb/steps-panel.js` imports `matches` from `src/app/commands.js`, which the plan's table does not permit. The edge is listed in the rule rather than changed in code. Moving `matches` into a layer the UI may import is the alternative and needs the user's decision.
+Found: no use of the base64 helpers exists outside `src/core` on beta, so T-LINT-20 passes with no exceptions.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

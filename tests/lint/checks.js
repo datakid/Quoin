@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'acorn';
 
@@ -115,6 +115,67 @@ function containsThrow(node) {
   return found;
 }
 
+const LAYER_GLOBALS = ['document', 'window', 'navigator', 'localStorage', 'self', 'postMessage', 'Worker'];
+const BASE64_NAMES = ['btoa', 'atob', 'base64Encode', 'base64Decode'];
+const LAYER_TARGETS = {
+  core: ['core'],
+  batch: ['core', 'batch'],
+  workers: ['core', 'batch', 'workers'],
+  app: ['core', 'batch', 'workers', 'app', 'ui'],
+  ui: ['ui', 'core']
+};
+const UI_EDGE_ALLOWED = new Set(['src/ui/wb/steps-panel.js -> src/app/commands.js']);
+const layerOf = (p) => {
+  const m = /^src\/([^/]+)\//.exec(p);
+  return m ? m[1] : null;
+};
+
+function identifierRefs(text, names, { members }) {
+  const out = [];
+  visit(parseSource(text).ast, (n, parent) => {
+    if (n.type === 'Identifier' && names.includes(n.name)) {
+      const asProperty = parent && parent.type === 'MemberExpression' && parent.property === n && !parent.computed;
+      const asKey = parent && ['Property', 'MethodDefinition', 'PropertyDefinition'].includes(parent.type) && parent.key === n && !parent.computed;
+      if (asKey || (asProperty && !members)) return;
+      out.push({ line: n.loc.start.line, msg: n.name });
+    }
+  });
+  return out;
+}
+
+export function layerPurityFindings(relPath, text) {
+  if (!relPath.startsWith('src/batch/')) return [];
+  return identifierRefs(text, LAYER_GLOBALS, { members: false });
+}
+
+export function base64Findings(relPath, text) {
+  if (relPath.startsWith('src/core/') || !(relPath.startsWith('src/') || relPath === 'sw.js')) return [];
+  return identifierRefs(text, BASE64_NAMES, { members: true });
+}
+
+export function importDirectionFindings(relPath, text) {
+  const from = layerOf(relPath);
+  if (!from || !LAYER_TARGETS[from]) return [];
+  const out = [];
+  const check = (spec, line) => {
+    if (typeof spec !== 'string' || !spec.startsWith('.')) return;
+    const target = posix.normalize(posix.join(posix.dirname(relPath), spec));
+    const to = layerOf(target);
+    if (!to) return;
+    if (!LAYER_TARGETS[from].includes(to)) {
+      if (!UI_EDGE_ALLOWED.has(`${relPath} -> ${target}`)) out.push({ line, msg: `src/${from} -> src/${to}` });
+      return;
+    }
+    const sub = relPath.startsWith('src/batch/resolve/') ? /^src\/batch\/(execute|verify)\//.exec(target) : null;
+    if (sub) out.push({ line, msg: `src/batch/resolve -> src/batch/${sub[1]}` });
+  };
+  visit(parseSource(text).ast, (n) => {
+    if (['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration'].includes(n.type) && n.source) check(n.source.value, n.loc.start.line);
+    if (n.type === 'ImportExpression' && n.source.type === 'Literal') check(n.source.value, n.loc.start.line);
+  });
+  return out;
+}
+
 function cssBlock(text, marker) {
   const at = text.indexOf(marker);
   if (at < 0) return '';
@@ -157,6 +218,14 @@ export function runAll() {
     } catch {
       add('T-LINT-1', f, 0, 'manifest is not valid JSON');
     }
+  }
+
+  for (const f of srcJs) {
+    if (!parsed.has(f)) continue;
+    const text = read(f);
+    for (const x of layerPurityFindings(rel(f), text)) add('T-LINT-18', f, x.line, x.msg);
+    for (const x of importDirectionFindings(rel(f), text)) add('T-LINT-19', f, x.line, x.msg);
+    for (const x of base64Findings(rel(f), text)) add('T-LINT-20', f, x.line, x.msg);
   }
 
   for (const f of srcJs) {

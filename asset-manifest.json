@@ -1,5 +1,5 @@
 {
-  "version": "f08a063e14e22c16",
+  "version": "ae2e6e72c3ba4be3",
   "files": [
     "./",
     "index.html",
@@ -27,6 +27,7 @@
     "src/app/file-save.js",
     "src/app/main.js",
     "src/app/orchestrator.js",
+    "src/app/pool.js",
     "src/app/runner.js",
     "src/app/session.js",
     "src/app/theme-init.js",

@@ -91,6 +91,23 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 Counts after this task: lint 0 findings; unit 982 tests, 977 pass, 5 skipped.
 Local browser note: the bundled Chromium crashes after every second test in a spec file, so full local browser runs are not trustworthy; CI is the reference. The five new browser tests each pass when run on their own.
 
+### F0-07 Pool
+Layer: app
+Files: src/app/pool.js, tests/unit/batch-pool.test.js
+Do: `WorkerPool` with injected `createWorker`, `hardwareConcurrency`, `deviceMemory`, byte budget, acknowledgement time and timers; `poolSize` and `budgetFor` as exported functions. Workers are created on demand up to the size. Jobs are queued in `relPath` order and admitted by the byte budget at the head of the queue (a later small job never jumps ahead of a blocked larger one). A job larger than the budget runs alone. Cancel removes queued jobs and asks a running worker; a worker that has not acknowledged within 1000 ms is terminated and replaced. A worker error fails only its own job. `lease()` hands out an exclusive worker and `release({terminated})` returns or replaces it.
+Test that fails without it: `tests/unit/batch-pool.test.js`, 25 tests against a fake worker and fake timers (module missing without the change).
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- `submit` never rejects. It resolves with `{status: 'done', message}`, `{status: 'cancelled'}` or `{status: 'failed', error}`.
+- Jobs are ordered by `relPath` among jobs that are waiting at the same moment; the pool starts work on a microtask so a synchronous batch of submits is sorted before the first job starts.
+- A result that arrives after a cancel was requested is discarded and reported as cancelled.
+- A leased worker is not counted against the batch size, so a lease never makes the batch wait; the pool spawns a replacement lazily when a leased worker is terminated.
+- A job that never gets any reply is not timed out by the pool; the per-run timeout belongs to the caller (`apply` carries `limits.timeoutMs`).
+Counts after this task: lint 0 findings; unit 1007 tests, 1002 pass, 5 skipped.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

@@ -14,6 +14,7 @@ import { Workspace } from './workspace.js';
 import { queryFile, moduleFile, zipFiles, sanitizeFileName } from '../core/export/files.js';
 import { QuoinError } from '../core/errors.js';
 import { SetSession } from './set-session.js';
+import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 
@@ -153,8 +154,12 @@ export class App {
     this.faultInject = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('selfcheck') === 'fail';
     this.session = new Session();
     this.set = new SetSession();
+    this.shell = null;
     this.build();
     this.bindGlobal();
+    this.set.subscribe(() => {
+      if (!this.ws && !this.shell && this.set.state !== 'empty') this.showSet();
+    });
   }
 
   build() {
@@ -195,7 +200,33 @@ export class App {
     this.showEmpty();
   }
 
+  showSet() {
+    clear(this.mainEl);
+    this.ws = null;
+    this.zone = null;
+    this.fileBtn.hidden = true;
+    this.paletteBtn.hidden = true;
+    this.printBtn.hidden = true;
+    this.exportBtn.hidden = true;
+    this.downloadBtn.hidden = true;
+    this.fileMeta.hidden = false;
+    this.shell = new SetShell(this.mainEl, this.set, {
+      onSummary: (c) => {
+        this.fileMeta.textContent = S.setSummary(c.files, c.queries);
+        document.title = S.setTitle(c.files);
+      }
+    });
+  }
+
+  unmountShell() {
+    if (!this.shell) return;
+    this.shell.destroy();
+    this.shell = null;
+    document.title = S.appName;
+  }
+
   showEmpty(message) {
+    this.unmountShell();
     clear(this.mainEl);
     this.ws = null;
     this.fileBtn.hidden = true;
@@ -248,7 +279,7 @@ export class App {
   }
 
   refuse(text) {
-    if (this.ws) this.status.set({ alertText: text });
+    if (this.ws || this.shell) this.status.set({ alertText: text });
     else this.showEmpty(text);
   }
 
@@ -393,6 +424,7 @@ export class App {
     next.sourceHandle = handlePromise ? await handlePromise : null;
     this.session = next;
     this.settings = { ...this.settings };
+    this.unmountShell();
     clear(this.mainEl);
     this.ws = new Workspace(this.mainEl, this.session, this.settings, this.status);
     this.ws.onEdit(() => {

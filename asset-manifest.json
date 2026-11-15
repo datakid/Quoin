@@ -1,5 +1,5 @@
 {
-  "version": "c10401a9492d35f4",
+  "version": "ee8368103241e06a",
   "files": [
     "./",
     "index.html",
@@ -121,6 +121,7 @@
     "src/ui/mark.js",
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
+    "src/ui/set/shell.js",
     "src/ui/strings.js",
     "src/ui/wb/palette.js",
     "src/ui/wb/steps-panel.js",
@@ -129,6 +130,7 @@
     "styles/editor.css",
     "styles/grid.css",
     "styles/print.css",
+    "styles/set.css",
     "styles/tokens.css"
   ]
 }

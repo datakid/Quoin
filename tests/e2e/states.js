@@ -109,3 +109,39 @@ export const STATES = [
     }
   }
 ];
+
+export const SET_STATES = ['empty', 'indexing', 'ready', 'previewing', 'running', 'done', 'doneWithFailures'];
+
+export async function setUpSetState(page, state) {
+  await page.evaluate((state) => {
+    const set = window.__quoin.set;
+    const ref = (i) => ({ name: `book${i}.xlsx`, relPath: `east/book${i}.xlsx`, size: 10, lastModified: 1, file: new Blob([new Uint8Array(1)]) });
+    set.addFiles([1, 2, 3, 4].map(ref));
+    if (state === 'indexing') {
+      set.indexed('f0001', { status: 'ready', queries: [{ name: 'A' }] });
+      return;
+    }
+    if (state === 'empty') {
+      for (const f of set.list()) set.removeFile(f.id);
+      return;
+    }
+    set.indexed('f0001', { status: 'ready', queries: [{ name: 'A' }, { name: 'B' }] });
+    set.indexed('f0002', { status: 'ready', queries: [{ name: 'C' }] });
+    set.refused('f0003', 'file.encrypted');
+    set.failed('f0004', 'boom');
+    if (state === 'previewing') set.beginPreview();
+    if (state === 'running') {
+      set.beginRun(4);
+      set.setProgress(1);
+    }
+    if (state === 'done' || state === 'doneWithFailures') {
+      set.beginRun(4);
+      if (state === 'done') set.markFailed('f0004', null);
+      else set.markFailed('f0001', 'not released');
+      set.finishRun();
+    }
+  }, state);
+  await page.waitForFunction((s) => window.__quoin.set.state === s, state);
+  await page.waitForSelector('.set-shell');
+  await page.waitForFunction((s) => document.querySelector('.set-shell').dataset.state === s, state);
+}

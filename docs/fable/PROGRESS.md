@@ -155,8 +155,26 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - Intake keeps every file in a folder, including ones that are not workbooks; they appear as skipped with `file.unsupportedExtension`.
 Counts after this task: lint 0 findings; unit 1052 tests.
 
+### F0-11 Shell skeleton
+Layer: ui/set, app, styles
+Files: src/ui/set/shell.js, styles/set.css, index.html, src/app/main.js, src/ui/strings.js, tests/e2e/fable-shell.spec.js, tests/a11y/fable-shell.spec.js, tests/e2e/states.js, asset-manifest.json
+Do: once a set exists and no workbook is open, the centre of the page shows three named regions (Files, Recipe, Result) and a run bar. The top bar shows "12 files · 340 queries". The Files list shows each file's name, folder and one badge (Ready, Edited, Skipped, Failed, Indexing) with the reason for a skipped or failed file, plus a filter and a count. Recipe and Result are empty and focusable. The run bar shows a count and a native `progress` bar with no animation. An empty set reads only "Drop workbooks or a folder." The start screen is unchanged. Opening one workbook removes the shell. All strings are in `strings.js`; `document.title` reads "N files — quoin Fable" while the shell shows.
+Test that fails without it: `tests/e2e/fable-shell.spec.js` (16 tests: regions and names, summary and title, badges and reasons, filter, empty state, run-bar text and bar for each of the seven states, no animation, Tab order, narrow stacking, single drop removes the shell, a real two-file drop) and `tests/a11y/fable-shell.spec.js` (14 axe audits: seven states in two themes). All fail without the shell.
+Result: Done locally; CI result is recorded when the run finishes. Screenshots were opened and checked locally in light and dark at 1280 wide and light at 390 wide: three panes side by side, badges legible with their colours, run bar and progress visible, narrow width stacked in one column.
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Blocked within this task: new visual baselines (plan §7.6). Local Chromium renders differently from the CI runner, so a baseline made here would fail on CI, and the 36 existing baselines already fail there. Needs your decision on how baselines are generated (see Blocked).
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- The start screen and its tests are unchanged; the shell replaces it only once a set exists, and returns to the shell's own empty state if every file is removed.
+- Two new strings in the error table (`file.unsupportedExtension`, `file.lockFile`) and one for `pq.none`.
+- At narrow widths the existing top bar hides the summary text; the run bar still shows the counts.
+- Rows are not virtualised; the list renders every file. F0-13 measures this with 500 files.
+Counts after this task: lint 0 findings; unit 1052 tests.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
+- New visual baselines for the Fable shell and the existing 36 failing baselines: need a decision. Options are to generate Linux baselines on CI and review each image before accepting them, or to run visual tests only on the machine that made the baselines.
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).
   - `keyboard.spec.js:57`: the shortcut sheet is generated from the command registry and lists "Alt+Up" and "Alt+Down" as two rows; the test expects one row "Alt+Up / Alt+Down". Reproduced locally. Stale test expectation.
   - `steps-panel.spec.js:78`: after "Move and rewire", "Added Custom" is still after "Changed Type" in the editor text. Reproduced locally and on CI.

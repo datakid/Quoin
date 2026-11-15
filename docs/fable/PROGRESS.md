@@ -160,7 +160,7 @@ Layer: ui/set, app, styles
 Files: src/ui/set/shell.js, styles/set.css, index.html, src/app/main.js, src/ui/strings.js, tests/e2e/fable-shell.spec.js, tests/a11y/fable-shell.spec.js, tests/e2e/states.js, asset-manifest.json
 Do: once a set exists and no workbook is open, the centre of the page shows three named regions (Files, Recipe, Result) and a run bar. The top bar shows "12 files · 340 queries". The Files list shows each file's name, folder and one badge (Ready, Edited, Skipped, Failed, Indexing) with the reason for a skipped or failed file, plus a filter and a count. Recipe and Result are empty and focusable. The run bar shows a count and a native `progress` bar with no animation. An empty set reads only "Drop workbooks or a folder." The start screen is unchanged. Opening one workbook removes the shell. All strings are in `strings.js`; `document.title` reads "N files — quoin Fable" while the shell shows.
 Test that fails without it: `tests/e2e/fable-shell.spec.js` (16 tests: regions and names, summary and title, badges and reasons, filter, empty state, run-bar text and bar for each of the seven states, no animation, Tab order, narrow stacking, single drop removes the shell, a real two-file drop) and `tests/a11y/fable-shell.spec.js` (14 axe audits: seven states in two themes). All fail without the shell.
-Result: Done locally; CI result is recorded when the run finishes. Screenshots were opened and checked locally in light and dark at 1280 wide and light at 390 wide: three panes side by side, badges legible with their colours, run bar and progress visible, narrow width stacked in one column.
+Result: Done. CI at 593660d: browser 213 pass, 41 fail (the 36 visual and 5 non-visual baseline failures; all 30 new tests pass); unit 1052 tests, 0 fail. Screenshots were opened and checked locally in light and dark at 1280 wide and light at 390 wide: three panes side by side, badges legible with their colours, run bar and progress visible, narrow width stacked in one column.
 Fails without: yes
 Changed expectations: none
 Deviations: none
@@ -171,6 +171,9 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - At narrow widths the existing top bar hides the summary text; the run bar still shows the counts.
 - Rows are not virtualised; the list renders every file. F0-13 measures this with 500 files.
 Counts after this task: lint 0 findings; unit 1052 tests.
+
+### F0-12 Single file inside a set
+Result: Not started on purpose. Its test covers every row of Fable section 6.1, which is not available (see Blocked). Mounting today's workspace from the set touches the single-file flows, so it waits for that test.
 
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).

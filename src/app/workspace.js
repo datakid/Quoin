@@ -4,6 +4,9 @@ import { Editor } from '../ui/editor.js';
 import { Grid, cellDisplay } from '../ui/grid.js';
 import { popover, bindingDialog, differencesDialog, confirmDialog } from '../ui/dialogs.js';
 import { StepsPanel } from '../ui/wb/steps-panel.js';
+import { OutlinePanel } from '../ui/wb/outline-panel.js';
+import { outlineModule } from '../core/vba/outline.js';
+import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
 import { openProblems } from '../ui/wb/problems-dialog.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
@@ -70,7 +73,15 @@ export class Workspace {
     this.lastRunErrors = new Map();
     this.onProblems = null;
     this.stepResults = new Map();
-    this.stepsPanel = new StepsPanel(this.inspector, this.stepActions());
+    this.stepsHost = h('div', { class: 'inspector-section steps-host' });
+    this.outlineHost = h('div', { class: 'inspector-section outline-host' });
+    this.inspector.append(this.stepsHost, this.outlineHost);
+    this.stepsPanel = new StepsPanel(this.stepsHost, this.stepActions());
+    this.outlinePanel = new OutlinePanel(this.outlineHost, {
+      go: (line) => this.editor.goto(line, 1),
+      revert: (key, name) => this.revertProc(key, name, false),
+      putBack: (key, name) => this.revertProc(key, name, true)
+    });
     this.drillStack = [];
     this.lastRun = null;
     this.cachedCompare = new Map();
@@ -279,7 +290,53 @@ export class Workspace {
     if (focusName) this.stepsPanel.focusStep(focusName);
   }
 
+  moduleKindOf(item) {
+    const m = this.session.module(item.name);
+    return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
+  }
+
+  refreshOutline() {
+    if (!this.item || this.item.type !== 'module') {
+      this.outlinePanel.render(null, null, 0);
+      return;
+    }
+    const text = this.editor.getText();
+    const kind = this.moduleKindOf(this.item);
+    const outline = outlineModule(text, { moduleKind: kind });
+    const match = matchProcedures(this.session.originalText(this.item), text, kind);
+    this.outlineModel = outline;
+    const line = this.lineOfOffset(text, this.editor.caretOffset());
+    this.outlinePanel.render(outline, match, line);
+    this.updateCrumb(outline, line);
+  }
+
+  updateCrumb(outline, line) {
+    if (!this.item || this.item.type !== 'module') return;
+    const m = this.session.module(this.item.name);
+    const p = outline.procedures.find((x) => line >= x.startLine && line <= x.endLine);
+    this.meta.textContent = p ? `${m ? m.kind : ''} \u203a ${p.name}` : m ? m.kind : '';
+  }
+
+  revertProc(key, name, putBack) {
+    if (!this.item || this.item.type !== 'module') return;
+    const res = revertProcedure(this.session.originalText(this.item), this.editor.getText(), key, this.moduleKindOf(this.item));
+    if (!res.ok) {
+      this.outlinePanel.announce(res.reason);
+      return;
+    }
+    this.editor.replaceDiff(res.text);
+    this.refreshOutline();
+    this.outlinePanel.announce((putBack ? S.outline.done.putBack : S.outline.done.revert)(name));
+  }
+
   syncCaretStep() {
+    if (this.item && this.item.type === 'module') {
+      const text = this.editor.getText();
+      const line = this.lineOfOffset(text, this.editor.caretOffset());
+      if (this.outlineModel) this.updateCrumb(this.outlineModel, line);
+      this.refreshOutline();
+      return;
+    }
     if (!this.stepsModel || this.item === null || this.item.type !== 'query') return;
     const name = this.caretStep(this.stepsModel);
     if (name !== this.stepsPanel.caret) this.stepsPanel.render(this.stepsModel, name);
@@ -618,7 +675,9 @@ export class Workspace {
     const isQuery = item.type === 'query';
     this.main.classList.toggle('is-vba', !isQuery);
     this.root.dataset.kind = isQuery ? 'query' : 'vba';
-    this.inspectorToggle.hidden = !isQuery;
+    this.inspectorToggle.hidden = false;
+    this.inspectorToggle.textContent = isQuery ? S.stepsPanel.toggle : S.outline.title;
+    this.inspectorToggle.setAttribute('aria-label', isQuery ? S.stepsPanel.toggleAria : S.outline.toggleAria);
     this.stepResults = new Map();
     this.runbar.hidden = !isQuery;
     this.resultPanel.hidden = !isQuery;
@@ -628,6 +687,7 @@ export class Workspace {
     this.editor.setLabel(S.editorAriaFor(isQuery ? S.editorAria : S.moduleAria, item.name));
     this.editor.setText(s.textOf(item));
     this.refreshSteps();
+    this.refreshOutline();
     this.editor.setError(null);
     const ed = isQuery ? s.queryEditable() : s.moduleEditable(item.name);
     this.editor.setReadOnly(!ed.editable);
@@ -663,6 +723,7 @@ export class Workspace {
     if (this.item) this.lastRunErrors.delete(this.item.name);
     this.stepsTimer = setTimeout(() => {
       this.refreshSteps();
+      this.refreshOutline();
       this.paintStatuses();
     }, 150);
     this.scheduleProblems(300);

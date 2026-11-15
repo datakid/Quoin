@@ -1,5 +1,5 @@
 {
-  "version": "d572abcda8f23903",
+  "version": "ce1e29c425d3321f",
   "files": [
     "./",
     "index.html",
@@ -85,6 +85,7 @@
     "src/core/vba/outline.js",
     "src/core/vba/ovba-compress.js",
     "src/core/vba/ovba-decompress.js",
+    "src/core/vba/proc-diff.js",
     "src/core/vba/project-stream.js",
     "src/core/vba/refs.js",
     "src/core/vba/structure.js",
@@ -119,6 +120,7 @@
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
     "src/ui/strings.js",
+    "src/ui/wb/outline-panel.js",
     "src/ui/wb/palette.js",
     "src/ui/wb/problems-dialog.js",
     "src/ui/wb/steps-panel.js",

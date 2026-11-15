@@ -296,6 +296,28 @@ export const S = {
     toggle: 'Steps',
     toggleAria: 'Show or hide the steps panel'
   },
+  outline: {
+    title: 'Outline',
+    aria: 'Outline of the open macro module',
+    options: 'Options',
+    declarations: 'Declarations',
+    procedures: 'Procedures',
+    removed: 'Removed procedures',
+    empty: 'This module has no procedures.',
+    edited: 'Edited',
+    added: 'Added',
+    private: 'Private',
+    toggleAria: 'Show or hide the outline',
+    entry: 'Entry point',
+    event: 'Event',
+    revert: 'Revert this procedure',
+    putBack: 'Put back',
+    kind: { sub: 'Sub', function: 'Function', 'property-get': 'Property Get', 'property-let': 'Property Let', 'property-set': 'Property Set' },
+    decl: { dim: 'Variable', const: 'Constant', type: 'Type', enum: 'Enum', declare: 'Declare', event: 'Event' },
+    params: (n) => (n === 1 ? '1 parameter' : `${n} parameters`),
+    done: { revert: (n) => `Reverted ${n}.`, putBack: (n) => `Put back ${n}.` },
+    problemsHint: 'Problems'
+  },
   problems: {
     title: 'Problems',
     count: (n) => `Problems ${n}`,

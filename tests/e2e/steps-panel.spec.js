@@ -20,7 +20,7 @@ test('T-WB-14: the panel lists the steps with kinds, follows the caret and jumps
   await expect(rows.nth(1)).toContainText('Changed Type');
   await expect(rows.nth(1)).toContainText('Types');
   await expect(rows.nth(2)).toContainText('Added Custom');
-  await expect(page.locator('.panel-head .count-pill')).toHaveText('3');
+  await expect(page.locator('.steps-host .panel-head .count-pill')).toHaveText('3');
   await rows.nth(2).click();
   const line = await page.evaluate(() => {
     const ta = document.querySelector('.editor-wrap textarea');
@@ -99,7 +99,7 @@ test('T-WB-14: a refused edit says why and changes nothing', async ({ page }) =>
   const before = await editorText(page);
   await page.locator('.step-row').nth(0).focus();
   await page.keyboard.press('Alt+Shift+ArrowDown');
-  await expect(page.locator('.steps-live')).toContainText('source');
+  await expect(page.locator('.steps-host .steps-live')).toContainText('source');
   await page.keyboard.press('Delete');
   expect(await editorText(page)).toBe(before);
 });
@@ -117,7 +117,7 @@ test('T-WB-14: Evaluate steps shows a status and row count for every step and a 
   expect(await page.locator('.grid-hcell .hname').allTextContents()).toEqual(['Name', 'Age', 'DateTimeGenerated']);
 });
 
-test('T-WB-14: the panel hides for a macro and the toggle shortcut collapses and restores it', async ({ page }) => {
+test('T-WB-14: the panel swaps for the outline on a macro and the toggle shortcut collapses and restores it', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await openApp(page);
   await loadFile(page, ext('pq_vba_complex.xlsm'));
@@ -128,5 +128,7 @@ test('T-WB-14: the panel hides for a macro and the toggle shortcut collapses and
   await page.keyboard.press('Control+Alt+b');
   await expect(page.locator('.inspector')).toBeVisible();
   await page.locator('[role=treeitem][data-type=module]').first().click();
-  await expect(page.locator('.inspector')).toBeHidden();
+  await expect(page.locator('.inspector')).toBeVisible();
+  await expect(page.locator('.steps-host')).toBeHidden();
+  await expect(page.locator('.outline-host')).toBeVisible();
 });

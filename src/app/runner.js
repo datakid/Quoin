@@ -1,9 +1,12 @@
 import { DEFAULT_LIMITS } from '../core/limits.js';
+import { sharedPool } from './pool.js';
 
 const GRACE_MS = 2000;
 
 export class Runner {
-  constructor() {
+  constructor(pool = sharedPool()) {
+    this.pool = pool;
+    this.lease = null;
     this.worker = null;
     this.seq = 0;
     this.handlers = new Map();
@@ -13,7 +16,8 @@ export class Runner {
 
   ensure() {
     if (this.worker) return;
-    this.worker = new Worker(new URL('../workers/m-worker.js', import.meta.url), { type: 'module' });
+    this.lease = this.pool.lease();
+    this.worker = this.lease.worker;
     this.worker.onmessage = (ev) => {
       const m = ev.data;
       const h = this.handlers.get(m.id);
@@ -24,8 +28,15 @@ export class Runner {
       for (const h of this.handlers.values()) h({ type: 'result', status: 'internal', message: ev.message || 'worker error' });
       this.handlers.clear();
       this.worker = null;
+      this.releaseLease();
       this.runId = null;
     };
+  }
+
+  releaseLease() {
+    if (!this.lease) return;
+    this.lease.release({ terminated: true });
+    this.lease = null;
   }
 
   get running() {
@@ -120,6 +131,7 @@ export class Runner {
     this.generation++;
     if (this.worker) this.worker.terminate();
     this.worker = null;
+    this.releaseLease();
     for (const h of this.handlers.values()) h(result);
     this.handlers.clear();
     this.runId = null;

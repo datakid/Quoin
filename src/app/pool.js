@@ -214,3 +214,17 @@ export class WorkerPool {
     this.slots = [];
   }
 }
+
+let shared = null;
+
+export function sharedPool() {
+  if (!shared) {
+    const nav = globalThis.navigator || {};
+    shared = new WorkerPool({
+      createWorker: () => new Worker(new URL('../workers/m-worker.js', import.meta.url), { type: 'module' }),
+      hardwareConcurrency: nav.hardwareConcurrency,
+      deviceMemory: nav.deviceMemory
+    });
+  }
+  return shared;
+}

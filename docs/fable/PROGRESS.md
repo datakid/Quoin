@@ -108,6 +108,17 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - A job that never gets any reply is not timed out by the pool; the per-run timeout belongs to the caller (`apply` carries `limits.timeoutMs`).
 Counts after this task: lint 0 findings; unit 1007 tests, 1002 pass, 5 skipped.
 
+### F0-08 Runner leases from the pool
+Layer: app
+Files: src/app/runner.js, src/app/pool.js, tests/unit/runner-lease.test.js, asset-manifest.json
+Do: `Runner` takes an optional pool (default: a shared pool built from `navigator.hardwareConcurrency` and `navigator.deviceMemory`). `ensure()` leases a worker instead of creating one, and `stop()` and a worker error terminate it and return the lease so the pool replaces it. Nothing else in `Runner` changed, and `new Runner()` still works everywhere it is used.
+Test that fails without it: `tests/unit/runner-lease.test.js`, 7 tests (6 fail with the old `Runner`): one worker leased on first use, reused afterwards, stop and worker error release it, a fresh one is leased next, terminating it leaves a batch job on another worker untouched, two runners hold two workers.
+Result: Done. Existing runner specs `T-B-08` and `T-B-09` pass locally; the full browser suite is compared on CI below.
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Counts after this task: lint 0 findings; unit 1014 tests, 1009 pass, 5 skipped.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

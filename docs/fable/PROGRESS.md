@@ -137,6 +137,24 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - Preview is not required before a run in the session; whether Get needs a fresh Preview is a rule for the run-bar task.
 Counts after this task: lint 0 findings; unit 1036 tests.
 
+### F0-10 Intake
+Layer: app
+Files: src/app/intake.js, src/app/main.js, src/batch/index/file-index.js, src/ui/strings.js, tests/unit/intake.test.js, tests/e2e/fable-intake.spec.js, tests/e2e/drop.spec.js, tests/e2e/helpers.js, asset-manifest.json
+Do: a dropped folder is read recursively (entries are read until the reader returns nothing), a multi-file drop and a hidden `<input type="file" webkitdirectory multiple>` (reachable through `chooseFolder()`) build the file list with `relPath` taken from `fullPath` or `webkitRelativePath`, sorted by plain code-unit order. With no workbook open, two or more files or any folder create a set (`window.__quoin.set`) and every file is indexed through the shared pool; files refused by name (lock files, unsupported extensions) are skipped on the main thread without reading their bytes. A single dropped workbook opens the workspace exactly as before. `refusalByName` was extracted from `indexWorkbook` so both use one rule.
+Test that fails without it: `tests/unit/intake.test.js` (16 tests, module missing without the change) and `tests/e2e/fable-intake.spec.js` (6 tests: folder tree with badges and query counts, unreadable workbooks keep their reasons, adding to a set and ignoring a repeat, a lone workbook still opens, the folder input, sixty files through a bounded pool).
+Result: Done locally; CI result is recorded when the run finishes.
+Fails without: yes
+Changed expectations (named by the plan, both in `tests/e2e/drop.spec.js`):
+- T-B-16 "two files dropped open nothing and say so" is now "two files dropped create a set of two". It no longer expects "Drop one workbook."; it expects a set holding `a.xlsx` and `b.xlsx` and no workspace.
+- T-B-16 "a dropped folder is named as a folder" is now "a dropped folder creates a set". It no longer expects "That is a folder."; it expects a set holding `folder/a.xlsx`.
+- Unchanged on purpose: "a bad drop while a workbook is open keeps the session and reports in the alert region" still expects "Drop one workbook." because the plan does not name it. With a workbook open, a folder or multi-file drop is still refused as before, so unsaved edits are never replaced.
+Deviations: `tests/e2e/helpers.js` gained `dropTree`, `setSnapshot` and `waitForSet`, and `src/batch/index/file-index.js` gained one exported function; `indexPending` lives in `intake.js` rather than a separate module.
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- There is no visible set UI until F0-11; until then the set is inspected through `window.__quoin.set`.
+- Dropping onto a running or choosing set is refused with a new string (`setBusy`); a folder that could not be fully read reports a count through `unreadableItems`.
+- Intake keeps every file in a folder, including ones that are not workbooks; they appear as skipped with `file.unsupportedExtension`.
+Counts after this task: lint 0 findings; unit 1052 tests.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

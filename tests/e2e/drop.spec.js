@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { ext, fx, openApp, loadFile } from './helpers.js';
+import { ext, fx, openApp, loadFile, dropTree, setSnapshot, waitForSet } from './helpers.js';
 
 const b64 = (file) => readFileSync(file).toString('base64');
 
@@ -24,17 +24,19 @@ async function drop(page, files, { entries = null, target = 'window' } = {}) {
 
 const message = (page) => page.locator('.empty .message, #alert').first();
 
-test('T-B-16: two files dropped open nothing and say so', async ({ page }) => {
+test('T-B-16: two files dropped create a set of two', async ({ page }) => {
   await openApp(page);
   await drop(page, [{ name: 'a.xlsx', data: b64(ext('pq_simple.xlsx')) }, { name: 'b.xlsx', data: b64(ext('pq_simple.xlsx')) }]);
-  await expect(page.locator('.empty .message')).toHaveText('Drop one workbook.');
+  await waitForSet(page);
+  expect((await setSnapshot(page)).files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx']);
   await expect(page.locator('.workspace')).toHaveCount(0);
 });
 
-test('T-B-16: a dropped folder is named as a folder', async ({ page }) => {
+test('T-B-16: a dropped folder creates a set', async ({ page }) => {
   await openApp(page);
-  await drop(page, [{ name: 'folder', data: '' }], { entries: [{ isDirectory: true }] });
-  await expect(page.locator('.empty .message')).toHaveText('That is a folder.');
+  await dropTree(page, [{ name: 'folder', children: [{ name: 'a.xlsx', data: b64(ext('pq_simple.xlsx')) }] }]);
+  await waitForSet(page);
+  expect((await setSnapshot(page)).files.map((f) => f.relPath)).toEqual(['folder/a.xlsx']);
 });
 
 test('T-B-16: an unsupported extension names the supported ones', async ({ page }) => {

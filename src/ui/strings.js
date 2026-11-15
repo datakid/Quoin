@@ -219,6 +219,8 @@ export const S = {
   cancelled: 'Cancelled.',
   dropOne: 'Drop one workbook.',
   dropFolder: 'That is a folder.',
+  setBusy: 'Files can be added when nothing is running.',
+  unreadableItems: (n) => `${n} ${n === 1 ? 'item' : 'items'} could not be read.`,
   dropType: 'quoin opens .xlsx, .xlsm, .xltx and .xltm files.',
   reasonLabel: 'Reason: ',
   messageLabel: 'Message: ',

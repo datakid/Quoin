@@ -53,3 +53,51 @@ export async function saveDownload(page, clickTarget, path) {
   await dl.saveAs(path);
   return dl.suggestedFilename();
 }
+
+export async function dropTree(page, nodes) {
+  await page.evaluate((nodes) => {
+    const toEntry = (node, parent) => {
+      const fullPath = `${parent}/${node.name}`;
+      if (node.children) {
+        const kids = node.children.map((c) => toEntry(c, fullPath));
+        return {
+          isFile: false,
+          isDirectory: true,
+          name: node.name,
+          fullPath,
+          createReader() {
+            let done = false;
+            return {
+              readEntries: (ok) => {
+                if (done) ok([]);
+                else {
+                  done = true;
+                  ok(kids);
+                }
+              }
+            };
+          }
+        };
+      }
+      const bin = Uint8Array.from(atob(node.data), (c) => c.charCodeAt(0));
+      return { isFile: true, isDirectory: false, name: node.name, fullPath, file: (ok) => ok(new File([bin], node.name)) };
+    };
+    const entries = nodes.map((n) => toEntry(n, ''));
+    const dt = new DataTransfer();
+    for (const n of nodes) dt.items.add(new File(n.children ? [] : [new Uint8Array(1)], n.name));
+    const carrier = { files: dt.files, items: entries.map((e) => ({ kind: 'file', webkitGetAsEntry: () => e })), types: ['Files'] };
+    const ev = new DragEvent('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: carrier });
+    window.dispatchEvent(ev);
+  }, nodes);
+}
+
+export const setSnapshot = (page) =>
+  page.evaluate(() => ({
+    state: window.__quoin.set.state,
+    move: window.__quoin.set.move,
+    files: window.__quoin.set.list().map((f) => ({ id: f.id, relPath: f.relPath, name: f.name, size: f.size, status: f.status, badge: f.badge, skipReason: f.skipReason, error: f.error, queries: f.index ? f.index.queries.map((q) => q.name) : null })),
+    counts: window.__quoin.set.counts()
+  }));
+
+export const waitForSet = (page, state = 'ready') => page.waitForFunction((s) => window.__quoin && window.__quoin.set.state === s, state, { timeout: 45000 });

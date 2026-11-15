@@ -56,9 +56,15 @@ async function modulesOf(wb) {
   return out;
 }
 
+export function refusalByName(name) {
+  if (name.startsWith('~$')) return 'file.lockFile';
+  if (!SUPPORTED_EXTENSION.test(name)) return 'file.unsupportedExtension';
+  return null;
+}
+
 export async function indexWorkbook(bytes, meta, { limits = DEFAULT_LIMITS } = {}) {
-  if (meta.name.startsWith('~$')) return refusedIndex(meta, 'file.lockFile');
-  if (!SUPPORTED_EXTENSION.test(meta.name)) return refusedIndex(meta, 'file.unsupportedExtension');
+  const byName = refusalByName(meta.name);
+  if (byName) return refusedIndex(meta, byName);
   let wb;
   try {
     wb = await openWorkbook(bytes, meta.name, limits);

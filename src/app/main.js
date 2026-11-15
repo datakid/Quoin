@@ -13,6 +13,9 @@ import { Session } from './session.js';
 import { Workspace } from './workspace.js';
 import { queryFile, moduleFile, zipFiles, sanitizeFileName } from '../core/export/files.js';
 import { QuoinError } from '../core/errors.js';
+import { SetSession } from './set-session.js';
+import { sharedPool } from './pool.js';
+import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
 
@@ -149,6 +152,7 @@ export class App {
     this.settings = { ...DEFAULTS, theme: loadTheme() };
     this.faultInject = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).get('selfcheck') === 'fail';
     this.session = new Session();
+    this.set = new SetSession();
     this.build();
     this.bindGlobal();
   }
@@ -173,6 +177,12 @@ export class App {
       if (this.input.files && this.input.files[0]) this.openFile(this.input.files[0]);
       this.input.value = '';
     });
+    this.folderInput = h('input', { type: 'file', class: 'sr-only', multiple: true, webkitdirectory: true, tabindex: -1, 'aria-hidden': 'true' });
+    this.folderInput.addEventListener('change', () => {
+      const refs = filesFromInput(this.folderInput.files || []);
+      this.folderInput.value = '';
+      this.addToSet(refs);
+    });
     this.mainEl = h('main', { class: 'content' });
     this.mainEl.style.minHeight = '0';
     this.mainEl.style.display = 'grid';
@@ -180,7 +190,7 @@ export class App {
     this.alertEl = h('div', { class: 'status-alert', id: 'alert', role: 'alert' });
     this.barEl = h('div', { class: 'statusbar' }, this.statusEl, this.alertEl);
     this.status = new Status(this.statusEl, this.alertEl);
-    this.root.append(this.input, this.topbar, this.mainEl, this.barEl);
+    this.root.append(this.input, this.folderInput, this.topbar, this.mainEl, this.barEl);
     this.root.classList.add('app');
     this.showEmpty();
   }
@@ -246,12 +256,35 @@ export class App {
     if (!dt) return;
     const first = dt.items && dt.items[0];
     const handle = first && typeof first.getAsFileSystemHandle === 'function' ? first.getAsFileSystemHandle().catch(() => null) : null;
-    const files = [...(dt.files || [])];
-    const items = [...(dt.items || [])];
-    const folder = items.some((it) => it.kind === 'file' && typeof it.webkitGetAsEntry === 'function' && (it.webkitGetAsEntry() || {}).isDirectory);
-    if (folder) this.refuse(S.dropFolder);
-    else if (files.length > 1) this.refuse(S.dropOne);
-    else if (files.length === 1) this.openFile(files[0], handle);
+    const snapshot = snapshotDrop(dt);
+    const files = snapshot.files;
+    if (this.ws) {
+      if (hasFolder(snapshot)) this.refuse(S.dropFolder);
+      else if (files.length > 1) this.refuse(S.dropOne);
+      else if (files.length === 1) this.openFile(files[0], handle);
+    } else if (files.length === 1 && !hasFolder(snapshot)) this.openFile(files[0], handle);
+    else if (files.length > 0 || hasFolder(snapshot)) this.collectIntoSet(snapshot);
+  }
+
+  async collectIntoSet(snapshot) {
+    const { files, unreadable } = await collectFiles(snapshot);
+    this.addToSet(files, unreadable);
+  }
+
+  addToSet(refs, unreadable = []) {
+    if (!refs.length && !unreadable.length) return;
+    try {
+      this.set.addFiles(refs);
+    } catch {
+      this.status.set({ alertText: S.setBusy });
+      return;
+    }
+    if (unreadable.length) this.status.set({ alertText: S.unreadableItems(unreadable.length) });
+    indexPending(this.set, sharedPool());
+  }
+
+  chooseFolder() {
+    this.folderInput.click();
   }
 
   async openPrint() {

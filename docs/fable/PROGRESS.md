@@ -56,6 +56,24 @@ Deviations: none
 Decisions made inside the plan's gaps: an applied message must own its whole buffer (offset 0, full length) so transferring it cannot detach other views; `sha256` is required, lower case, 64 characters whenever bytes are present; `now` must be an ISO UTC string.
 Counts after this task: lint 0 findings; unit 959 tests, 954 pass, 5 skipped.
 
+### F0-05 File index
+Layer: batch/index
+Files: src/batch/index/file-index.js, src/batch/index/refusal.js, src/batch/index/hash.js, tests/unit/batch-index.test.js
+Do: `indexWorkbook(bytes, {id, name, relPath, size}, {limits})` returns a FileIndex with exactly the keys in §5.3, built from `openWorkbook`; `refusalFor(error)` and `REFUSAL_CODES`; `sha256Text(text)` (UTF-8, lower case hex). A name starting with `~$` gives `file.lockFile` and any name not ending in .xlsx, .xlsm, .xltx or .xltm gives `file.unsupportedExtension`, both before any bytes are read.
+Test that fails without it: `tests/unit/batch-index.test.js`, 15 tests over every `.xlsx` and `.xlsm` fixture in `tests/fixtures/workbooks` and `external`, the refusal mapping, hashes against the session's own comparison text, determinism and structured clone.
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- A name ending in `.xls` or `.xlsb` is refused as `file.unsupportedExtension`, as the task card says; `file.xls` and `file.xlsb` only appear when a file with a supported name has those contents.
+- `refusalFor` maps `limit.*` errors to `file.tooLarge`, `zip.encrypted` to `file.encrypted`, and every other Quoin error to `file.notWorkbook`. An error that is not a Quoin error is not mapped and `indexWorkbook` rethrows it, so a worker-level handler must catch it per file.
+- `pq.reason` is `pq.none` for a workbook with no query data. This code is new and needs a string when strings are added; `pq.format` is kept for query data Quoin does not write, as the session does today.
+- A table's `name` is its display name. A query `load` keeps only `kind`, and for tables `sheet`, `ref` and `tableName`; the model flag is dropped.
+- A module whose text could not be decoded has `hash: null`.
+- `nonEmpty` is always `null`; filling it belongs to the inspect step.
+Counts after this task: lint 0 findings; unit 974 tests.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

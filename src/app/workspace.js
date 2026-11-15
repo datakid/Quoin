@@ -4,6 +4,10 @@ import { Editor } from '../ui/editor.js';
 import { Grid, cellDisplay } from '../ui/grid.js';
 import { popover, bindingDialog, differencesDialog, confirmDialog } from '../ui/dialogs.js';
 import { StepsPanel } from '../ui/wb/steps-panel.js';
+import { openProblems } from '../ui/wb/problems-dialog.js';
+import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
+import { sourcesOfSection } from '../core/wb/sources.js';
+import { supportedNames } from '../core/wb/lib-names.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, duplicateStep } from '../core/wb/let-edit.js';
 import { parseExpressionText, MParseError } from '../core/m/parser.js';
@@ -61,6 +65,10 @@ export class Workspace {
       }
     });
     this.orchestrator.on((e) => this.onBatchEvent(e));
+    this.problemRows = [];
+    this.problemsRun = 0;
+    this.lastRunErrors = new Map();
+    this.onProblems = null;
     this.stepResults = new Map();
     this.stepsPanel = new StepsPanel(this.inspector, this.stepActions());
     this.drillStack = [];
@@ -148,7 +156,55 @@ export class Workspace {
     this.splitterSetup();
   }
 
+  scheduleProblems(delay) {
+    clearTimeout(this.problemsTimer);
+    this.problemsTimer = setTimeout(() => this.computeProblems(), delay);
+  }
+
+  computeProblems() {
+    const run = ++this.problemsRun;
+    const s = this.session;
+    const index = this.orchestrator.refresh();
+    const text = s.currentSectionText();
+    const modules = s.modules.map((m) => ({ name: m.name, kind: m.kind, text: s.textOf({ type: 'module', name: m.name }) }));
+    this.libNames = this.libNames || supportedNames();
+    const ctx = { sectionText: text, index, sources: sourcesOfSection(text), libNames: this.libNames, bound: new Set(s.bindings.keys()), lastRun: this.lastRunErrors, validate: (mod) => s.validateModule(mod.name, mod.text) };
+    const jobs = [...index.members.map((m) => () => problemsForQuery(m.name, ctx)), ...modules.map((m) => () => problemsForModule(m, ctx))];
+    const order = new Map([...index.members.map((m) => m.name), ...modules.map((m) => m.name)].map((n, i) => [n, i]));
+    const rows = [];
+    let at = 0;
+    const slice = () => {
+      if (run !== this.problemsRun) return;
+      const t0 = performance.now();
+      while (at < jobs.length && performance.now() - t0 < 8) rows.push(...jobs[at++]());
+      if (at < jobs.length) {
+        const idle = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 100 }) : (fn) => setTimeout(fn, 0);
+        idle(slice);
+        return;
+      }
+      this.problemRows = sortProblems(rows, order);
+      if (this.onProblems) this.onProblems(countProblems(this.problemRows), this.problemRows);
+    };
+    slice();
+  }
+
+  openProblems() {
+    if (!this.problemRows) return true;
+    openProblems(() => this.problemRows, {
+      onOpen: (r) => {
+        this.select(r.item);
+        this.editor.goto(r.line, r.col);
+      }
+    });
+    return true;
+  }
+
   onBatchEvent(e) {
+    if (e.type === 'member') {
+      if (e.status === 'error') this.lastRunErrors.set(e.name, { message: (e.event && e.event.error && e.event.error.message) || '' });
+      else this.lastRunErrors.delete(e.name);
+      this.scheduleProblems(0);
+    }
     if (e.type === 'status' || e.type === 'member' || e.type === 'batch-start' || e.type === 'batch-end') this.paintStatuses();
     if (e.type === 'status') {
       const q = this.orchestrator.batch.names;
@@ -448,6 +504,7 @@ export class Workspace {
     this.rail.append(tree, keep);
     this.syncRailSelection();
     this.paintStatuses();
+    this.scheduleProblems(0);
   }
 
   railItems() {
@@ -603,10 +660,12 @@ export class Workspace {
     this.markEdited(this.item);
     this.stepResults = new Map();
     clearTimeout(this.stepsTimer);
+    if (this.item) this.lastRunErrors.delete(this.item.name);
     this.stepsTimer = setTimeout(() => {
       this.refreshSteps();
       this.paintStatuses();
     }, 150);
+    this.scheduleProblems(300);
     clearTimeout(this.liveTimer);
     if (this.item.type === 'query') this.liveTimer = setTimeout(() => this.checkLive(text), 250);
     else this.liveTimer = setTimeout(() => this.checkModule(text), 300);

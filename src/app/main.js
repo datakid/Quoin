@@ -178,7 +178,8 @@ export class App {
     this.mainEl.style.display = 'grid';
     this.statusEl = h('div', { class: 'status-main', id: 'status', role: 'status', 'aria-live': 'polite' });
     this.alertEl = h('div', { class: 'status-alert', id: 'alert', role: 'alert' });
-    this.barEl = h('div', { class: 'statusbar' }, this.statusEl, this.alertEl);
+    this.problemsBtn = h('button', { class: 'status-problems', type: 'button', hidden: true, onclick: () => this.ws && this.ws.openProblems() }, S.problems.count(0));
+    this.barEl = h('div', { class: 'statusbar' }, this.statusEl, this.alertEl, this.problemsBtn);
     this.status = new Status(this.statusEl, this.alertEl);
     this.root.append(this.input, this.topbar, this.mainEl, this.barEl);
     this.root.classList.add('app');
@@ -190,6 +191,7 @@ export class App {
     this.ws = null;
     this.fileBtn.hidden = true;
     this.fileMeta.hidden = true;
+    this.problemsBtn.hidden = true;
     this.paletteBtn.hidden = true;
     this.printBtn.hidden = true;
     this.exportBtn.hidden = true;
@@ -367,6 +369,12 @@ export class App {
       this.syncDownload();
       this.syncLeaveGuard();
     });
+    this.ws.onProblems = (counts) => {
+      const n = counts.error + counts.warning + counts.info;
+      this.problemsBtn.textContent = S.problems.count(n);
+      this.problemsBtn.classList.toggle('has-errors', counts.error > 0);
+      this.problemsBtn.hidden = false;
+    };
     this.syncDownload();
     this.syncLeaveGuard();
     const dot = file.name.lastIndexOf('.');

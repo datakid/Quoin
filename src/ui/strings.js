@@ -296,6 +296,41 @@ export const S = {
     toggle: 'Steps',
     toggleAria: 'Show or hide the steps panel'
   },
+  problems: {
+    title: 'Problems',
+    count: (n) => `Problems ${n}`,
+    none: 'No problems found.',
+    computing: 'Checking…',
+    filters: { all: 'All', error: 'Errors', warning: 'Warnings', info: 'Info', query: 'Queries', module: 'Macros' },
+    severity: { error: 'Error', warning: 'Warning', info: 'Info' },
+    open: 'Open'
+  },
+  problem: {
+    'm.parse': (a) => a.message,
+    'm.unresolved': (a) => `${a.name} is not a query, a step or a library function.`,
+    'm.cycle': (a) => `These queries depend on each other in a loop: ${a.members.join(', ')}.`,
+    'm.unsupported': (a) => `Runs in Excel. quoin cannot run ${a.name}.`,
+    'm.external': (a) => (a.kind === 'web' ? `Needs the address ${a.key} to be provided before it can run.` : `Needs the file ${a.key} to be provided before it can run.`),
+    'm.forwardRef': (a) => `${a.step} reads ${a.ref}, which comes later.`,
+    'm.lastRun': (a) => (a.message ? `The last run failed: ${a.message}` : 'The last run failed.'),
+    'vba.structure': (a) => {
+      if (a.kind === 'mismatch') return `${a.open} on line ${a.openLine} is closed by ${a.found} on line ${a.foundLine}.`;
+      if (a.kind === 'stray') return `${a.found} on line ${a.foundLine} has nothing to close.`;
+      if (a.kind === 'unclosed') return `${a.open} on line ${a.openLine} is never closed.`;
+      if (a.kind === 'unterminated-string') return 'A string is not closed on this line.';
+      if (a.kind === 'unterminated-block') return 'A Type or Enum is never closed.';
+      return 'The structure of this module does not balance.';
+    },
+    'vba.duplicate': (a) => `${a.name} is already defined on line ${a.firstLine}.`,
+    'vba.exit': (a) => `${a.exit} inside a ${a.inside}.`,
+    'vba.noExplicit': () => 'The module has no Option Explicit, so a misspelled variable is not caught.',
+    'vba.encoding': (a) => `${a.char || 'A character'} cannot be stored in this project's code page.`,
+    'vba.lineLength': (a) => `This line is ${a.n} characters long; the limit is ${a.max}.`,
+    'vba.nul': () => 'This line contains a null character.',
+    'vba.surrogate': () => 'This line contains an unpaired surrogate.',
+    'vba.attribute': () => 'This line is an Attribute line, which belongs to the hidden part of the module.',
+    'vba.tooLarge': () => 'The module is larger than the limit.'
+  },
   batch: {
     summary: (c) => {
       const parts = [];
@@ -313,6 +348,7 @@ export const S = {
   },
   stepKind: { source: 'Source', navigate: 'Navigate', filter: 'Filter', sort: 'Sort', 'add-column': 'Column', 'remove-columns': 'Columns', rename: 'Rename', types: 'Types', group: 'Group', merge: 'Merge', append: 'Append', pivot: 'Pivot', expand: 'Expand', promote: 'Headers', custom: 'Custom' },
   cmd: {
+    problems: 'Show the problems list',
     runAll: 'Run all queries',
     runStale: 'Run the queries that are out of date',
     runDownstream: 'Run this query and everything that uses it',

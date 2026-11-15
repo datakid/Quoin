@@ -1517,3 +1517,114 @@ dialog.palette {
   border: 1.5px solid var(--slate);
   background: var(--slate-soft);
 }
+
+.status-problems {
+  margin-left: auto;
+  min-height: var(--h-ctl-sm);
+  padding: 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--on-readout);
+  font: inherit;
+  cursor: pointer;
+}
+
+.status-problems:hover {
+  text-decoration: underline;
+}
+
+.status-problems.has-errors::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--madder);
+}
+
+dialog.problems {
+  width: min(720px, calc(100vw - var(--s-5)));
+  max-width: none;
+  max-height: 80vh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: var(--s-3);
+}
+
+.problems-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+
+.problems-filters .filter.is-on {
+  background: var(--slate-soft);
+  color: var(--slate-ink);
+}
+
+.problems-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  min-height: 0;
+}
+
+.problem-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--h-row);
+  padding: var(--s-1) var(--s-3);
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.problem-row:hover {
+  background: var(--hover);
+}
+
+.problem-glyph {
+  flex: none;
+  width: var(--s-4);
+  text-align: center;
+  font-weight: 700;
+}
+
+.sev-error .problem-glyph {
+  color: var(--madder-ink);
+}
+
+.sev-warning .problem-glyph {
+  color: var(--ochre-ink);
+}
+
+.sev-info .problem-glyph {
+  color: var(--slate-ink);
+}
+
+.problem-where {
+  flex: none;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.problem-pos {
+  flex: none;
+}
+
+.problem-msg {
+  min-width: 0;
+  flex: 1;
+  color: var(--ink-2);
+}

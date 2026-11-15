@@ -1,5 +1,5 @@
 {
-  "version": "25727b6e85812793",
+  "version": "f08a063e14e22c16",
   "files": [
     "./",
     "index.html",
@@ -31,6 +31,11 @@
     "src/app/session.js",
     "src/app/theme-init.js",
     "src/app/workspace.js",
+    "src/batch/index/file-index.js",
+    "src/batch/index/hash.js",
+    "src/batch/index/inspect.js",
+    "src/batch/index/refusal.js",
+    "src/batch/protocol.js",
     "src/core/bytes.js",
     "src/core/cells.js",
     "src/core/compare/cache-compare.js",

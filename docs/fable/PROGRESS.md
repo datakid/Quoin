@@ -74,6 +74,23 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - `nonEmpty` is always `null`; filling it belongs to the inspect step.
 Counts after this task: lint 0 findings; unit 974 tests.
 
+### F0-06 Worker: open and inspect
+Layer: workers
+Files: src/workers/m-worker.js, src/batch/index/inspect.js, tests/unit/batch-inspect.test.js, tests/e2e/batch-worker.spec.js, asset-manifest.json
+Do: the worker reads a `File` itself and answers `open` with `opened` (a FileIndex) or `refused` (a code), and `inspect` with `inspected`; `inspectWorkbook` fills `sheets[].nonEmpty` for worksheets (a cell with a value, an inline string or a formula counts; styled blank cells do not). The new handlers are added after the existing ones; no existing handler changed. The asset manifest was regenerated because the worker now imports `src/batch`.
+Test that fails without it: `tests/unit/batch-inspect.test.js` (8 tests; module missing without the change) and `tests/e2e/batch-worker.spec.js` (5 tests: open matches the Node index, refusal codes, inspect matches Node, malformed messages, and the existing `run` message still works). Four of the five failed with no reply before the worker change.
+Result: Done locally; browser results from CI are recorded below once the run finishes.
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- An `open` message the validator rejects gets `refused` with `file.notWorkbook` when it carries a file id, and is ignored otherwise. A rejected `inspect` is ignored. An unexpected error while opening or inspecting is logged with `console.error` and answered as `file.notWorkbook`, so one file cannot stop a batch; the pool should treat an unanswered job as failed.
+- `inspect` on a refused file answers `inspected` with the refused index.
+- `inspect` opens the workbook a second time to read sheet XML. That is acceptable for a lazy, rare call and is the first thing to revisit if F5 memory measurements point at it.
+- A sheet counts as non-empty by a text match on its XML (a `c` element with a `v`, `f` or `is` child that is not self-closing). Prefixed XML namespaces would be missed; no fixture uses them.
+Counts after this task: lint 0 findings; unit 982 tests, 977 pass, 5 skipped.
+Local browser note: the bundled Chromium crashes after every second test in a spec file, so full local browser runs are not trustworthy; CI is the reference. The five new browser tests each pass when run on their own.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

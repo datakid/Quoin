@@ -4,6 +4,9 @@ import { MTable } from '../core/m/values.js';
 import { tableToDelimited } from '../core/export/csv.js';
 import { tableToJson, valueToJson } from '../core/export/json.js';
 import { tableToXlsx } from '../core/export/xlsx.js';
+import { indexWorkbook } from '../batch/index/file-index.js';
+import { inspectWorkbook } from '../batch/index/inspect.js';
+import { validateMessage, openedMessage, refusedMessage, inspectedMessage } from '../batch/protocol.js';
 
 const store = new ResultStore();
 let lastId = null;
@@ -179,6 +182,40 @@ async function exportResult(m) {
   }
 }
 
+const fileIdOf = (m) => (m && m.fileRef && typeof m.fileRef.id === 'string' && m.fileRef.id ? m.fileRef.id : null);
+
+const metaOf = (ref) => ({ id: ref.id, name: ref.name, relPath: ref.relPath, size: ref.size });
+
+async function bytesOf(ref) {
+  return new Uint8Array(await ref.file.arrayBuffer());
+}
+
+async function openFile(m) {
+  const id = fileIdOf(m);
+  if (!validateMessage(m).ok) {
+    if (id) post(refusedMessage(id, 'file.notWorkbook'));
+    return;
+  }
+  try {
+    const index = await indexWorkbook(await bytesOf(m.fileRef), metaOf(m.fileRef));
+    post(index.status === 'ready' ? openedMessage(id, index) : refusedMessage(id, index.refused.code));
+  } catch (e) {
+    console.error(e);
+    post(refusedMessage(id, 'file.notWorkbook'));
+  }
+}
+
+async function inspectFile(m) {
+  const id = fileIdOf(m);
+  if (!validateMessage(m).ok) return;
+  try {
+    post(inspectedMessage(id, await inspectWorkbook(await bytesOf(m.fileRef), metaOf(m.fileRef), m.need)));
+  } catch (e) {
+    console.error(e);
+    post(refusedMessage(id, 'file.notWorkbook'));
+  }
+}
+
 self.onmessage = (ev) => {
   const m = ev.data;
   if (m.type === 'run') run(m);
@@ -197,4 +234,6 @@ self.onmessage = (ev) => {
     const rows = entry && entry.value instanceof MTable ? serializeTableRows(entry.value, m.start, m.count) : [];
     post({ type: 'rows', id: m.id, rows, evicted: !entry });
   } else if (m.type === 'export') exportResult(m);
+  else if (m.type === 'open') openFile(m);
+  else if (m.type === 'inspect') inspectFile(m);
 };

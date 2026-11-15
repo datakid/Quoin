@@ -175,6 +175,17 @@ Counts after this task: lint 0 findings; unit 1052 tests.
 ### F0-12 Single file inside a set
 Result: Not started on purpose. Its test covers every row of Fable section 6.1, which is not available (see Blocked). Mounting today's workspace from the set touches the single-file flows, so it waits for that test.
 
+### F0-13 Responsiveness
+Layer: test only
+Files: tests/e2e/fable-responsive.spec.js
+Do: drop a folder of 200 generated workbooks and measure main-thread long tasks from the moment of the drop; check that indexing finishes within 60 s with every file ready; type into the filter and check that each change takes under 100 ms and no long task is over 100 ms.
+Test that fails without it: not applicable, this is a test-only task. The long-task observer was checked on the page: it reports a 155 ms task during application start-up, which is why the measurement counts only tasks that start after the drop or after typing begins.
+Result: Done locally (both tests pass in about 6 s each); CI result is recorded when the run finishes.
+Fails without: not applicable
+Changed expectations: none
+Deviations: none
+Note: the application's own start-up has one long task of about 155 ms in local Chromium. It is outside this acceptance criterion and unchanged from beta.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - New visual baselines for the Fable shell and the existing 36 failing baselines: need a decision. Options are to generate Linux baselines on CI and review each image before accepting them, or to run visual tests only on the machine that made the baselines.

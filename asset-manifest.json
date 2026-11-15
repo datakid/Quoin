@@ -1,5 +1,5 @@
 {
-  "version": "122ba4db339ae2bb",
+  "version": "4b2560b007d6c3a5",
   "files": [
     "./",
     "index.html",
@@ -30,6 +30,7 @@
     "src/app/pool.js",
     "src/app/runner.js",
     "src/app/session.js",
+    "src/app/set-session.js",
     "src/app/theme-init.js",
     "src/app/workspace.js",
     "src/batch/index/file-index.js",

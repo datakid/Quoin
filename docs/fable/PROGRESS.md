@@ -119,6 +119,24 @@ Changed expectations: none
 Deviations: none
 Counts after this task: lint 0 findings; unit 1014 tests, 1009 pass, 5 skipped.
 
+### F0-09 Set session
+Layer: app
+Files: src/app/set-session.js, tests/unit/set-session.test.js
+Do: `SetSession` holds the files, per-file status and badge, indexes, the current move (`drop`, `choose`, `get`, or none), the app state (`empty`, `indexing`, `ready`, `previewing`, `running`, `done`, `doneWithFailures`) and run progress. It emits change events (`files`, `file`, `state`, `move`, `progress`) and touches no DOM.
+Test that fails without it: `tests/unit/set-session.test.js`, 22 tests covering transitions, the one-move-at-a-time rule, duplicates, badge precedence, progress, removal, clear, events and copies (module missing without the change).
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- The badge is `null` while a file is still pending, then `failed`, `skipped`, `edited` or `ready` in that order of precedence. A refused file is `skipped` with its code as the reason.
+- Adding files starts the drop move and more files can join a drop that is still indexing. Adding files, choosing, previewing, running and clearing are refused (they throw) while another move is active; a file cannot be removed during a preview or a run.
+- Choosing after a finished run puts the session back to `ready`. Adding files after a run puts it back to `indexing`.
+- A run ends as `doneWithFailures` only when a file became failed during that run; a file that already failed to index does not count.
+- A file with the same path, size and last-modified time as one already in the set is a duplicate and is ignored. File ids keep counting after a clear.
+- Preview is not required before a run in the session; whether Get needs a fresh Preview is a rule for the run-bar task.
+Counts after this task: lint 0 findings; unit 1036 tests.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

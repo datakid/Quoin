@@ -79,7 +79,7 @@ Layer: workers
 Files: src/workers/m-worker.js, src/batch/index/inspect.js, tests/unit/batch-inspect.test.js, tests/e2e/batch-worker.spec.js, asset-manifest.json
 Do: the worker reads a `File` itself and answers `open` with `opened` (a FileIndex) or `refused` (a code), and `inspect` with `inspected`; `inspectWorkbook` fills `sheets[].nonEmpty` for worksheets (a cell with a value, an inline string or a formula counts; styled blank cells do not). The new handlers are added after the existing ones; no existing handler changed. The asset manifest was regenerated because the worker now imports `src/batch`.
 Test that fails without it: `tests/unit/batch-inspect.test.js` (8 tests; module missing without the change) and `tests/e2e/batch-worker.spec.js` (5 tests: open matches the Node index, refusal codes, inspect matches Node, malformed messages, and the existing `run` message still works). Four of the five failed with no reply before the worker change.
-Result: Done locally; browser results from CI are recorded below once the run finishes.
+Result: Done. CI at db51bba: browser 177 pass, 41 fail (the same 36 visual and 5 non-visual failures as the baseline, nothing new; the 5 new browser tests pass); unit 982 tests, 976 pass, 0 fail, 6 skipped.
 Fails without: yes
 Changed expectations: none
 Deviations: none

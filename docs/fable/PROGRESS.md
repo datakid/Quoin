@@ -5,7 +5,7 @@
 ### Baseline (beta at 9afea2a, recorded in F0-01)
 
 - Lint: 0 findings.
-- Unit: 928 tests, 923 pass, 0 fail, 5 skipped locally; CI shows 922 pass, 6 skipped. One CI unit step failed once with no cause found and passed on every other run.
+- Unit: 928 tests, 923 pass, 0 fail, 5 skipped locally; CI shows 922 pass, 6 skipped. The one intermittent unit failure on CI is `wb-fuzzy.test.js:73` (T-WB-05, ranking ten thousand items in under 30 ms; it took 38.1 ms on a slow runner). It is a timing test on `beta` and is not related to Fable changes; it passes on most runs. It is left unchanged and listed under Blocked.
 - Browser on CI (ubuntu-24.04, Chromium 141): 171 pass, 42 fail.
   - 36 are visual baselines (`visual.spec.js`, T-I-04). The stored images do not match Linux rendering.
   - 6 are not visual and are listed under Blocked.
@@ -113,7 +113,7 @@ Layer: app
 Files: src/app/runner.js, src/app/pool.js, tests/unit/runner-lease.test.js, asset-manifest.json
 Do: `Runner` takes an optional pool (default: a shared pool built from `navigator.hardwareConcurrency` and `navigator.deviceMemory`). `ensure()` leases a worker instead of creating one, and `stop()` and a worker error terminate it and return the lease so the pool replaces it. Nothing else in `Runner` changed, and `new Runner()` still works everywhere it is used.
 Test that fails without it: `tests/unit/runner-lease.test.js`, 7 tests (6 fail with the old `Runner`): one worker leased on first use, reused afterwards, stop and worker error release it, a fresh one is leased next, terminating it leaves a batch job on another worker untouched, two runners hold two workers.
-Result: Done. Existing runner specs `T-B-08` and `T-B-09` pass locally; the full browser suite is compared on CI below.
+Result: Done. CI at d3a44e8: browser 177 pass, 41 fail (the baseline set, nothing new); unit 1014 tests with one failure, the timing test T-WB-05 described in the baseline.
 Fails without: yes
 Changed expectations: none
 Deviations: none
@@ -143,6 +143,7 @@ Counts after this task: lint 0 findings; unit 1036 tests.
   - `keyboard.spec.js:57`: the shortcut sheet is generated from the command registry and lists "Alt+Up" and "Alt+Down" as two rows; the test expects one row "Alt+Up / Alt+Down". Reproduced locally. Stale test expectation.
   - `steps-panel.spec.js:78`: after "Move and rewire", "Added Custom" is still after "Changed Type" in the editor text. Reproduced locally and on CI.
   - `store.spec.js:60`: cancelling a batch with an endless query returns `ok` instead of `cancelled`. Reproduced locally and on CI.
+  - `wb-fuzzy.test.js:73` (T-WB-05, under 30 ms for ten thousand items): a timing threshold that fails on slow runners; needs the same owner decision.
   - `palette.spec.js:46` and `:69`, `keyboard.spec.js:9`: fail on CI only or intermittently; `palette.spec.js:46` and `keyboard.spec.js:9` pass locally. Not reproduced.
 
 ### Deviations

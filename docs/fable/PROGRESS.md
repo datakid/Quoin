@@ -44,6 +44,18 @@ Changed expectations: none
 Deviations: T-LINT-19 names one existing edge as allowed: `src/ui/wb/steps-panel.js` imports `matches` from `src/app/commands.js`, which the plan's table does not permit. The edge is listed in the rule rather than changed in code. Moving `matches` into a layer the UI may import is the alternative and needs the user's decision.
 Found: no use of the base64 helpers exists outside `src/core` on beta, so T-LINT-20 passes with no exceptions.
 
+### F0-04 Worker protocol messages
+Layer: batch
+Files: src/batch/protocol.js, tests/unit/batch-protocol.test.js
+Do: pure constructors, `validateMessage`, `isBatchMessage` and `transferListFor` for the new batch messages (open, opened, refused, inspect, inspected, apply, applied, cancel, cancelled, progress), following the plan's §5.4 shapes. The existing worker message types (`run`, `run-steps`, `run-many`, `pin`, `release`, `binding`, `rows`, `export`) are not batch messages and the worker is not touched yet.
+Test that fails without it: `tests/unit/batch-protocol.test.js`, 14 tests (module missing without the change).
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: none
+Decisions made inside the plan's gaps: an applied message must own its whole buffer (offset 0, full length) so transferring it cannot detach other views; `sha256` is required, lower case, 64 characters whenever bytes are present; `now` must be an ISO UTC string.
+Counts after this task: lint 0 findings; unit 959 tests, 954 pass, 5 skipped.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - Six browser tests fail on beta and need an owner. They sit in beta's Phase 6 area, so the decision is whether beta's other agent fixes them and Fable takes the fix by merge, or Fable fixes them here. Editing any of these tests needs the user's approval (§11.3).

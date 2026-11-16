@@ -180,7 +180,7 @@ Layer: test only
 Files: tests/e2e/fable-responsive.spec.js
 Do: drop a folder of 200 generated workbooks and measure main-thread long tasks from the moment of the drop; check that indexing finishes within 60 s with every file ready; type into the filter and check that each change takes under 100 ms and no long task is over 100 ms.
 Test that fails without it: not applicable, this is a test-only task. The long-task observer was checked on the page: it reports a 155 ms task during application start-up, which is why the measurement counts only tasks that start after the drop or after typing begins.
-Result: Done locally (both tests pass in about 6 s each); CI result is recorded when the run finishes.
+Result: Done. CI at 55332c8: browser 215 pass, 41 fail (the baseline set; both new tests pass); unit 1052 tests, 0 fail.
 Fails without: not applicable
 Changed expectations: none
 Deviations: none

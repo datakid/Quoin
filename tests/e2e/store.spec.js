@@ -64,7 +64,7 @@ test('T-WB-08: cancelling a batch drops the store, old results report as evicted
     const r = new Runner();
     const text = 'section Section1;\r\n\r\nshared A = #table({"x"}, {{1}});\r\n\r\nshared Slow = List.Count(List.Generate(() => 0, each true, each _ + 1));';
     const events = [];
-    const p = r.runMany({ sectionText: text, names: ['A', 'Slow'], culture: 'en-US', limits: {}, previewRows: 5 }, { onEvent: (m) => events.push(m), onNeedBinding: async () => null });
+    const p = r.runMany({ sectionText: text, names: ['A', 'Slow'], culture: 'en-US', limits: { maxRows: 1e12 }, previewRows: 5 }, { onEvent: (m) => events.push(m), onNeedBinding: async () => null });
     await new Promise((res) => setTimeout(res, 600));
     const gen = r.generation;
     const keptId = events[0] && events[0].resultId;

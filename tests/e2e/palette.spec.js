@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { ext, openApp, loadFile } from './helpers.js';
 
+const caretLine = (page) =>
+  page.evaluate(() => {
+    const ta = document.querySelector('.editor-wrap textarea');
+    return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
+  });
+
 test('T-WB-13: Ctrl+K opens the palette, a name selects the item, focus returns to the editor area', async ({ page }) => {
   const problems = await openApp(page);
   await loadFile(page, ext('pq_vba_complex.xlsm'));
@@ -51,19 +57,11 @@ test('T-WB-13: @ jumps into a module at the procedure and : goes to a line', asy
   await expect(page.locator('.palette-row').first()).toContainText('Worksheet_Change');
   await page.keyboard.press('Enter');
   await expect(page.locator('.item-title')).toContainText('Sheet1');
-  const line = await page.evaluate(() => {
-    const ta = document.querySelector('.editor-wrap textarea');
-    return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
-  });
-  expect(line).toBe(3);
+  await expect.poll(() => caretLine(page)).toBe(3);
   await page.keyboard.press('Control+k');
   await page.keyboard.type(':9');
   await page.keyboard.press('Enter');
-  const line2 = await page.evaluate(() => {
-    const ta = document.querySelector('.editor-wrap textarea');
-    return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
-  });
-  expect(line2).toBe(9);
+  await expect.poll(() => caretLine(page)).toBe(9);
 });
 
 test('T-WB-13: # lists the steps of the current query and jumps to the one chosen', async ({ page }) => {
@@ -74,11 +72,7 @@ test('T-WB-13: # lists the steps of the current query and jumps to the one chose
   await page.keyboard.type('#added');
   await expect(page.locator('.palette-row').first()).toContainText('Added Custom');
   await page.keyboard.press('Enter');
-  const line = await page.evaluate(() => {
-    const ta = document.querySelector('.editor-wrap textarea');
-    return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
-  });
-  expect(line).toBe(4);
+  await expect.poll(() => caretLine(page)).toBe(4);
 });
 
 test('T-WB-13: the shortcut sheet is generated from the registry and lists the palette', async ({ page }) => {

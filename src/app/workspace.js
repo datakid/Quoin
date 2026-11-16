@@ -8,6 +8,7 @@ import { OutlinePanel } from '../ui/wb/outline-panel.js';
 import { outlineModule } from '../core/vba/outline.js';
 import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
 import { openProblems } from '../ui/wb/problems-dialog.js';
+import { openFind } from '../ui/wb/find-dialog.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
@@ -197,6 +198,46 @@ export class Workspace {
       if (this.onProblems) this.onProblems(countProblems(this.problemRows), this.problemRows);
     };
     slice();
+  }
+
+  findItems() {
+    const s = this.session;
+    const cur = this.item;
+    const queries = s.queries.map((q) => {
+      const ed = s.queryEditable();
+      return { type: 'query', name: q.name, text: s.textOf({ type: 'query', name: q.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), current: !!cur && cur.type === 'query' && cur.name === q.name };
+    });
+    const modules = s.modules.map((m) => {
+      const ed = s.moduleEditable(m.name);
+      return { type: 'module', name: m.name, text: s.textOf({ type: 'module', name: m.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), current: !!cur && cur.type === 'module' && cur.name === m.name };
+    });
+    if (this.item && this.item.type === 'query') {
+      const live = queries.find((q) => q.current);
+      if (live) live.text = this.editor.getText();
+    }
+    if (this.item && this.item.type === 'module') {
+      const live = modules.find((m) => m.current);
+      if (live) live.text = this.editor.getText();
+    }
+    return [...queries, ...modules];
+  }
+
+  openFind(replace) {
+    const sel = this.editor.getSelectionText ? this.editor.getSelectionText() : '';
+    openFind({ items: () => this.findItems() }, {
+      onOpen: (item, m) => {
+        this.select(item);
+        this.editor.goto(m.line, m.col);
+      },
+      onApply: (changes, message) => {
+        for (const c of changes) {
+          this.select(c.item);
+          this.editor.replaceDiff(c.text);
+        }
+        this.status.set({ note: message });
+      }
+    }, { replace, initial: sel && !/[\r\n]/.test(sel) ? sel : '' });
+    return true;
   }
 
   openProblems() {

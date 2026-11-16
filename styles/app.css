@@ -1701,3 +1701,111 @@ dialog.problems {
   cursor: default;
   color: var(--ink-3);
 }
+
+dialog.find {
+  width: min(760px, calc(100vw - var(--s-5)));
+  max-width: none;
+  max-height: 85vh;
+  display: grid;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
+  gap: var(--s-3);
+}
+
+.find-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-2) var(--s-3);
+  align-items: center;
+}
+
+.find-fields input,
+.find-fields select {
+  min-height: var(--h-ctl);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.find-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+}
+
+.find-error {
+  color: var(--madder-ink);
+}
+
+.find-error:empty {
+  display: none;
+}
+
+.find-results {
+  overflow: auto;
+  min-height: 0;
+}
+
+.find-group {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  font-weight: 600;
+}
+
+.find-match {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: 0 var(--s-2);
+}
+
+.find-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.find-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--h-row);
+  padding: var(--s-1) var(--s-3);
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.find-row:hover {
+  background: var(--hover);
+}
+
+.find-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  font-family: var(--font-code);
+  font-size: var(--t-sm);
+}
+
+.find-line mark {
+  background: var(--ochre-soft);
+  color: var(--ochre-ink);
+  font-weight: 700;
+}
+
+.find-diff {
+  padding: 0 var(--s-3) var(--s-1) var(--s-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  font-family: var(--font-code);
+}

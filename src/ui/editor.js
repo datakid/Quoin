@@ -251,6 +251,10 @@ export class Editor {
     this.replaceRange(a, cur.length - b, next.slice(a, next.length - b), at, at);
   }
 
+  getSelectionText() {
+    return this.textarea.value.slice(this.textarea.selectionStart, this.textarea.selectionEnd);
+  }
+
   caretOffset() {
     return this.textarea.selectionStart;
   }

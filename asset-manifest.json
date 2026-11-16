@@ -1,5 +1,5 @@
 {
-  "version": "ce1e29c425d3321f",
+  "version": "fd537638bfccfde9",
   "files": [
     "./",
     "index.html",
@@ -94,6 +94,7 @@
     "src/core/vba/writeback.js",
     "src/core/wb/ast-walk.js",
     "src/core/wb/deps.js",
+    "src/core/wb/find.js",
     "src/core/wb/fuzzy.js",
     "src/core/wb/ident.js",
     "src/core/wb/let-edit.js",
@@ -120,6 +121,7 @@
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
     "src/ui/strings.js",
+    "src/ui/wb/find-dialog.js",
     "src/ui/wb/outline-panel.js",
     "src/ui/wb/palette.js",
     "src/ui/wb/problems-dialog.js",

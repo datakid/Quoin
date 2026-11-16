@@ -247,3 +247,19 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - `align.hash` must be a full lower case SHA-256.
 Counts after this task: lint 0 findings; unit 1077 tests.
 
+### F1-02 Resolve: workbook units
+Layer: batch/resolve
+Files: src/batch/resolve/resolve.js, tests/unit/batch-resolve.test.js, src/ui/strings.js, asset-manifest.json
+Do: `resolvePlan(recipe, indexes, {now})` returns the Plan of section 5.3 for a collect recipe: files in relative-path order (then id), one `workbook` unit per ready file named after the file without its extension, one `collect` action per query and per module on that unit, a refused file with no units and `skipped` carrying its refusal code, a summary of usable files, units and groups by units per file, orphan pins for overrides that match no file path, and a `recipe.token` error for each unknown token in the output name. It is pure: the same inputs give the same plan and the inputs are not changed. The time must be a frozen ISO UTC string.
+Test that fails without it: `tests/unit/batch-resolve.test.js`, 14 tests (module missing without the change).
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: the error string `recipe.token` is added now that something uses it.
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- Only collect recipes are resolved; any other kind throws until its phase.
+- For Collect the unit is the workbook and its actions are one per query and per module, so the report can list them; their compute and output are null.
+- A refused file's `skipped.code` is its refusal code; the report turns it into a `refused` verdict later.
+- Input must be file indexes with status ready or refused; files that failed to index are the caller's to leave out or report.
+Counts after this task: lint 0 findings; unit 1092 tests.
+

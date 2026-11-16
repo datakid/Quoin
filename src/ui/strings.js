@@ -383,6 +383,7 @@ export const ERRORS = {
   'file.unsupportedExtension': 'Skipped. Quoin opens .xlsx, .xlsm, .xltx and .xltm files.',
   'file.lockFile': 'Skipped. This is an Excel lock file.',
   'recipe.newer': 'This recipe is from a newer version of Quoin and was not opened.',
+  'recipe.token': 'Unknown token {token}.',
   'recipe.invalid': 'This recipe could not be read. {detail}',
   'pq.none': 'This workbook has no queries.',
   'file.strict': 'Strict Open XML workbooks are not supported.',

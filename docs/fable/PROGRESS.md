@@ -227,3 +227,23 @@ Not part of this task: in the old and new 390 px baselines of the VBA view the f
 
 ### Deviations
 - See F0-00.
+
+## Phase F1 — Collect and Variants (read only)
+
+### F1-01 Recipe model
+Layer: batch/recipe
+Files: src/batch/recipe/recipe.js, tests/unit/batch-recipe.test.js, src/ui/strings.js, asset-manifest.json
+Do: `parseRecipe` reads Appendix A as data only (JSON, never evaluated) and returns the normalised recipe with documented defaults plus warnings, or a refusal: `recipe.newer` when `v` is above 1 (checked first), `recipe.invalid` with a path and reason otherwise. Unknown fields warn with their path and are dropped; a block for another recipe kind warns `recipe.ignored`. `serialiseRecipe` writes one canonical form (fixed key order, two-space indent, trailing newline) that parses back to the same recipe. `TOKENS` and `unknownTokens` give the four tokens and report any other `{...}`; an unknown token does not fail parsing, it is a planning error for the resolver.
+Test that fails without it: `tests/unit/batch-recipe.test.js`, 26 tests (module missing without the change).
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: the strings for `file.unsupportedExtension` and `file.lockFile` now use the wording of plan Appendix E ("Skipped. Quoin opens ..." and "Skipped. This is an Excel lock file."). The string for `recipe.token` is not added yet because test T-E-11 rejects an error code that nothing uses; the resolver task adds it.
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- A recipe text over 1 MiB is refused as `recipe.invalid`.
+- When `scope` is absent it defaults to the whole workbook; when present, `type` is required and `match` defaults to `all`, `excludeHidden` to true and `patternKind` to `glob`.
+- `inject.name` is required for every operation (it holds the pattern when `match` is `pattern`); `newName` is needed only to rename; `text` is needed only to add or replace. `replace.kind` defaults to text and `matchCase` to true.
+- `output.name` and `output.range` are optional; `output.mode` is required when `output` is present. `more.limits` values are whole numbers from 1 and `more.encoding` can only be `utf-8`.
+- `align.hash` must be a full lower case SHA-256.
+Counts after this task: lint 0 findings; unit 1077 tests.
+

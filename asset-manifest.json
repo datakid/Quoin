@@ -1,5 +1,5 @@
 {
-  "version": "3fd05a6be8e4d161",
+  "version": "0ddb93250fc7bf2c",
   "files": [
     "./",
     "index.html",
@@ -39,6 +39,7 @@
     "src/batch/index/inspect.js",
     "src/batch/index/refusal.js",
     "src/batch/protocol.js",
+    "src/batch/recipe/recipe.js",
     "src/core/bytes.js",
     "src/core/cells.js",
     "src/core/compare/cache-compare.js",

@@ -6,7 +6,7 @@ on:
     branches: [fable]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -51,3 +51,24 @@ jobs:
           name: playwright-results
           path: test-results
           if-no-files-found: ignore
+  baselines:
+    if: ${{ contains(github.event.head_commit.message, '[update-baselines]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/e2e/visual.spec.js tests/e2e/fable-visual.spec.js --update-snapshots=all
+      - name: Commit the new baselines
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add tests/__visual__
+          git diff --cached --quiet && exit 0
+          git commit -m "Update visual baselines from CI"
+          git push origin HEAD:fable

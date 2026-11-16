@@ -112,3 +112,16 @@ A browser cannot repeat a footer row at the bottom of every printed page, cannot
 ## 23. Not built, so nobody tries it later
 
 No PDF library in the app (the browser's Save as PDF is the supported route and G-6 forbids a dependency); no control over the file name of a printed PDF; no duplex, tray, copies or printer choice; no CSS margin boxes; no replacement for the browser's own headers and footers (the panel tells the user to turn them off).
+
+## 24. Fable: a set of files, a worker pool and a set shell
+
+These entries cover the Fable branch (`fable`, cut from `beta`). The plan is `docs/fable/01_PLAN.md` and progress is `docs/fable/PROGRESS.md`.
+
+- Batch code lives in `src/batch/` and may import only `src/core/` and itself; workers import `src/core/` and `src/batch/`; the UI imports `src/ui/` and `src/core/`, with one named exception (`src/ui/wb/steps-panel.js` imports `matches` from `src/app/commands.js`). Lint rules T-LINT-18 to T-LINT-20 enforce the direction, keep DOM and worker globals out of `src/batch/`, and keep base64 helpers inside `src/core/`.
+- The worker protocol for open, inspect, apply, cancel and progress is a set of pure message constructors and a validator in `src/batch/protocol.js`. A result buffer must own its whole `ArrayBuffer`, so transferring it cannot detach another view.
+- A file index (`src/batch/index/`) is built from `openWorkbook`. A name that is a lock file or has an unsupported extension is refused before any bytes are read, on the main thread and again in the worker.
+- Workers are pooled (`src/app/pool.js`): size `min(4, max(1, cores - 1))`, at most 2 on devices that report 4 GB or less; admission by an in-flight byte budget (768 MiB, or 384 MiB on those devices); a job larger than the budget runs alone; jobs queue in relative-path order. A worker that does not acknowledge a cancel within 1000 ms is terminated and replaced. The interactive `Runner` leases its own worker from the pool.
+- A set (`src/app/set-session.js`) is a state machine with one active move at a time. A single dropped workbook still opens the workspace. With no workbook open, two or more files or a folder create a set; with a workbook open they are refused as before, so unsaved edits are never replaced.
+- The set shell shows Files, Recipe and Result regions and a run bar. The start screen is unchanged.
+- The `.github/workflows/ci.yml` workflow runs lint, unit and browser tests on every push to `fable`, and condenses the results into check annotations.
+

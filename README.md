@@ -46,6 +46,10 @@ Quoin opens an Excel `.xlsx` or `.xlsm` file in your browser and shows its Power
 - Installable, and cached for offline use by a service worker.
 - Accessibility checks with axe-core run in the test suite.
 
+## Working with several workbooks (Fable branch)
+
+On the `fable` branch, dropping two or more workbooks or a folder builds a set. Each file is indexed in a pool of background workers and listed with a badge (Ready, Skipped, Failed) and its reason; the top bar shows the number of files and queries. The Recipe and Result regions are placeholders for the next phases. Dropping one workbook opens it exactly as before. Nothing is written to any file in this version.
+
 ## What it does not do
 
 - It never runs VBA. VBA is shown and edited only.

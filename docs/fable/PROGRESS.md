@@ -186,6 +186,20 @@ Changed expectations: none
 Deviations: none
 Note: the application's own start-up has one long task of about 155 ms in local Chromium. It is outside this acceptance criterion and unchanged from beta.
 
+### Gate (phase F0, section 9)
+Not passed. Evidence so far, row by row:
+- [ ] `npm test` is green. Lint 0 findings: ticked (0 findings, T-LINT-1 included, `npm run test:lint`). Unit: ticked (1052 tests, 0 fail on CI except the timing test T-WB-05 on slow runners). Browser: not ticked, 41 tests fail on CI, all of them already failing on `beta` (36 screenshot baselines and 5 listed under Blocked).
+- [x] Every new test was shown to fail without its change: recorded in each task above.
+- [x] No existing test was weakened, skipped or deleted. Changed expectations: two named T-B-16 drop tests (F0-10).
+- [ ] Every new surface has a keyboard path, axe checks in both themes, contrast pairs and reviewed visual baselines: keyboard and axe done for the shell; reviewed baselines not done (Blocked); contrast pairs are covered by axe.
+- [x] No new dependency, no network call, no new storage key, no base64 or binary data persisted (T-LINT-4, T-LINT-8, T-LINT-20 green).
+- [ ] The vertical slice works by hand in Chromium: not done. Drop and index were exercised through browser tests only; there is no preview or get yet.
+- [x] README, `docs/decisions.md` and PROGRESS.md are updated.
+- [ ] F0: the parity spec covers every row of Fable section 6.1: not done, F0-12 and the Fable document are missing.
+- [x] F0: folder intake works (F0-10, `fable-intake.spec.js`).
+- [x] F0: the responsiveness spec passes (F0-13, also on CI).
+- [ ] F0: a single-file drop behaves exactly as in `beta`: the existing single-file tests pass unchanged on CI, but the parity spec that proves it row by row is not written.
+
 ### Blocked
 - `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
 - New visual baselines for the Fable shell and the existing 36 failing baselines: need a decision. Options are to generate Linux baselines on CI and review each image before accepting them, or to run visual tests only on the machine that made the baselines.

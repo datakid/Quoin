@@ -190,7 +190,7 @@ Note: the application's own start-up has one long task of about 155 ms in local 
 Not passed yet: two rows are open (the by-hand slice and the parity spec, which depends on F0-12). Evidence, row by row:
 - [x] `npm test` is green (on CI; locally the bundled Chromium is unstable, see F0-06). Lint 0 findings: ticked (0 findings, T-LINT-1 included, `npm run test:lint`). Unit: ticked (1052 tests, 0 fail on CI except the timing test T-WB-05 on slow runners). Browser: ticked on CI at 5a3ce1c (all tests pass, including 61 screenshot tests).
 - [x] Every new test was shown to fail without its change: recorded in each task above.
-- [x] No existing test was weakened, skipped or deleted. Changed expectations: two named T-B-16 drop tests (F0-10).
+- [x] No existing test was weakened, skipped or deleted. Changed expectations: two named T-B-16 drop tests (F0-10) and six repairs the user approved (F0-15), each with its cause; every original assertion was kept.
 - [x] Every new surface has a keyboard path, axe checks in both themes, contrast pairs and reviewed visual baselines: done for the shell (F0-16); contrast pairs are covered by axe.
 - [x] No new dependency, no network call, no new storage key, no base64 or binary data persisted (T-LINT-4, T-LINT-8, T-LINT-20 green).
 - [ ] The vertical slice works by hand in Chromium: not done. Drop and index were exercised through browser tests only; there is no preview or get yet.

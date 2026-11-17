@@ -1089,6 +1089,7 @@ dialog.wide {
 
 .change-item > summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s-3);
   min-height: var(--h-ctl);
@@ -1808,4 +1809,48 @@ dialog.find {
   text-overflow: ellipsis;
   white-space: pre;
   font-family: var(--font-code);
+}
+
+.change-line {
+  display: block;
+  flex-basis: 100%;
+  padding-left: var(--s-4);
+}
+
+.change-problems {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-3);
+  background: var(--sunk);
+}
+
+.change-problem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+
+.outline-proc {
+  flex-wrap: wrap;
+}
+
+.outline-links {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--s-1);
+  margin: 0 var(--s-3) var(--s-3) var(--s-5);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  background: var(--sunk);
+}
+
+.outline-link {
+  font-size: var(--t-sm);
+  line-height: var(--t-sm-lh);
+}
+
+.outline-links .btn {
+  justify-self: start;
+  margin-top: var(--s-1);
 }

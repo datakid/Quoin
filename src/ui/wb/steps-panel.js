@@ -14,8 +14,9 @@ export class StepsPanel {
     this.head = h('div', { class: 'panel-head' }, this.title, this.count, h('span', { class: 'spacer' }), this.runBtn);
     this.list = h('ol', { class: 'steps-list', role: 'list', 'aria-label': S.stepsPanel.aria });
     this.note = h('p', { class: 'panel-note item-meta', hidden: true });
+    this.refreshed = h('p', { class: 'panel-note item-meta refreshed-by', hidden: true });
     this.live = h('div', { class: 'sr-only steps-live', 'aria-live': 'polite', 'aria-atomic': 'true' });
-    host.append(this.head, this.note, this.list, this.live);
+    host.append(this.head, this.note, this.refreshed, this.list, this.live);
     this.model = null;
     this.results = new Map();
     this.caret = null;
@@ -26,6 +27,11 @@ export class StepsPanel {
   announce(text) {
     this.live.textContent = '';
     this.live.textContent = text;
+  }
+
+  setRefreshedBy(list) {
+    this.refreshed.hidden = !list || !list.length;
+    this.refreshed.textContent = list && list.length ? `${S.pqLinks.refreshedBy}: ${list.join(', ')}` : '';
   }
 
   setResults(results) {

@@ -6,16 +6,16 @@ function functionsOf(index) {
   return new Set(index.members.filter((m) => m.isFunction).map((m) => m.name));
 }
 
-function batch(index, names, stopAtFirstError) {
+function batch(index, names, stopAtFirstError, ordered = false) {
   const known = new Set(index.members.map((m) => m.name));
   const fns = functionsOf(index);
   const wanted = [...new Set(names)].filter((n) => known.has(n));
   const skipped = wanted.filter((n) => fns.has(n));
   const runnable = wanted.filter((n) => !fns.has(n));
-  return { kind: 'many', names: topoOrder(index, runnable), skipped, stopAtFirstError: !!stopAtFirstError };
+  return { kind: 'many', names: ordered ? runnable : topoOrder(index, runnable), skipped, stopAtFirstError: !!stopAtFirstError };
 }
 
-export function planRun(index, mode, { current = null, step = null, selection = [], statuses = new Map(), stopAtFirstError = false } = {}) {
+export function planRun(index, mode, { current = null, step = null, selection = [], statuses = new Map(), stopAtFirstError = false, ordered = false } = {}) {
   const known = new Set(index.members.map((m) => m.name));
   const fns = functionsOf(index);
   switch (mode) {
@@ -25,7 +25,7 @@ export function planRun(index, mode, { current = null, step = null, selection = 
       if (fns.has(current)) return { kind: 'none', reason: 'function', names: [], skipped: [current] };
       return { kind: 'steps', name: current, upTo: mode === 'run-to-here' ? step : null, names: [current], skipped: [] };
     case 'run-selected':
-      return batch(index, selection, stopAtFirstError);
+      return batch(index, selection, stopAtFirstError, ordered);
     case 'run-downstream': {
       if (!current || !known.has(current)) return { kind: 'none', reason: 'no-query', names: [], skipped: [] };
       return batch(index, [current, ...downstreamOf(index, [current])], stopAtFirstError);

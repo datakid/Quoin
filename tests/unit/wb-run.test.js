@@ -142,3 +142,9 @@ test('T-WB-09: history keeps ten runs and reports the row difference with the pr
   assert.equal(book.rowDelta('Other'), null);
   assert.equal(book.rowDelta('Never'), null);
 });
+
+test('T-WB-09: run selected in the given order keeps a macro order that is not dependency order', () => {
+  const { ix } = build();
+  const p = planRun(ix, 'run-selected', { selection: ['Report', 'Sales_Raw', 'Summary', 'Report'], ordered: true });
+  assert.deepEqual(p.names, ['Report', 'Sales_Raw', 'Summary']);
+});

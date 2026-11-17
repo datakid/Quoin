@@ -229,7 +229,7 @@ function diffTable(name, before, after) {
           h('td', { class: 'diff-text' }, r.text || ' ')))))));
 }
 
-export function changesDialog(changes, { onRevertAll }) {
+export function changesDialog(changes, { onRevertAll, summaries = new Map(), problems = [] }) {
   const entries = [
     ...[...changes.queries].map(([name, c]) => ({ kind: S.changesQueryKind, name, ...c })),
     ...[...changes.modules].map(([name, c]) => ({ kind: S.changesModuleKind, name, ...c }))
@@ -240,7 +240,8 @@ export function changesDialog(changes, { onRevertAll }) {
       h('summary', null,
         h('span', { class: 'change-name' }, e.name),
         h('span', { class: 'item-meta' }, e.kind),
-        h('span', { class: 'change-stats item-meta' }, S.changeStats(stats.added, stats.removed))));
+        h('span', { class: 'change-stats item-meta' }, S.changeStats(stats.added, stats.removed)),
+        ...(summaries.get(e.name) || []).map((line) => h('span', { class: 'change-line item-meta' }, line))));
     det.addEventListener('toggle', () => {
       if (det.open && !det.querySelector('.diff-scroll')) det.append(diffTable(e.name, e.original, e.current));
     });
@@ -250,6 +251,10 @@ export function changesDialog(changes, { onRevertAll }) {
     'dialog',
     { class: 'wide', 'aria-labelledby': 'ch-title' },
     h('h2', { id: 'ch-title' }, S.changesTitle),
+    problems.length ? h('div', { class: 'change-problems' },
+      h('div', { class: 'outline-label' }, S.changeSummary.problemsTitle),
+      ...problems.slice(0, 10).map((p) => h('div', { class: `change-problem sev-${p.severity}` }, h('span', { class: 'problem-glyph', 'aria-hidden': 'true' }, p.severity === 'error' ? '\u2715' : '!'), h('span', { class: 'sr-only' }, S.problems.severity[p.severity]), h('span', { class: 'problem-where' }, p.item.name), h('span', { class: 'problem-msg' }, S.problem[p.code](p.args)))),
+      problems.length > 10 ? h('div', { class: 'item-meta' }, S.changeSummary.more(problems.length - 10)) : null) : null,
     h('div', { class: 'change-list' }, ...sections),
     h('div', { class: 'dialog-actions' },
       h('button', { class: 'btn', type: 'button', onclick: () => {

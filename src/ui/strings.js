@@ -296,6 +296,30 @@ export const S = {
     toggle: 'Steps',
     toggleAria: 'Show or hide the steps panel'
   },
+  pqLinks: {
+    refreshes: 'Refreshes',
+    runThese: 'Run these queries',
+    refreshedBy: 'Refreshed by',
+    all: 'every loaded query',
+    reads: 'Reads or changes',
+    dynamic: (n) => (n === 1 ? '1 call cannot be resolved without running the macro' : `${n} calls cannot be resolved without running the macro`),
+    unknown: (names) => `Not in this workbook: ${names.join(', ')}`,
+    forMacro: (name) => `Queries refreshed by ${name}`,
+    note: 'Runs the queries this macro refreshes. The rest of the macro does not run.'
+  },
+  changeSummary: {
+    reordered: (step, before) => (before ? `Steps reordered: ${step} moved above ${before}` : `Steps reordered: ${step} moved to the end`),
+    added: (step) => `Step added: ${step}`,
+    removed: (step) => `Step removed: ${step}`,
+    bypassed: (step) => `Step bypassed: ${step}`,
+    restored: (step) => `Step put back: ${step}`,
+    changed: (step) => `Step changed: ${step}`,
+    edited: (names) => `Procedures changed: ${names.join(', ')}`,
+    addedProcs: (names) => `Procedures added: ${names.join(', ')}`,
+    removedProcs: (names) => `Procedures removed: ${names.join(', ')}`,
+    problemsTitle: 'Problems in the changed items',
+    more: (n) => `and ${n} more`
+  },
   find: {
     findTitle: 'Find in the workbook',
     replaceTitle: 'Find and replace in the workbook',

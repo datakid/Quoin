@@ -8,6 +8,7 @@ import { buildRegistry } from './app-commands.js';
 import { openPalette } from '../ui/wb/palette.js';
 import { outlineModule } from '../core/vba/outline.js';
 import { stepsOf } from '../core/wb/steps.js';
+import { summariesFor } from './change-summary.js';
 import { settingsDialog, shortcutsDialog, detailsDialog, changesDialog, confirmDialog, menu, popover } from '../ui/dialogs.js';
 import { Session } from './session.js';
 import { Workspace } from './workspace.js';
@@ -501,7 +502,16 @@ export class App {
   }
 
   openChanges() {
-    changesDialog(this.session.changes(), {
+    const changes = this.session.changes();
+    const names = new Set([...changes.queries.keys(), ...changes.modules.keys()]);
+    const moduleKind = (n) => {
+      const m = this.session.module(n);
+      return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
+    };
+    const problems = (this.ws ? this.ws.problemRows : []).filter((p) => names.has(p.item.name) && (p.severity === 'error' || p.severity === 'warning'));
+    changesDialog(changes, {
+      summaries: summariesFor(changes, moduleKind),
+      problems,
       onRevertAll: async () => {
         const n = this.session.editCount;
         const ok = await confirmDialog({ title: S.revertAllTitle, body: S.revertAllBody(n), confirmLabel: S.revertAll });

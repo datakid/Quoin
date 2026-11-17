@@ -6,6 +6,7 @@ import { popover, bindingDialog, differencesDialog, confirmDialog } from '../ui/
 import { StepsPanel } from '../ui/wb/steps-panel.js';
 import { OutlinePanel } from '../ui/wb/outline-panel.js';
 import { outlineModule } from '../core/vba/outline.js';
+import { pqLinksOfModule, resolveLinks, runPlanOf, refreshedBy } from '../core/vba/pq-links.js';
 import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
 import { openProblems } from '../ui/wb/problems-dialog.js';
 import { openFind } from '../ui/wb/find-dialog.js';
@@ -81,7 +82,8 @@ export class Workspace {
     this.outlinePanel = new OutlinePanel(this.outlineHost, {
       go: (line) => this.editor.goto(line, 1),
       revert: (key, name) => this.revertProc(key, name, false),
-      putBack: (key, name) => this.revertProc(key, name, true)
+      putBack: (key, name) => this.revertProc(key, name, true),
+      runLinked: (name, names) => this.runLinked(name, names)
     });
     this.drillStack = [];
     this.lastRun = null;
@@ -327,8 +329,42 @@ export class Workspace {
     const model = stepsOf(this.editor.getText(), 0, { members: new Set(this.session.queries.map((q) => q.name)) });
     this.stepsModel = model;
     this.stepsPanel.setResults(this.stepResults);
+    this.stepsPanel.setRefreshedBy(this.item && this.item.type === 'query' ? this.refreshedByFor(this.item.name) : []);
     this.stepsPanel.render(model, this.caretStep(model));
     if (focusName) this.stepsPanel.focusStep(focusName);
+  }
+
+  refreshedByFor(name) {
+    if (!this.session.modules.length) return [];
+    return refreshedBy(this.allPqLinks(), this.linkContext()).get(name) || [];
+  }
+
+  linkContext() {
+    const qs = this.session.queries;
+    return { queries: qs.map((q) => q.name), loaded: qs.filter((q) => q.load && q.load.kind === 'table').map((q) => q.name), queryOfTable: (t) => { const q = qs.find((x) => x.load && x.load.tableName === t); return q ? q.name : null; } };
+  }
+
+  allPqLinks() {
+    const per = new Map();
+    for (const m of this.session.modules) {
+      const text = this.item && this.item.type === 'module' && this.item.name === m.name ? this.editor.getText() : this.session.textOf({ type: 'module', name: m.name });
+      const links = pqLinksOfModule(text, this.moduleKindOf({ name: m.name }));
+      if (links.size) per.set(m.name, links);
+    }
+    return per;
+  }
+
+  async runLinked(procName, names) {
+    if (this.runner.running || this.orchestrator.running) {
+      this.status.set({ note: S.batch.busy });
+      return;
+    }
+    this.status.set({ note: S.pqLinks.note });
+    this.setRunning(true);
+    await this.orchestrator.run('run-selected', { selection: names, ordered: true });
+    this.setRunning(false);
+    this.paintStatuses();
+    this.status.set({ note: `${S.pqLinks.forMacro(procName)}: ${S.batch.summary(this.orchestrator.counts())}` });
   }
 
   moduleKindOf(item) {
@@ -347,7 +383,13 @@ export class Workspace {
     const match = matchProcedures(this.session.originalText(this.item), text, kind);
     this.outlineModel = outline;
     const line = this.lineOfOffset(text, this.editor.caretOffset());
-    this.outlinePanel.render(outline, match, line);
+    const ctx = this.linkContext();
+    const links = new Map();
+    for (const [pname, ls] of pqLinksOfModule(text, kind)) {
+      const resolved = resolveLinks(ls, ctx);
+      links.set(pname, { plan: runPlanOf(resolved), hasAll: resolved.some((r) => r.kind === 'all'), reads: [...new Set(resolved.filter((r) => r.kind === 'read' && !r.dynamic && r.name).map((r) => r.name))] });
+    }
+    this.outlinePanel.render(outline, match, line, links);
     this.updateCrumb(outline, line);
   }
 

@@ -1,5 +1,5 @@
 {
-  "version": "60ad660cbdc13bce",
+  "version": "e9e297817e45c2bb",
   "files": [
     "./",
     "index.html",
@@ -23,6 +23,7 @@
     "public/mark.svg",
     "src/app/app-commands.js",
     "src/app/bootstrap.js",
+    "src/app/collect-run.js",
     "src/app/commands.js",
     "src/app/file-save.js",
     "src/app/intake.js",

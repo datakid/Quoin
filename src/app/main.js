@@ -17,6 +17,7 @@ import { SetSession } from './set-session.js';
 import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
+import { startCollect } from './collect-run.js';
 
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
 
@@ -214,7 +215,9 @@ export class App {
       onSummary: (c) => {
         this.fileMeta.textContent = S.setSummary(c.files, c.queries);
         document.title = S.setTitle(c.files);
-      }
+      },
+      onCollect: () => this.collectSet(),
+      onCancel: () => this.cancelSetRun()
     });
   }
 
@@ -312,6 +315,31 @@ export class App {
     }
     if (unreadable.length) this.status.set({ alertText: S.unreadableItems(unreadable.length) });
     indexPending(this.set, sharedPool());
+  }
+
+  collectSet() {
+    if (this.setRun) return this.setRun.promise;
+    const now = new Date().toISOString();
+    let run;
+    try {
+      run = startCollect({ session: this.set, pool: sharedPool(), now, runId: `r${now}` });
+    } catch {
+      this.status.set({ alertText: S.setBusy });
+      return Promise.resolve(null);
+    }
+    this.setRun = run;
+    return run.promise.then((out) => {
+      if (this.setRun === run) this.setRun = null;
+      if (out.ok) saveBytes(out.bytes, out.name, 'application/zip');
+      else if (out.code) this.status.set({ alertText: errorMessage(out.code) });
+      return out;
+    });
+  }
+
+  cancelSetRun() {
+    if (!this.setRun) return;
+    this.setRun.cancel();
+    this.setRun = null;
   }
 
   chooseFolder() {

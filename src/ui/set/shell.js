@@ -43,10 +43,12 @@ function splitPath(relPath, name) {
 }
 
 export class SetShell {
-  constructor(container, session, { onSummary = () => {} } = {}) {
+  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {} } = {}) {
     this.container = container;
     this.session = session;
     this.onSummary = onSummary;
+    this.onCollect = onCollect;
+    this.onCancel = onCancel;
     this.query = '';
     this.scheduled = false;
     this.build();
@@ -68,7 +70,9 @@ export class SetShell {
     this.result = h('section', { class: 'set-pane set-result', 'aria-label': S.setResult, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setResult));
     this.runText = h('span', { class: 'set-run-text' });
     this.bar = h('progress', { class: 'set-bar', hidden: true, 'aria-label': S.setRunRunning(0, 0) });
-    this.runbar = h('div', { class: 'set-runbar', role: 'status' }, this.runText, this.bar);
+    this.collectBtn = h('button', { class: 'btn btn-primary set-collect', type: 'button', hidden: true, onclick: () => this.onCollect() }, S.setCollect);
+    this.cancelBtn = h('button', { class: 'btn set-cancel', type: 'button', hidden: true, onclick: () => this.onCancel() }, S.cancel);
+    this.runbar = h('div', { class: 'set-runbar' }, h('div', { class: 'set-run-status', role: 'status' }, this.runText, this.bar), this.collectBtn, this.cancelBtn);
     this.root = h('div', { class: 'set-shell' }, this.files, this.recipe, this.result, this.runbar);
     this.container.append(this.root);
   }
@@ -101,6 +105,8 @@ export class SetShell {
       this.bar.setAttribute('aria-label', this.runText.textContent);
     }
     const counts = this.session.counts();
+    this.collectBtn.hidden = !(this.session.state === 'ready' || this.session.state === 'done' || this.session.state === 'doneWithFailures') || counts.ready + counts.edited === 0;
+    this.cancelBtn.hidden = this.session.state !== 'running';
     this.onSummary(counts);
   }
 

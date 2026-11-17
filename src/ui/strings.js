@@ -222,6 +222,7 @@ export const S = {
   setBusy: 'Files can be added when nothing is running.',
   loadConnectionOnly: 'connection only',
   loadTable: (table, sheet) => `table ${table} on ${sheet}`,
+  setCollect: 'Export everything',
   setFiles: 'Files',
   setRecipe: 'Recipe',
   setResult: 'Result',

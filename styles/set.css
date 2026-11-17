@@ -157,6 +157,14 @@
   font-size: var(--t-md);
 }
 
+.set-run-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .set-bar {
   appearance: none;
   width: 200px;

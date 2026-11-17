@@ -6,7 +6,8 @@ import { tableToJson, valueToJson } from '../core/export/json.js';
 import { tableToXlsx } from '../core/export/xlsx.js';
 import { indexWorkbook } from '../batch/index/file-index.js';
 import { inspectWorkbook } from '../batch/index/inspect.js';
-import { validateMessage, openedMessage, refusedMessage, inspectedMessage } from '../batch/protocol.js';
+import { executeFilePlan, failedResult } from '../batch/execute/collect.js';
+import { validateMessage, openedMessage, refusedMessage, inspectedMessage, appliedMessage, transferListFor } from '../batch/protocol.js';
 
 const store = new ResultStore();
 let lastId = null;
@@ -216,6 +217,25 @@ async function inspectFile(m) {
   }
 }
 
+async function applyFile(m) {
+  const id = fileIdOf(m);
+  if (!validateMessage(m).ok) {
+    if (id) post(refusedMessage(id, 'file.notWorkbook'));
+    return;
+  }
+  const meta = metaOf(m.fileRef);
+  const options = { now: m.options.now, runId: typeof m.options.runId === 'string' ? m.options.runId : '' };
+  let result;
+  try {
+    result = await executeFilePlan(await bytesOf(m.fileRef), meta, m.filePlan, options);
+  } catch (e) {
+    console.error(e);
+    result = failedResult(meta, m.filePlan, e, options);
+  }
+  const reply = appliedMessage(id, result);
+  post(reply, transferListFor(reply));
+}
+
 self.onmessage = (ev) => {
   const m = ev.data;
   if (m.type === 'run') run(m);
@@ -236,4 +256,5 @@ self.onmessage = (ev) => {
   } else if (m.type === 'export') exportResult(m);
   else if (m.type === 'open') openFile(m);
   else if (m.type === 'inspect') inspectFile(m);
+  else if (m.type === 'apply') applyFile(m);
 };

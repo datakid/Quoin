@@ -25,7 +25,7 @@ export function moduleFile(mod, text, codePage) {
   return { name: sanitizeFileName(mod.name, ext), data: encodeText(codePage, crlf, null) };
 }
 
-export async function zipFiles(files) {
+export async function zipFiles(files, options = {}) {
   const seen = new Set();
   const unique = files.map((f) => {
     let name = f.name;
@@ -37,5 +37,5 @@ export async function zipFiles(files) {
     seen.add(name.toLowerCase());
     return { ...f, name };
   });
-  return writeZip(unique);
+  return writeZip(unique, options);
 }

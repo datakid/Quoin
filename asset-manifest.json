@@ -1,5 +1,5 @@
 {
-  "version": "7f61d65f68a0f1b5",
+  "version": "035674d26de736ae",
   "files": [
     "./",
     "index.html",
@@ -34,6 +34,7 @@
     "src/app/set-session.js",
     "src/app/theme-init.js",
     "src/app/workspace.js",
+    "src/batch/execute/collect.js",
     "src/batch/index/file-index.js",
     "src/batch/index/hash.js",
     "src/batch/index/inspect.js",

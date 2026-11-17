@@ -263,3 +263,20 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - Input must be file indexes with status ready or refused; files that failed to index are the caller's to leave out or report.
 Counts after this task: lint 0 findings; unit 1092 tests.
 
+### F1-03 Execute: Collect
+Layer: batch/execute, workers, core (one optional argument)
+Files: src/batch/execute/collect.js, src/workers/m-worker.js, src/core/export/files.js, src/batch/index/hash.js, tests/unit/batch-collect.test.js, tests/e2e/fable-collect-worker.spec.js, asset-manifest.json
+Do: `executeFilePlan(bytes, meta, filePlan, {now, runId})` opens the workbook, builds the query (`.m`) and module (`.bas`, `.cls`, `.frm`) files with `queryFile` and `moduleFile` exactly as the single-file "everything" export does, zips them with `zipFiles`, reads the zip back and compares every entry with what was meant to be written, then returns the plan's ApplyResult with the bytes, their SHA-256 and one report row per action in the Appendix B column order. The worker answers `apply` with an `applied` message and transfers the buffer. A file that cannot be opened comes back as one `failed` row and the worker keeps working. `zipFiles` takes an optional second argument that is passed to `writeZip`, and the zip clock is built from the frozen time's UTC parts so the bytes do not depend on the local time zone.
+Test that fails without it: `tests/unit/batch-collect.test.js` (16 tests: for four workbooks the output equals the single-file zip byte for byte and hash for hash; entry names; one row per action with the index hashes; nothing to collect; determinism; time zone independence; inputs untouched; failures) and `tests/e2e/fable-collect-worker.spec.js` (2 tests: the worker's bytes, hash and rows equal Node's, twice in a row; a corrupt file is a failed row and the worker survives).
+Result: Done locally; CI result is recorded when the run finishes.
+Fails without: yes
+Changed expectations: none
+Deviations: `src/core/export/files.js` gained an optional argument; its existing behaviour is unchanged.
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- Collect rows have verdict `unchanged` (nothing is modified), `verified` true after the read-back, and old and new hash both set to the index hash of the query or module. The report `reason` column is left empty by the worker; the UI turns `reason_code` into text from `strings.js`.
+- A file with no queries and no readable modules gives `bytes: null` and one row, rather than an empty zip.
+- A module whose text could not be decoded is skipped with `skip.notApplicable`. A read-back mismatch gives verdict `not-released` with the new code `verify.readBack`; the report builder adds its string.
+- The folder column keeps a trailing slash (`east/`), so `{file.folder}{file.name}` joins correctly; it is empty at the root.
+- Cancel is not yet cooperative inside the worker; the pool terminates and replaces a worker that does not acknowledge within 1000 ms. Cooperative cancel arrives with the writing phase.
+Counts after this task: lint 0 findings; unit 1109 tests.
+

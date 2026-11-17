@@ -278,5 +278,21 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - A module whose text could not be decoded is skipped with `skip.notApplicable`. A read-back mismatch gives verdict `not-released` with the new code `verify.readBack`; the report builder adds its string.
 - The folder column keeps a trailing slash (`east/`), so `{file.folder}{file.name}` joins correctly; it is empty at the root.
 - Cancel is not yet cooperative inside the worker; the pool terminates and replaces a worker that does not acknowledge within 1000 ms. Cooperative cancel arrives with the writing phase.
-Counts after this task: lint 0 findings; unit 1109 tests.
+Counts after this task: lint 0 findings; unit 1108 tests.
+
+### F1-04 Collect outputs (part 1: the zip)
+Layer: app, core/export
+Files: src/app/outputs.js, src/core/export/xlsx.js, src/ui/strings.js, tests/unit/outputs.test.js, asset-manifest.json
+Do: `buildCollectOutput({plan, indexes, results, now, runId})` builds one zip: `index.xlsx` and `report.csv` first, then one folder per file that produced output, holding that file's own entries (`queries/…`, `modules/…`) unchanged. The folder is the file's relative path without its extension, each segment sanitised, with `-2`, `-3` for collisions compared without regard to case. `index.xlsx` lists every query and module of every ready file (file, name, kind, load target, full hash). `report.csv` starts with a BOM, has the Appendix B columns, guards values that start like a formula, and has at least one row for every dropped file: refused files as `refused` with their reason, failed files as `failed`, files with no result as `cancelled`. Outputs over 1 GiB of compressed bytes or over 65,534 entries are refused with `output.zipTooLarge`. `tablesToXlsx` is added to core with the single-sheet behaviour of `tableToXlsx`.
+Test that fails without it: `tests/unit/outputs.test.js`, 13 tests (module missing without the change).
+Result: Part 1 done. Part 2 (the run flow, the button and the browser test) follows.
+Fails without: yes
+Changed expectations: none
+Deviations: `tablesToXlsx` accepts exactly one table for now and delegates to `tableToXlsx`, so it is byte-compatible by construction; multiple sheets arrive with the phase that needs them.
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- Folders keep the file's folder structure (`east/2024-sales/…`) rather than flattening the path into one name.
+- A file with no queries and no modules gets no folder (it appears in `report.csv` as unchanged).
+- Report `reason` text comes from `strings.js` for the row's `reason_code`; the worker leaves it empty.
+- New strings: `pool.cancelled`, `output.zipTooLarge` (wording from Appendix E) and the two load-target phrases.
+Counts after this part: lint 0 findings; unit 1121 tests.
 

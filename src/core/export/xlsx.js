@@ -63,3 +63,8 @@ export async function tableToXlsx(table, culture = 'en-US') {
     enc('xl/worksheets/sheet1.xml', sheet)
   ]);
 }
+
+export async function tablesToXlsx(tables, culture = 'en-US') {
+  if (tables.length !== 1) throw new RangeError('tablesToXlsx writes one table for now');
+  return tableToXlsx(tables[0], culture);
+}

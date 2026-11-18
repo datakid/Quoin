@@ -31,7 +31,7 @@ Deviations: none
 Not re-verified: the plan's §2 table (G1 to G17) has not been re-checked row by row against the checkout. Only G9, G14 and G15 were touched.
 
 ### F0-02 Fable docs folder
-Result: Partly done. `01_PLAN.md` is a verbatim copy of the plan. `00_FABLE.md` is Blocked.
+Result: Done. `01_PLAN.md` is a verbatim copy of the plan and `00_FABLE.md` is the decision document, added when the user supplied it.
 
 ### F0-03 Layer lint rules
 Layer: lint
@@ -222,7 +222,7 @@ Result: Done. CI at 5a3ce1c is green across lint, unit and browser, including al
 Not part of this task: in the old and new 390 px baselines of the VBA view the file name in the top bar overlaps the word "Search". It exists on beta and is unchanged.
 
 ### Blocked
-- `quoin-fable.md` (the decision document) has not been supplied, so `docs/fable/00_FABLE.md` cannot be written and tasks citing Fable §3.3, §6.1, §9, §12 and §15 cannot start (F0-12, F3-02, F3-10).
+- Resolved: `quoin-fable.md` was supplied and is `docs/fable/00_FABLE.md`; F0-12, F3-02 and F3-10 are unblocked.
 - Resolved: the six tests that failed on beta were fixed on this branch (F0-15, approved by the user); the 36 screenshot mismatches were closed by regenerating every baseline on the CI runner (F0-16, decided by the assistant, see below).
 
 ### Deviations

@@ -94,7 +94,16 @@ Test that fails without it: these pass on arrival because F3-01 built the behavi
 Result: Partly done. Rules 3 (two recipes on one field: last chosen wins, the region shows what it replaced) and 4 (injecting an existing name is `replace`, with the old hash) are not in resolve's files: rule 3 is session state in `src/app` and `Action.replaces`, rule 4 is inject resolution and the Writer's execute code. Testing them here would mean writing the code the other branches own, so they stay with trunk and Writer.
 Fails without: yes (by mutation)
 Changed expectations: none
-Deviations: F3-02 was waiting on `quoin-fable.md`; the user attached it to this session, so it is read and §3 and §9 are checked against.
+Deviations: F3-02 was waiting on `quoin-fable.md`; the user attached it to this session and trunk has since added it as `docs/fable/00_FABLE.md` and listed F3-02 as Scope's in PARALLEL.md.
+
+Where each rule of Fable §3.2 and §3.3 is tested in this branch:
+
+- §3.2 pins match by exact name, then folder-relative path: `batch-scope.test.js`, the four "pin" tests on name, path, ambiguity and orphans.
+- §3.2 a pin whose file is absent is shown as orphaned and never dropped: "a pin whose file is gone is an orphan".
+- §3.2 a file resolving to nothing is skipped, and is not an error: "a file that resolves to nothing is skipped".
+- §3.2 divergence is stated as a fact: "divergence is a fact in the summary" (7 files with one unit, 3 files with two, 13 units across 10 files).
+- §3.2 order inside a file is the unit order and a unit may read a prior unit's output: `batch-chain.test.js`, "units run in index order" and "a unit reads an earlier unit output".
+- §3.3 pin beats rule and exclude beats include: the three tests added in F3-02.
 
 ## Strings and codes trunk adds when it merges
 

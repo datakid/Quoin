@@ -1,9 +1,9 @@
 name: ci
 on:
   push:
-    branches: [fable]
+    branches: [fable, 'fable-*']
   pull_request:
-    branches: [fable]
+    branches: [fable, 'fable-*']
   workflow_dispatch:
 permissions:
   contents: write
@@ -52,7 +52,7 @@ jobs:
           path: test-results
           if-no-files-found: ignore
   baselines:
-    if: ${{ contains(github.event.head_commit.message, '[update-baselines]') }}
+    if: ${{ github.ref == 'refs/heads/fable' && contains(github.event.head_commit.message, '[update-baselines]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

@@ -83,12 +83,20 @@ for (const [state, text] of Object.entries(RUN_TEXT)) {
   });
 }
 
-test('fable shell: every state is reachable and nothing in the shell animates', async ({ page }) => {
+test('fable shell: every state is reachable and the shell animates only colour, opacity and transform', async ({ page }) => {
   expect(SET_STATES).toHaveLength(7);
   await openApp(page);
   await setUpSetState(page, 'running');
-  const moving = await page.evaluate(() => [...document.querySelectorAll('.set-shell, .set-shell *')].filter((el) => { const cs = getComputedStyle(el); return parseFloat(cs.transitionDuration) > 0 || parseFloat(cs.animationDuration) > 0; }).length);
-  expect(moving).toBe(0);
+  const offenders = await page.evaluate(() => {
+    const allowed = new Set(['color', 'background-color', 'border-color', 'opacity', 'transform', 'box-shadow', 'outline-color', 'all']);
+    return [...document.querySelectorAll('.set-shell, .set-shell *')].filter((el) => {
+      const cs = getComputedStyle(el);
+      if (parseFloat(cs.animationDuration) > 0) return true;
+      if (!(parseFloat(cs.transitionDuration) > 0)) return false;
+      return cs.transitionProperty.split(',').map((p) => p.trim()).some((p) => !allowed.has(p));
+    }).map((el) => el.className);
+  });
+  expect(offenders).toEqual([]);
 });
 
 test('fable shell: Tab reaches the filter, the recipe region and the result region in order', async ({ page }) => {

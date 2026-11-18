@@ -1,0 +1,181 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { openWorkbook } from '../../src/core/workbook.js';
+import { applyChangeSet } from '../../src/core/save.js';
+import { checkSection } from '../../src/core/m/engine.js';
+import { executeFile } from '../../src/batch/execute/index.js';
+import { planChanges } from '../../src/batch/execute/changes.js';
+import { REPORT_COLUMNS, zipClock } from '../../src/batch/execute/collect.js';
+import { sha256Text, sha256Bytes } from '../../src/batch/index/hash.js';
+import { normalizeQueryText } from '../../src/core/pq/section.js';
+import { fixture, generated } from './helpers.js';
+
+const NOW = '2026-11-14T10:00:00.000Z';
+const NEW_M = 'let\n    Source = 1\nin\n    Source';
+
+const recipeFor = (over = {}) => ({
+  recipe: 'inject',
+  v: 1,
+  scope: { type: 'workbook', match: 'all', excludeHidden: true },
+  inject: { target: 'query', op: 'replace', match: 'name', name: 'StudentResults', newName: null, source: 'inline', text: NEW_M, refreshOnLoad: true, ...over }
+});
+
+function filePlanFor(names, op = 'replace') {
+  const unit = { fileId: 'f0001', kind: 'workbook', name: 'pq_simple', index: 1 };
+  return { fileId: 'f0001', source: 'rule', units: [unit], actions: names.map((name) => ({ unit, op, target: { type: 'query', name }, compute: null, output: null, replaces: null })), skipped: null };
+}
+
+const open = (name = 'pq_simple.xlsx') => openWorkbook(fixture(name), name);
+
+test('F2-02: a replace action becomes a ChangeSet that replaces the query with trimmed text', async () => {
+  const wb = await open();
+  const { changeSet, outcomes } = await planChanges(wb, filePlanFor(['StudentResults']), recipeFor({ text: `\n\n${NEW_M}  \n` }));
+  assert.deepEqual([...changeSet.queries.replace], [['StudentResults', NEW_M]]);
+  assert.equal(changeSet.queries.add.size + changeSet.queries.rename.size + changeSet.queries.remove.size, 0);
+  assert.deepEqual([...changeSet.refreshOnLoad], ['StudentResults']);
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].verdict, 'changed');
+  assert.equal(outcomes[0].old_hash, await sha256Text(normalizeQueryText(wb.queries[0].original)));
+  assert.equal(outcomes[0].new_hash, await sha256Text(NEW_M));
+});
+
+test('F2-02: the recipe decides whether the query refreshes on open', async () => {
+  const wb = await open();
+  const off = await planChanges(wb, filePlanFor(['StudentResults']), recipeFor({ refreshOnLoad: false }));
+  assert.equal(off.changeSet.refreshOnLoad.size, 0);
+  const unset = await planChanges(wb, filePlanFor(['StudentResults']), recipeFor({ refreshOnLoad: undefined }));
+  assert.equal(unset.changeSet.refreshOnLoad.size, 0);
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor({ refreshOnLoad: false }) });
+  const back = await openWorkbook(res.bytes, 'x.xlsx');
+  assert.equal(back.queries[0].connection.refreshOnLoad, false);
+  const on = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor({ refreshOnLoad: true }) });
+  assert.equal((await openWorkbook(on.bytes, 'x.xlsx')).queries[0].connection.refreshOnLoad, true);
+});
+
+test('F2-02: executeFile returns the new bytes, their hash, the change and one report row', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor(), runId: 'r1', meta: { name: 'pq_simple.xlsx', relPath: 'east/pq_simple.xlsx' } });
+  assert.equal(res.fileId, 'f0001');
+  assert.ok(res.bytes instanceof Uint8Array);
+  assert.equal(res.sha256, await sha256Bytes(res.bytes));
+  const back = await openWorkbook(res.bytes, 'x.xlsx');
+  assert.equal(back.queries[0].original, NEW_M);
+  assert.deepEqual(res.changes, [{ op: 'replace', target: { type: 'query', name: 'StudentResults' }, oldHash: await sha256Text(normalizeQueryText(wb.queries[0].original)), newHash: await sha256Text(NEW_M) }]);
+  assert.deepEqual(res.warnings, []);
+  assert.equal(res.rows.length, 1);
+  const row = res.rows[0];
+  assert.deepEqual(Object.keys(row), REPORT_COLUMNS);
+  assert.equal(row.run_id, 'r1');
+  assert.equal(row.file, 'pq_simple.xlsx');
+  assert.equal(row.folder, 'east/');
+  assert.equal(row.unit, 'pq_simple');
+  assert.equal(row.unit_index, 1);
+  assert.equal(row.recipe, 'inject');
+  assert.equal(row.action, 'replace');
+  assert.equal(row.compute, '');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, res.changes[0].oldHash);
+  assert.equal(row.new_hash, res.changes[0].newHash);
+  assert.equal(row.verified, true);
+  assert.equal(row.signature_removed, false);
+  assert.ok(Number.isInteger(row.duration_ms) && row.duration_ms >= 0);
+});
+
+test('F2-02: the bytes are exactly what applyChangeSet gives for that ChangeSet and clock', async () => {
+  const wb = await open();
+  const recipe = recipeFor();
+  const { changeSet } = await planChanges(wb, filePlanFor(['StudentResults']), recipe);
+  const direct = await applyChangeSet(wb, changeSet, { now: zipClock(NOW), refreshOnLoad: false, checkSection });
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe });
+  assert.equal(res.sha256, await sha256Bytes(direct.bytes));
+});
+
+test('F2-02: the same now gives byte-identical output even when the clock moves', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 14, 10, 0, 0) });
+  const wb = await open();
+  const first = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor() });
+  t.mock.timers.tick(30000);
+  const second = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor() });
+  assert.equal(first.sha256, second.sha256);
+  const later = await executeFile(wb, filePlanFor(['StudentResults']), { now: '2026-12-01T08:30:00.000Z', recipe: recipeFor() });
+  assert.notEqual(later.sha256, first.sha256);
+});
+
+test('F2-02: execute never reads dryRun', async () => {
+  const wb = await open();
+  let reads = 0;
+  const options = { now: NOW, recipe: recipeFor() };
+  Object.defineProperty(options, 'dryRun', {
+    enumerable: true,
+    get() {
+      reads += 1;
+      return true;
+    }
+  });
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), options);
+  assert.equal(reads, 0);
+  assert.ok(res.bytes);
+});
+
+test('F2-02: text with Windows line breaks is stored with the same breaks as typed text', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor({ text: NEW_M.replace(/\n/g, '\r\n') }) });
+  assert.equal((await openWorkbook(res.bytes, 'x.xlsx')).queries[0].original, NEW_M);
+});
+
+test('F2-02: the same text as the query gives unchanged and no bytes', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor({ text: `${wb.queries[0].original}\n` }) });
+  assert.equal(res.bytes, null);
+  assert.equal(res.sha256, null);
+  assert.deepEqual(res.changes, []);
+  assert.equal(res.rows[0].verdict, 'unchanged');
+  assert.equal(res.rows[0].old_hash, res.rows[0].new_hash);
+  assert.equal(res.rows[0].verified, true);
+});
+
+test('F2-02: a query that is not in the file is skipped, and so is a file with no query data', async () => {
+  const wb = await open();
+  const missing = await executeFile(wb, filePlanFor(['Nope']), { now: NOW, recipe: recipeFor({ name: 'Nope' }) });
+  assert.equal(missing.bytes, null);
+  assert.equal(missing.rows[0].verdict, 'skipped');
+  assert.equal(missing.rows[0].reason_code, 'skip.notApplicable');
+  const plain = await open('plain_table.xlsx');
+  const none = await executeFile(plain, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor() });
+  assert.equal(none.bytes, null);
+  assert.equal(none.rows[0].verdict, 'skipped');
+});
+
+test('F2-02: text that does not parse fails the file with m.parse and writes nothing', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor({ text: 'let Source = in' }) });
+  assert.equal(res.bytes, null);
+  assert.equal(res.sha256, null);
+  assert.deepEqual(res.changes, []);
+  assert.equal(res.rows[0].verdict, 'failed');
+  assert.equal(res.rows[0].reason_code, 'm.parse');
+  assert.equal(res.rows[0].verified, false);
+});
+
+test('F2-02: a failed self-check releases nothing and reports not-released', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const raw = wb.queries.find((q) => q.name === 'RawInput');
+  raw.original = `${raw.original}\n// tampered after open`;
+  const res = await executeFile(wb, filePlanFor(['FinalTable']), { now: NOW, recipe: recipeFor({ name: 'FinalTable' }) });
+  assert.ok(res.bytes === null);
+  assert.ok(res.sha256 === null);
+  assert.equal(res.rows[0].verdict, 'not-released');
+  assert.equal(res.rows[0].reason_code, 'write.selfcheck');
+  assert.equal(res.rows[0].verified, false);
+});
+
+test('F2-02: an error that is not a Quoin error is not turned into a row', async () => {
+  const wb = await open();
+  wb.pkg = null;
+  await assert.rejects(() => executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor() }), TypeError);
+});
+
+test('F2-02: an op that is not built yet is refused, not skipped', async () => {
+  const wb = await open();
+  await assert.rejects(() => executeFile(wb, filePlanFor(['StudentResults'], 'transform'), { now: NOW, recipe: recipeFor() }), /not supported yet/);
+});

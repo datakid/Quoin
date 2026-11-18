@@ -296,6 +296,31 @@ export const S = {
     toggle: 'Steps',
     toggleAria: 'Show or hide the steps panel'
   },
+  deps: {
+    dependsOn: 'Depends on',
+    usedBy: 'Used by',
+    none: 'None',
+    graph: 'Graph',
+    impact: (n, m) => `Editing this affects ${n} ${n === 1 ? 'query' : 'queries'}${m ? ` (${m} loaded to sheets)` : ''}`,
+    noImpact: 'Nothing else uses this query.'
+  },
+  graph: {
+    title: 'Dependency graph',
+    region: 'Dependency graph. Arrow left goes to a query this one uses, arrow right to one that uses it, up and down move between neighbours, Enter opens it.',
+    neighbourhood: 'Neighbourhood',
+    all: 'Show all',
+    fit: 'Fit',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    open: 'Open',
+    run: 'Run',
+    runDownstream: 'Run with downstream',
+    onlyThis: 'Show only this neighbourhood',
+    selected: (name, up, down) => `${name}. Depends on ${up.length ? up.join(', ') : 'nothing'}. Used by ${down.length ? down.join(', ') : 'nothing'}.`,
+    cycle: 'These queries depend on each other in a loop.',
+    count: (n) => (n === 1 ? '1 query' : `${n} queries`),
+    empty: 'There are no queries to draw.'
+  },
   pqLinks: {
     refreshes: 'Refreshes',
     runThese: 'Run these queries',
@@ -420,6 +445,7 @@ export const S = {
   },
   stepKind: { source: 'Source', navigate: 'Navigate', filter: 'Filter', sort: 'Sort', 'add-column': 'Column', 'remove-columns': 'Columns', rename: 'Rename', types: 'Types', group: 'Group', merge: 'Merge', append: 'Append', pivot: 'Pivot', expand: 'Expand', promote: 'Headers', custom: 'Custom' },
   cmd: {
+    graph: 'Show the dependency graph',
     find: 'Find in all queries and macros',
     replace: 'Find and replace in all queries and macros',
     problems: 'Show the problems list',

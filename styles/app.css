@@ -1854,3 +1854,162 @@ dialog.find {
   justify-self: start;
   margin-top: var(--s-1);
 }
+
+.bead-stale {
+  background: transparent;
+  border: 1.5px solid var(--ochre);
+}
+
+.deps-panel {
+  flex: none;
+  border-top: 1px solid var(--line);
+  padding-bottom: var(--s-3);
+}
+
+.deps-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-2);
+  padding: 0 var(--s-2);
+}
+
+.dep-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  min-height: var(--h-row);
+  padding: 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dep-row:hover {
+  background: var(--hover);
+}
+
+.dep-none {
+  margin: 0;
+  padding: 0 var(--s-3);
+}
+
+.deps-impact {
+  margin: var(--s-2) 0 0;
+  padding: 0 var(--s-4);
+}
+
+dialog.graph {
+  width: min(1100px, calc(100vw - var(--s-5)));
+  max-width: none;
+  max-height: 90vh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: var(--s-3);
+}
+
+.graph-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.graph-wrap {
+  min-height: 22.5rem;
+  height: 56vh;
+  border-radius: var(--r-3);
+  background: var(--sunk);
+  overflow: hidden;
+}
+
+.graph-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.graph-svg:focus-visible {
+  outline: 2px solid var(--slate);
+  outline-offset: -2px;
+}
+
+.graph-edge {
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.graph-edge.is-on {
+  stroke: var(--slate);
+  stroke-width: 2;
+}
+
+.graph-edge.is-cycle {
+  stroke: var(--madder);
+  stroke-dasharray: 6 4;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node rect {
+  fill: var(--raised);
+  stroke: var(--line-strong);
+}
+
+.graph-node text {
+  fill: var(--ink);
+  font-size: 12px;
+  font-family: var(--font-ui);
+}
+
+.graph-node.is-up rect,
+.graph-node.is-down rect {
+  stroke: var(--slate);
+}
+
+.graph-node.is-selected rect {
+  fill: var(--slate-soft);
+  stroke: var(--slate);
+  stroke-width: 2;
+}
+
+.graph-bead {
+  fill: var(--ink-3);
+}
+
+.graph-bead.bead-ok {
+  fill: var(--celadon-ink);
+}
+
+.graph-bead.bead-error {
+  fill: var(--madder);
+}
+
+.graph-bead.bead-stopped {
+  fill: var(--ochre);
+}
+
+.graph-bead.bead-stale {
+  fill: none;
+  stroke: var(--ochre);
+  stroke-width: 1.5;
+}
+
+.graph-bead.bead-never {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.graph-empty {
+  fill: var(--ink-3);
+}
+
+.graph-selected {
+  color: var(--ink-2);
+}

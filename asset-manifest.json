@@ -1,5 +1,5 @@
 {
-  "version": "66bb7303961d1fd5",
+  "version": "f4881f082f6c35c9",
   "files": [
     "./",
     "index.html",
@@ -98,6 +98,7 @@
     "src/core/wb/deps.js",
     "src/core/wb/find.js",
     "src/core/wb/fuzzy.js",
+    "src/core/wb/graph-layout.js",
     "src/core/wb/ident.js",
     "src/core/wb/let-edit.js",
     "src/core/wb/lib-names.js",
@@ -124,7 +125,9 @@
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
     "src/ui/strings.js",
+    "src/ui/wb/deps-panel.js",
     "src/ui/wb/find-dialog.js",
+    "src/ui/wb/graph-view.js",
     "src/ui/wb/outline-panel.js",
     "src/ui/wb/palette.js",
     "src/ui/wb/problems-dialog.js",

@@ -20,6 +20,7 @@ export function buildRegistry(app) {
   r.register({ id: 'problems', keys: [], surfaces: ['T1'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openProblems() : false) });
   r.register({ id: 'find', keys: ['Mod+Shift+F'], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openFind(false) : false) });
   r.register({ id: 'replace', keys: ['Mod+Alt+F'], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openFind(true) : false) });
+  r.register({ id: 'graph', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openGraph() : false) });
   r.register({ id: 'palette', keys: ['Mod+K', 'Mod+Shift+P'], surfaces: ['T1'], run: (a) => a.openPalette() });
   r.register({ id: 'shortcuts', keys: ['?'], surfaces: ['T3'], when: () => !inField(), run: (a) => a.openShortcuts() });
   r.register({ id: 'settings', keys: [], surfaces: ['T3'], run: (a) => a.openSettings() });

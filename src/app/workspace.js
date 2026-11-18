@@ -5,6 +5,10 @@ import { Grid, cellDisplay } from '../ui/grid.js';
 import { popover, bindingDialog, differencesDialog, confirmDialog } from '../ui/dialogs.js';
 import { StepsPanel } from '../ui/wb/steps-panel.js';
 import { OutlinePanel } from '../ui/wb/outline-panel.js';
+import { DepsPanel } from '../ui/wb/deps-panel.js';
+import { openGraph } from '../ui/wb/graph-view.js';
+import { upstreamOf, downstreamOf } from '../core/wb/deps.js';
+import { impactOf } from '../core/wb/graph-layout.js';
 import { outlineModule } from '../core/vba/outline.js';
 import { pqLinksOfModule, resolveLinks, runPlanOf, refreshedBy } from '../core/vba/pq-links.js';
 import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
@@ -79,6 +83,7 @@ export class Workspace {
     this.outlineHost = h('div', { class: 'inspector-section outline-host' });
     this.inspector.append(this.stepsHost, this.outlineHost);
     this.stepsPanel = new StepsPanel(this.stepsHost, this.stepActions());
+    this.depsPanel = new DepsPanel(this.stepsHost, { open: (n) => this.select({ type: 'query', name: n }), graph: () => this.openGraph() });
     this.outlinePanel = new OutlinePanel(this.outlineHost, {
       go: (line) => this.editor.goto(line, 1),
       revert: (key, name) => this.revertProc(key, name, false),
@@ -268,6 +273,7 @@ export class Workspace {
 
   paintStatuses() {
     const statuses = this.orchestrator.statuses();
+    if (this.depsPanel) this.refreshDeps();
     for (const li of this.rail.querySelectorAll('[role="treeitem"][data-type="query"]')) {
       const dot = li.querySelector('.dot-loaded, .dot-conn');
       if (!dot) continue;
@@ -331,7 +337,49 @@ export class Workspace {
     this.stepsPanel.setResults(this.stepResults);
     this.stepsPanel.setRefreshedBy(this.item && this.item.type === 'query' ? this.refreshedByFor(this.item.name) : []);
     this.stepsPanel.render(model, this.caretStep(model));
+    this.refreshDeps();
     if (focusName) this.stepsPanel.focusStep(focusName);
+  }
+
+  depsModel(name) {
+    const index = this.orchestrator.refresh();
+    if (!index.members.some((m) => m.name === name)) return null;
+    const statuses = this.orchestrator.statuses();
+    const qs = this.session.queries;
+    const loaded = new Set(qs.filter((q) => q.load && q.load.kind === 'table').map((q) => q.name));
+    return {
+      upstream: [...upstreamOf(index, [name], { transitive: false })],
+      downstream: [...downstreamOf(index, [name], { transitive: false })],
+      statuses,
+      impact: impactOf(downstreamOf(index, [name]), (n) => loaded.has(n))
+    };
+  }
+
+  refreshDeps() {
+    this.depsPanel.render(this.item && this.item.type === 'query' ? this.depsModel(this.item.name) : null);
+  }
+
+  openGraph(start = null) {
+    const index = this.orchestrator.refresh();
+    const cur = start || (this.item && this.item.type === 'query' ? this.item.name : null);
+    openGraph({
+      nodes: () => index.members.map((m) => m.name),
+      edges: () => index.members.flatMap((m) => [...(index.refs.get(m.name) || [])].map((d) => [d, m.name])),
+      statuses: () => this.orchestrator.statuses(),
+      upstream: (n) => [...upstreamOf(index, [n], { transitive: false })],
+      downstream: (n) => [...downstreamOf(index, [n], { transitive: false })]
+    }, {
+      open: (n) => this.select({ type: 'query', name: n }),
+      run: (n) => {
+        this.select({ type: 'query', name: n });
+        this.run();
+      },
+      runDownstream: (n) => {
+        this.select({ type: 'query', name: n });
+        this.runBatch('run-downstream');
+      }
+    }, { start: cur });
+    return true;
   }
 
   refreshedByFor(name) {

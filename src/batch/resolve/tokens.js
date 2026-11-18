@@ -17,6 +17,36 @@ function tokenValues(file, unit) {
   ]);
 }
 
+export function fileContext(file) {
+  return { name: baseName(file.name), folder: folderOf(file.relPath) };
+}
+
+export function templateFor(text) {
+  const parts = String(text).split(/(\{[^{}]*\})/);
+  return (context, unit) => {
+    let out = '';
+    for (const part of parts) {
+      switch (part) {
+        case '{file.name}':
+          out += context.name;
+          break;
+        case '{file.folder}':
+          out += context.folder;
+          break;
+        case '{unit.name}':
+          out += unit.name;
+          break;
+        case '{unit.index}':
+          out += unit.index;
+          break;
+        default:
+          out += part;
+      }
+    }
+    return out;
+  };
+}
+
 export function substituteTokens(text, file, unit) {
   const values = tokenValues(file, unit);
   return String(text).replace(ANY_BRACES, (token) => (values.has(token) ? values.get(token) : token));

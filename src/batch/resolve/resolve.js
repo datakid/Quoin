@@ -1,6 +1,6 @@
 import { unknownTokens } from '../recipe/recipe.js';
-import { baseName, substituteTokens, unknownQueryTokens } from './tokens.js';
-import { buildMatcher, matchPins, pinnedUnits, ruleUnits, unknownNonEmpty } from './scope.js';
+import { baseName, fileContext, templateFor, unknownQueryTokens } from './tokens.js';
+import { buildMatcher, matchPins, pinnedUnits, ruleUnits, unknownNonEmpty, worksheets } from './scope.js';
 
 export { inspectNeeds } from './scope.js';
 
@@ -27,36 +27,39 @@ function planCollectFile(index) {
   };
 }
 
-function outputFor(recipe, index, unit) {
-  if (!recipe.output) return null;
-  const template = recipe.output.name;
-  return { mode: recipe.output.mode, name: typeof template === 'string' ? substituteTokens(template, index, unit) : null };
-}
-
-function transformActions(recipe, index, units) {
-  return units.map((unit) => ({ unit, op: 'transform', target: { type: TARGET_TYPE[unit.kind], name: unit.name }, compute: recipe.compute, output: outputFor(recipe, index, unit), replaces: null }));
+function transformActions(ctx, context, units) {
+  const { recipe, fill } = ctx;
+  return units.map((unit) => ({
+    unit,
+    op: 'transform',
+    target: { type: TARGET_TYPE[unit.kind], name: unit.name },
+    compute: recipe.compute,
+    output: recipe.output ? { mode: recipe.output.mode, name: fill ? fill(context, unit) : null } : null,
+    replaces: null
+  }));
 }
 
 function planTransformFile(index, ctx) {
   if (index.status === 'refused') return skippedFile(index);
-  const { recipe, scope } = ctx;
+  const { scope } = ctx;
+  const sheets = worksheets(index);
   let units;
   let source = 'rule';
   if (scope.type === 'workbook') units = [workbookUnit(index)];
   else if (ctx.pins.has(index.id)) {
-    const found = pinnedUnits(index, scope, ctx.pins.get(index.id).units);
+    const found = pinnedUnits(index, scope, ctx.pins.get(index.id).units, sheets);
     units = found.units;
     source = 'pin';
     if (found.missing.length) ctx.orphans.push({ file: index.relPath, units: found.missing });
   } else {
-    units = ruleUnits(index, scope, ctx.matcher);
-    if (unknownNonEmpty(index, scope)) ctx.errors.push({ code: 'scope.needsInspect', fileId: index.id, detail: 'nonEmpty' });
+    units = ruleUnits(index, scope, ctx.matcher, sheets);
+    if (unknownNonEmpty(index, scope, sheets)) ctx.errors.push({ code: 'scope.needsInspect', fileId: index.id, detail: 'nonEmpty' });
   }
   return {
     fileId: index.id,
     source,
     units,
-    actions: transformActions(recipe, index, units),
+    actions: transformActions(ctx, fileContext(index), units),
     skipped: units.length ? null : { code: 'skip.noMatchingUnit', detail: null }
   };
 }
@@ -94,7 +97,8 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
   if (recipe.recipe === 'transform') {
     const matcher = buildMatcher(recipe.scope);
     if (matcher.error) errors.push(matcher.error);
-    const ctx = { recipe, scope: recipe.scope, matcher, pins: pins.matched, errors, orphans };
+    const template = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : null;
+    const ctx = { recipe, scope: recipe.scope, matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
     files = ordered.map((ix) => planTransformFile(ix, ctx));
   } else files = ordered.map(planCollectFile);
   return { recipe: structuredClone(recipe), now, createdBy: 'resolve', summary: summarise(files), files, orphanPins: orphans, errors };

@@ -33,8 +33,10 @@ export function buildMatcher(scope) {
   }
 }
 
-function worksheets(index) {
-  return index.sheets.filter((s) => s.type === 'worksheet').sort(byIndex);
+export function worksheets(index) {
+  const out = index.sheets.filter((s) => s.type === 'worksheet');
+  for (let i = 1; i < out.length; i++) if (out[i].index < out[i - 1].index) return out.sort(byIndex);
+  return out;
 }
 
 function sheetState(index) {
@@ -43,9 +45,9 @@ function sheetState(index) {
   return states;
 }
 
-function sheetCandidates(index, scope) {
+function sheetCandidates(sheets, scope) {
   const out = [];
-  for (const s of worksheets(index)) {
+  for (const s of sheets) {
     if (scope.excludeHidden && s.state !== 'visible') continue;
     if (scope.onlyNonEmpty && s.nonEmpty === false) continue;
     out.push({ name: s.name, kind: 'sheet' });
@@ -91,8 +93,8 @@ function toUnits(index, picked) {
   return picked.map((c, i) => ({ fileId: index.id, kind: c.kind, name: c.name, index: i + 1 }));
 }
 
-export function ruleUnits(index, scope, matcher) {
-  const candidates = scope.type === 'tables' ? tableCandidates(index, scope) : sheetCandidates(index, scope);
+export function ruleUnits(index, scope, matcher, sheets = worksheets(index)) {
+  const candidates = scope.type === 'tables' ? tableCandidates(index, scope) : sheetCandidates(sheets, scope);
   let picked = candidates;
   if (scope.match === 'pattern') picked = candidates.filter((c) => matcher.test(c.name));
   else if (scope.match === 'position') picked = byPosition(candidates, scope.position);
@@ -103,10 +105,10 @@ export function ruleUnits(index, scope, matcher) {
   return toUnits(index, picked);
 }
 
-export function pinnedUnits(index, scope, names) {
+export function pinnedUnits(index, scope, names, sheets = worksheets(index)) {
   const wanted = new Map();
   for (const n of names) wanted.set(lower(n), n);
-  const pool = scope.type === 'tables' ? orderedTables(index).map((t) => ({ name: t.name, kind: 'table' })) : worksheets(index).map((s) => ({ name: s.name, kind: 'sheet' }));
+  const pool = scope.type === 'tables' ? orderedTables(index).map((t) => ({ name: t.name, kind: 'table' })) : sheets.map((s) => ({ name: s.name, kind: 'sheet' }));
   const picked = pool.filter((c) => wanted.has(lower(c.name)));
   const found = new Set(picked.map((c) => lower(c.name)));
   const missing = names.filter((n, i) => !found.has(lower(n)) && names.findIndex((m) => lower(m) === lower(n)) === i);
@@ -139,9 +141,9 @@ export function matchPins(overrides, files) {
   return { matched, orphans };
 }
 
-export function unknownNonEmpty(index, scope) {
+export function unknownNonEmpty(index, scope, sheets = worksheets(index)) {
   if (scope.type !== 'sheets' || !scope.onlyNonEmpty) return false;
-  return worksheets(index).some((s) => (!scope.excludeHidden || s.state === 'visible') && s.nonEmpty === null);
+  return sheets.some((s) => (!scope.excludeHidden || s.state === 'visible') && s.nonEmpty === null);
 }
 
 export function inspectNeeds(recipe, indexes) {

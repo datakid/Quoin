@@ -57,6 +57,10 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 | Code | Used for | Suggested text |
 |---|---|---|
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
+| `refused.exists` | an add of a name the file already has (compared without regard to case, and against every section member) | "Not added. The file already has a query named {name}." |
+| `refused.name` | an add whose name is empty, has a space at either end or has a control character | "Not added. This name cannot be used." |
+
+`pq.none` and `pq.format` are used as `reason_code` for refused adds (no query data, and query data Quoin does not write). Both are already in `ERRORS`.
 
 Verdict `not-released` carries `write.selfcheck`; verdict `failed` carries the `QuoinError` code (`m.parse` so far). Both codes are already in `ERRORS`.
 
@@ -103,7 +107,30 @@ Decisions inside gaps (log, not yet confirmed by the user):
 - An unchanged row has `verified: true`, as Collect rows do when there is nothing to write.
 Counts after this task: lint 0 findings; unit 1176 tests, 1171 pass, 5 skipped.
 
+### F2-03 Query add
+Layer: core/pq, with the execute wiring for `add` actions
+Files: src/core/pq/members.js, src/core/save.js, src/batch/execute/changes.js, tests/unit/batch-pq-members.test.js (new), tests/unit/batch-execute.test.js
+Do: `writeQueryChanges` appends a `shared` member to the section, adds one metadata Formula item for it, and rebuilds the DataMashup with the new metadata. The new query is connection-only: no connection, table or sheet is created (Q5). `selfCheck` now also fails when the output opens with a `pq.*` warning the input did not have.
+Test that fails without it: `tests/unit/batch-pq-members.test.js` (14 tests; 12 failed before the change, one passed for the wrong reason because "not applied yet" already threw `TypeError`, and one is the guard test added after it) and 5 new tests in `tests/unit/batch-execute.test.js`.
+Fails without, by mutation (each reverted): name check off, 1 fails; duplicate check off, 1; metadata not written, 9; new-warning check off, 1; names never quoted, 1; keywords not quoted, 1; line comment not closed, 1; constant query id, 1; metadata mismatch guard off, 1; path not URL-encoded, 1. In `changes.js`: exists check off, 1; name check off, 1; no-data check off, 1; old hash recorded for add, 1.
+Result: Done
+Changed expectations: none
+Deviations:
+- The execute wiring for `add` is in this commit because the cards name no separate execute task. Remove and rename will do the same.
+- The six single-file byte checks from F2-01 still pass with the section now rewritten by `members.js`.
+Decisions inside gaps (log, not yet confirmed by the user). The metadata item copies what Excel wrote for the connection-only function in `pq_vba_complex.xlsm`, without the entries that come from a refresh:
+- Entries written: `IsPrivate l0`, `FillEnabled l0`, `FillObjectType sConnectionOnly`, `FillToDataModelEnabled l0`, `QueryID`, `BufferNextRefresh l0`, `FilledCompleteResultToWorksheet l0`, `AddedToDataModel l0`. Not written: `ResultType`, `FillStatus`, `FillLastUpdated`, `FillErrorCode`, the column entries and the per-step items (`Section1/Name/Step`) that Excel writes for each step of a query.
+- `QueryID` is a version 4 style GUID built from CRC-32 of the name and text, so Preview and Run give the same bytes. It is not random.
+- The item path is `Section1/` plus the name through `encodeURIComponent`. Excel's own escaping for characters such as parentheses has not been checked.
+- A name is written bare when it is ASCII letters, digits and underscores, starts with a letter or underscore and is not an M keyword; otherwise it is written as `#"..."` with quotes doubled.
+- Names are refused when empty, when they start or end with a space, or when they contain a control character. A name that matches an existing section member without regard to case is refused. These rules are mine; the plan gives none.
+- An add to a workbook that already opens with `pq.countMismatch` is refused.
+- No connection is created, so `inject.refreshOnLoad` has nothing to flag on an added query and is ignored. See the open points.
+Real-Excel pack item (for F2-15): add a query to a workbook made by Excel, open it in Excel, and check that it appears in Queries and Connections and in the Power Query editor, that the text is unchanged, and that the workbook saves without a repair message. Repeat with a name that has a space and a name with parentheses.
+Counts after this task: lint 0 findings; unit 1195 tests, 1190 pass, 5 skipped.
+
 ## Open points for the user
 
 1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I will take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.
+3. Added queries have no connection. Excel lists connection-only queries it makes in Workbook Connections and writes a `connection` element for each. Without one, `inject.refreshOnLoad` cannot apply to an added query, and I do not know whether Excel creates the connection itself on open. The plan says never create a load target and does not mention a connection. Options: leave it (current), or write the connection element too (needs `xl/connections.xml` to exist, or a new part, relationship and content type). The real-Excel pack result for F2-03 would settle it.
 2. F2-09 says "resolve and execute". I will build only the execute side in `align.js`. The resolve side (choosing a version by hash, `skipped` for files with no such query) is in Scope's files.

@@ -113,6 +113,8 @@ function expectedModules(wb, m) {
 export async function selfCheck(wb, bytes, { changes, touched, addedParts, removedParts, signatureRemoved }) {
   try {
     const back = await openWorkbook(bytes, wb.fileName, wb.limits);
+    const knownWarnings = new Set(wb.warnings.map((w) => w.code));
+    for (const w of back.warnings) if (w.code.startsWith('pq.') && !knownWarnings.has(w.code)) throw new QuoinError('check.query', `new warning ${w.code}`, w.part || '');
     const wantQueries = expectedQueries(wb, changes.queries);
     for (const got of back.queries) if (!wantQueries.has(got.name)) throw new QuoinError('check.query', 'query was not declared', got.name);
     for (const [name, want] of wantQueries) {

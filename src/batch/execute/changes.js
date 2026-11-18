@@ -1,5 +1,6 @@
 import { normalizeQueryText, toViewText } from '../../core/pq/section.js';
 import { emptyChangeSet } from '../../core/save.js';
+import { queryNameProblem } from '../../core/pq/members.js';
 import { sha256Text } from '../index/hash.js';
 import { REPORT_COLUMNS } from './collect.js';
 
@@ -28,6 +29,23 @@ export function reportRow(meta, action, recipe, values) {
 }
 
 const skipped = (code) => ({ verdict: 'skipped', reason_code: code, old_hash: '', new_hash: '', change: null });
+const refused = (code, oldHash = '', newHash = '') => ({ verdict: 'refused', reason_code: code, old_hash: oldHash, new_hash: newHash, change: null });
+
+async function addQuery(wb, action, recipe, changeSet) {
+  const name = action.target.name;
+  if (!wb.mashup) return refused('pq.none');
+  if (wb.mashup.error) return refused('pq.format');
+  const text = toViewText(normalizeQueryText(recipe.inject.text));
+  const newHash = await sha256Text(text);
+  if (queryNameProblem(name)) return refused('refused.name', '', newHash);
+  const taken = wb.mashup.split.members.find((m) => m.name.toLowerCase() === name.toLowerCase());
+  if (taken) {
+    const existing = wb.queries.find((q) => q.name === taken.name);
+    return refused('refused.exists', existing ? await sha256Text(normalizeQueryText(existing.original)) : '', newHash);
+  }
+  changeSet.queries.add.set(name, text);
+  return { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: { op: 'add', target: { type: 'query', name }, oldHash: null, newHash } };
+}
 
 async function replaceQuery(wb, action, recipe, changeSet) {
   const name = action.target.name;
@@ -47,6 +65,7 @@ export async function planChanges(wb, filePlan, recipe) {
   const outcomes = [];
   for (const action of filePlan.actions) {
     if (action.op === 'replace' && action.target.type === 'query') outcomes.push(await replaceQuery(wb, action, recipe, changeSet));
+    else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));
     else throw new Error(`${action.op} ${action.target.type} is not supported yet`);
   }
   return { changeSet, outcomes };

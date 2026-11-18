@@ -179,3 +179,54 @@ test('F2-02: an op that is not built yet is refused, not skipped', async () => {
   const wb = await open();
   await assert.rejects(() => executeFile(wb, filePlanFor(['StudentResults'], 'transform'), { now: NOW, recipe: recipeFor() }), /not supported yet/);
 });
+
+test('F2-03: an add action writes a new connection-only query and reports no old hash', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra' }) });
+  const back = await openWorkbook(res.bytes, 'x.xlsx');
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'Extra']);
+  assert.equal(back.queries[1].original, NEW_M);
+  assert.deepEqual(back.warnings, []);
+  assert.deepEqual(res.changes, [{ op: 'add', target: { type: 'query', name: 'Extra' }, oldHash: null, newHash: await sha256Text(NEW_M) }]);
+  const row = res.rows[0];
+  assert.equal(row.action, 'add');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, '');
+  assert.equal(row.new_hash, await sha256Text(NEW_M));
+  assert.equal(row.verified, true);
+});
+
+test('F2-03: an add of a name the file already has is refused and writes nothing', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['studentresults'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'studentresults' }) });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'refused.exists');
+});
+
+test('F2-03: an add with a name that cannot be written is refused', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor([' Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: ' Extra' }) });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'refused.name');
+});
+
+test('F2-03: an add to a file with no query data is refused with pq.none', async () => {
+  const wb = await open('plain_table.xlsx');
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra' }) });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'pq.none');
+});
+
+test('F2-03: an add and a replace in one file give one write and one row each', async () => {
+  const wb = await open();
+  const plan = filePlanFor(['Extra'], 'add');
+  plan.actions.push(...filePlanFor(['StudentResults']).actions);
+  const res = await executeFile(wb, plan, { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra' }) });
+  const back = await openWorkbook(res.bytes, 'x.xlsx');
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'Extra']);
+  assert.deepEqual(res.rows.map((r) => [r.action, r.verdict]), [['add', 'changed'], ['replace', 'changed']]);
+  assert.equal(res.changes.length, 2);
+});

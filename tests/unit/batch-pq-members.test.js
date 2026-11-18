@@ -1,0 +1,192 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { openWorkbook } from '../../src/core/workbook.js';
+import { applyChangeSet, emptyChangeSet, selfCheck } from '../../src/core/save.js';
+import { buildDataMashup } from '../../src/core/pq/datamashup.js';
+import { base64Encode } from '../../src/core/bytes.js';
+import { applyEdits, parseXml, textContentEdit } from '../../src/core/xml.js';
+import { checkSection } from '../../src/core/m/engine.js';
+import { fixture, generated } from './helpers.js';
+
+const NOW = new Date(2026, 10, 14, 10, 0, 0);
+const NEW_M = 'let\n    Source = 1\nin\n    Source';
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+const openSimple = () => openWorkbook(fixture('pq_simple.xlsx'), 'pq_simple.xlsx');
+
+async function addTo(wb, adds, extra = {}) {
+  const cs = emptyChangeSet();
+  for (const [name, text] of adds) cs.queries.add.set(name, text);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection, ...extra });
+  return { res, back: await openWorkbook(res.bytes, 'out.xlsx') };
+}
+
+const itemFor = (xml, name) => {
+  const i = xml.indexOf(`<ItemPath>Section1/${name}</ItemPath>`);
+  assert.ok(i >= 0, `item for ${name}`);
+  const start = xml.lastIndexOf('<Item>', i);
+  return xml.slice(start, xml.indexOf('</Item>', i) + '</Item>'.length);
+};
+
+test('F2-03: an added query is listed, connection-only, and the output opens with no warning', async () => {
+  const wb = await openSimple();
+  const { res, back } = await addTo(wb, [['Extra', NEW_M]]);
+  assert.equal(res.queriesChanged, 1);
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'Extra']);
+  assert.equal(back.queries[1].original, NEW_M);
+  assert.deepEqual(back.queries[1].load, { kind: 'connection' });
+  assert.equal(back.queries[1].connection, null);
+  assert.equal(back.queries[0].original, wb.queries[0].original);
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-03: the existing query text and the section start are untouched and the new member follows them', async () => {
+  const wb = await openSimple();
+  const { back } = await addTo(wb, [['Extra', NEW_M]]);
+  const before = wb.mashup.section.text;
+  const after = back.mashup.section.text;
+  assert.ok(after.startsWith(before.replace(/\s+$/, '')));
+  const eol = /\r\n/.test(before) ? '\r\n' : '\n';
+  assert.ok(after.replace(/\s+$/, '').endsWith(`${eol}${eol}shared Extra = let${eol}    Source = 1${eol}in${eol}    Source;`));
+  assert.equal(after.length - before.length, `${eol}${eol}shared Extra = let${eol}    Source = 1${eol}in${eol}    Source;`.length);
+});
+
+test('F2-03: the metadata gains one connection-only item and every other byte of it stays', async () => {
+  const wb = await openSimple();
+  const { back } = await addTo(wb, [['Extra', NEW_M]]);
+  const before = wb.mashup.model.metadata.xml;
+  const after = back.mashup.model.metadata.xml;
+  const item = itemFor(after, 'Extra');
+  assert.equal(after, before.replace('</Items>', `${item}</Items>`));
+  const id = /Type="QueryID" Value="s([^"]+)"/.exec(item)[1];
+  assert.match(id, GUID);
+  for (const entry of ['IsPrivate" Value="l0', 'FillEnabled" Value="l0', 'FillObjectType" Value="sConnectionOnly', 'FillToDataModelEnabled" Value="l0']) assert.ok(item.includes(`Type="${entry}"`), entry);
+  assert.equal(back.mashup.model.metadata.version, wb.mashup.model.metadata.version);
+  assert.deepEqual(back.mashup.model.metadata.content, wb.mashup.model.metadata.content);
+  assert.deepEqual(back.mashup.model.permissionBindings, wb.mashup.model.permissionBindings);
+});
+
+test('F2-03: the same now gives the same bytes and the same query id; another name gives another id', async () => {
+  const wb = await openSimple();
+  const a = await addTo(wb, [['Extra', NEW_M]]);
+  const b = await addTo(wb, [['Extra', NEW_M]]);
+  assert.equal(sha(a.res.bytes), sha(b.res.bytes));
+  const c = await addTo(wb, [['Other', NEW_M]]);
+  const idOf = (back, name) => /Type="QueryID" Value="s([^"]+)"/.exec(itemFor(back.mashup.model.metadata.xml, name))[1];
+  assert.equal(idOf(a.back, 'Extra'), idOf(b.back, 'Extra'));
+  assert.notEqual(idOf(a.back, 'Extra'), idOf(c.back, 'Other'));
+});
+
+test('F2-03: a name with spaces, a keyword and a name with a quote are written quoted and read back', async () => {
+  const wb = await openSimple();
+  const { back } = await addTo(wb, [['My New Query', NEW_M], ['let', NEW_M], ['a"b', NEW_M], ['Plain_1', NEW_M]]);
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'My New Query', 'let', 'a"b', 'Plain_1']);
+  const text = back.mashup.section.text;
+  assert.ok(text.includes('shared #"My New Query" = '));
+  assert.ok(text.includes('shared #"let" = '));
+  assert.ok(text.includes('shared #"a""b" = '));
+  assert.ok(text.includes('shared Plain_1 = '));
+  assert.ok(back.mashup.model.metadata.xml.includes('<ItemPath>Section1/My%20New%20Query</ItemPath>'));
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-03: text that ends in a line comment still ends its member', async () => {
+  const wb = await openSimple();
+  const text = 'let\n    Source = 1\nin\n    Source // done';
+  const { back } = await addTo(wb, [['Extra', text]]);
+  assert.equal(back.queries[1].original, text);
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-03: several adds keep their order', async () => {
+  const wb = await openSimple();
+  const { back } = await addTo(wb, [['Zeta', NEW_M], ['Alpha', NEW_M]]);
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'Zeta', 'Alpha']);
+});
+
+test('F2-03: an add together with a replace and a module edit in one ChangeSet', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Extra', NEW_M);
+  cs.queries.replace.set('FinalTable', `${wb.queries.find((q) => q.name === 'FinalTable').original}\n// edited`);
+  cs.modules.replace.set('Module1', `${wb.vba.project.modules.find((m) => m.name === 'Module1').model.visible}\n' edited\n`);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection });
+  const back = await openWorkbook(res.bytes, 'out.xlsm');
+  assert.equal(res.queriesChanged, 2);
+  assert.equal(res.modulesChanged, 1);
+  assert.deepEqual(back.queries.map((q) => q.name), ['fGetNamedRange', 'RawInput', 'FinalTable', 'Extra']);
+  assert.ok(back.queries[2].original.endsWith('// edited'));
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-03: a refresh flag on an added query changes nothing, because it has no connection', async () => {
+  const wb = await openSimple();
+  const plain = await addTo(wb, [['Extra', NEW_M]], { refreshOnLoad: false });
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Extra', NEW_M);
+  cs.refreshOnLoad.add('Extra');
+  const flagged = await applyChangeSet(wb, cs, { now: NOW, checkSection, refreshOnLoad: false });
+  assert.equal(sha(flagged.bytes), sha(plain.res.bytes));
+});
+
+test('F2-03: names that cannot be written safely are refused before anything is written', async () => {
+  const wb = await openSimple();
+  const bad = ['', ' Extra', 'Extra ', 'a\nb', 'StudentResults', 'studentresults'];
+  for (const name of bad) {
+    const cs = emptyChangeSet();
+    cs.queries.add.set(name, NEW_M);
+    await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError, JSON.stringify(name));
+  }
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Same', NEW_M);
+  cs.queries.add.set('same', NEW_M);
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError);
+});
+
+test('F2-03: a workbook with no query data cannot take an add', async () => {
+  const wb = await openWorkbook(fixture('plain_table.xlsx'), 'plain_table.xlsx');
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Extra', NEW_M);
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e.code === 'pq.format');
+});
+
+test('F2-03: text that does not parse is refused with m.parse and nothing is written', async () => {
+  const wb = await openSimple();
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Extra', 'let Source = in');
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW, checkSection }), (e) => e.code === 'm.parse');
+});
+
+async function mismatchedOutput(wb) {
+  const m = wb.mashup;
+  const section = { text: `${m.section.text}\r\n\r\nshared Extra = 1;`, bom: m.section.bom };
+  const encoded = base64Encode(await buildDataMashup(m.model, section));
+  const fresh = parseXml(m.text.text, m.part);
+  const pkg = wb.pkg.clone();
+  await pkg.setText(m.part, applyEdits(m.text.text, [textContentEdit(fresh.root, encoded)]), m.text);
+  return pkg.write({ now: NOW });
+}
+
+test('F2-03: selfCheck rejects an output whose metadata does not match its section', async () => {
+  const wb = await openSimple();
+  const bytes = await mismatchedOutput(wb);
+  const back = await openWorkbook(bytes, 'bad.xlsx');
+  assert.ok(back.warnings.some((w) => w.code === 'pq.countMismatch'));
+  const changes = emptyChangeSet();
+  changes.queries.add.set('Extra', '1');
+  await assert.rejects(
+    () => selfCheck(wb, bytes, { changes, touched: new Set([wb.mashup.part]), addedParts: new Set(), removedParts: new Set(), signatureRemoved: false }),
+    (e) => e.code === 'write.selfcheck'
+  );
+});
+
+test('F2-03: a workbook whose metadata already does not match its section cannot take an add', async () => {
+  const wb = await openSimple();
+  const broken = await openWorkbook(await mismatchedOutput(wb), 'bad.xlsx');
+  assert.ok(broken.warnings.some((w) => w.code === 'pq.countMismatch'));
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Another', NEW_M);
+  await assert.rejects(() => applyChangeSet(broken, cs, { now: NOW }), (e) => e.code === 'pq.format');
+});

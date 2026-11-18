@@ -42,6 +42,31 @@ Decisions made inside gaps in the plan:
 - `{file.folder}` is the folder part of `relPath` with its trailing slash, `""` at the root, so `{file.folder}{file.name}` joins without a separator.
 - Resolving 500 files of 8 sheets with a pattern, pins and output names: the median of seven runs is asserted under 16 ms.
 
+## F3-03 Units in the engine and tokens
+
+Layer: execute and core snapshot
+Files: src/core/snapshot.js, src/batch/execute/units.js (new), tests/unit/batch-units.test.js (new)
+Do: `buildUnitSnapshot(wb, unit, {base})` adds a sheet unit to the run snapshot as its used range (`Column1…ColumnN`, no header promoted, A2); a table unit is the table already in the snapshot with its headers; a workbook unit adds nothing. `runUnit(wb, file, unit, recipe, {now, base, localOffsetMin})` substitutes tokens as raw text, then parses and runs the query with the recipe's culture and limits, and returns one result per unit.
+Test that fails without it: `tests/unit/batch-units.test.js`, 19 tests. The module is missing without the change; with the unit source removed from the snapshot 4 fail, with token substitution removed 6 fail, with the change 19 pass.
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: none
+
+Interface (for trunk and Writer): `runUnit` returns `{unit, status: 'ok' | 'error' | 'stopped', m, table, error, flags, durationMs}`. `m` is the substituted query. `table` is an engine `MTable` and stays in the worker; it is not structured-cloneable, so the output writer reads it there. `error` is null or `{code, ...}`:
+
+- `recipe.token` (unknown token, query not run), `unit.parse` (`message`, `line` and `col` inside the substituted query), `unit.error` (`reason`, `message`, `detail` from M), `unit.notTable` (`detail` is the kind M returned), `unit.binding` (the query asked for a file; `detail` is its key), `unit.nameCollision` and `unit.missing` (`detail` is the unit name), and the engine's own stop codes `m.rows`, `m.timeout`, `m.depth` with status `stopped`.
+- `buildSnapshot` is untouched. Callers that run many units build one base snapshot per file and pass it as `base`, so tables are read once.
+
+Decisions made inside gaps in the plan:
+
+- A sheet whose name equals a table or workbook name is `unit.nameCollision`. The alternative, letting the sheet shadow the table, would silently change what other names in the same query read. `pq_simple.xlsx` has this case (sheet and table `StudentResults`).
+- `now` is required and must be a frozen ISO UTC time, as in `resolvePlan`. `localOffsetMin` is passed through when given; otherwise the engine uses the machine's offset, so a caller that needs identical bytes on every machine passes `0`.
+- A transform query must return a table. A scalar, list, record or function is a row error, not a one-cell output.
+- A transform query is standalone M: it cannot call the workbook's own queries and cannot read files. A query that calls `File.Contents` or `Web.Contents` is `unit.binding`.
+
 ## Strings and codes trunk adds when it merges
+
+Row errors (F3-03): `unit.parse`, `unit.error`, `unit.notTable`, `unit.binding`, `unit.nameCollision`, `unit.missing`, plus `recipe.token` on a row. Existing: `m.rows`, `m.timeout`, `m.depth`.
 
 Planning errors (`plan.errors`): `scope.headerOnSheets` ("The header row filter applies to tables only."), `scope.needsInspect` (the file has not been checked for empty sheets), `scope.pattern` (the name pattern is not valid). Existing: `recipe.token`, `skip.noMatchingUnit`.

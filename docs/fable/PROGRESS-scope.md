@@ -65,6 +65,26 @@ Decisions made inside gaps in the plan:
 - A transform query must return a table. A scalar, list, record or function is a row error, not a one-cell output.
 - A transform query is standalone M: it cannot call the workbook's own queries and cannot read files. A query that calls `File.Contents` or `Web.Contents` is `unit.binding`.
 
+## F3-04 Chained units
+
+Layer: execute
+Files: src/batch/execute/units.js, tests/unit/batch-chain.test.js (new), tests/unit/batch-units.test.js (key list gains `outputName`)
+Do: `runFileUnits(wb, file, filePlan, recipe, {now, localOffsetMin, isCancelled, onUnit})` runs a file's units in `index` order. A unit may read an earlier unit's output through `Excel.CurrentWorkbook()` by the output name the plan gives that unit. State lives inside one call, so nothing is shared across files. It returns `{runs, cancelled}`.
+Test that fails without it: `tests/unit/batch-chain.test.js`, 13 tests. The export is missing without the change; with outputs not registered 4 fail, with the sort by index removed 1 fails, with the change 13 pass.
+Result: Done
+Fails without: yes
+Changed expectations: `batch-units.test.js` is my own F3-03 test; its key list for a run now includes `outputName` (null from `runUnit`, the plan's output name from `runFileUnits`).
+Deviations: none
+
+Decisions made inside gaps in the plan:
+
+- The output name is taken from the plan (`action.output.name`, already filled in by resolve), so Preview and run use the same value. No name, no output registered.
+- A name resolves to the most recent earlier output with that name. A recipe whose output name has no unit token therefore accumulates: unit 2 reads `Excel.CurrentWorkbook(){[Name="Combined"]}[Content]` and gets unit 1's table. This is the only way one query text can chain, because the four tokens have no arithmetic. It is the reading to confirm with the user.
+- Names in the chain are the plan's names. Sanitising and `-2` suffixes for sheet and file names belong to the output step (F3-05 onward) and are not applied here, so a collision suffix added there is not visible to a later unit.
+- An earlier output is added to the snapshot as a table whose cells are typed as a written workbook would be read back: dates, times and date-times as date-times, durations as durations, errors as `#VALUE!` or `#NUM!`, anything else as text. Outputs are copied only when a later unit exists.
+- An output whose name equals a table, name or sheet unit already in the snapshot makes the next unit a `unit.nameCollision` row error. A failed unit registers nothing; later units still run, and one that needed its output reports the M error.
+- `isCancelled` is checked before each unit and `onUnit(run, done, total)` after each, so the worker can send cancel and progress messages. Both are optional.
+
 ## Strings and codes trunk adds when it merges
 
 Row errors (F3-03): `unit.parse`, `unit.error`, `unit.notTable`, `unit.binding`, `unit.nameCollision`, `unit.missing`, plus `recipe.token` on a row. Existing: `m.rows`, `m.timeout`, `m.depth`.

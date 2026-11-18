@@ -178,8 +178,9 @@ test('the same unit run twice gives the same table and the time must be frozen',
 test('a unit run keeps one result per unit and reports how long it took', async () => {
   const wb = await open('plain_table.xlsx');
   const run = await runUnit(wb, FILE, tableUnit('DogShowResults'), recipeWith(CONTENT), { now: NOW });
-  assert.deepEqual(Object.keys(run).sort(), ['durationMs', 'error', 'flags', 'm', 'status', 'table', 'unit']);
+  assert.deepEqual(Object.keys(run).sort(), ['durationMs', 'error', 'flags', 'm', 'outputName', 'status', 'table', 'unit']);
   assert.equal(typeof run.durationMs, 'number');
   assert.deepEqual(run.unit, tableUnit('DogShowResults'));
   assert.deepEqual(run.flags, []);
+  assert.equal(run.outputName, null);
 });

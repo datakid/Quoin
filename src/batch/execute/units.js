@@ -1,6 +1,8 @@
 import { runOnce, MTable } from '../../core/m/engine.js';
 import { kindOf } from '../../core/m/values.js';
-import { buildUnitSnapshot } from '../../core/snapshot.js';
+import { getCulture } from '../../core/m/culture.js';
+import { cellValue, serialOf, exportText } from '../../core/export/cells.js';
+import { buildSnapshot, buildUnitSnapshot } from '../../core/snapshot.js';
 import { substituteTokens, unknownQueryTokens } from '../resolve/tokens.js';
 
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -15,13 +17,13 @@ export function prepareQuery(m, file, unit) {
   return { ok: true, text, error: null };
 }
 
-const failed = (unit, m, error, status = 'error') => ({ unit, status, m, table: null, error, flags: [], durationMs: 0 });
+const failed = (unit, m, error, status = 'error') => ({ unit, status, m, table: null, outputName: null, error, flags: [], durationMs: 0 });
 
 function describe(unit, m, r) {
   switch (r.status) {
     case 'ok':
       if (!(r.value instanceof MTable)) return failed(unit, m, { code: 'unit.notTable', detail: kindOf(r.value) });
-      return { unit, status: 'ok', m, table: r.value, error: null, flags: r.flags, durationMs: r.durationMs };
+      return { unit, status: 'ok', m, table: r.value, outputName: null, error: null, flags: r.flags, durationMs: r.durationMs };
     case 'parse-error':
       return failed(unit, m, { code: 'unit.parse', message: r.error.message, line: Math.max(1, r.error.line - HEAD_LINES), col: r.error.col });
     case 'error':
@@ -42,4 +44,66 @@ export async function runUnit(wb, file, unit, recipe, { now, base, localOffsetMi
   const options = { sectionText: `${HEAD}${prepared.text};`, queryName: QUERY, snapshot: built.snapshot, culture: recipe.more.culture, limits: recipe.more.limits, now, previewRows: 1 };
   if (localOffsetMin !== undefined) options.localOffsetMin = localOffsetMin;
   return describe(unit, prepared.text, runOnce(options));
+}
+
+const TICKS_PER_DAY = 864000000000;
+
+function snapshotCell(raw, culture) {
+  const cv = cellValue(raw);
+  if (!cv.ok) return { t: 'e', v: '#VALUE!' };
+  const v = cv.v;
+  switch (kindOf(v)) {
+    case 'null':
+      return null;
+    case 'number':
+      return Number.isFinite(v) ? { t: 'n', v } : { t: 'e', v: '#NUM!' };
+    case 'logical':
+      return { t: 'b', v };
+    case 'date':
+    case 'datetime':
+    case 'datetimezone':
+    case 'time':
+      return { t: 'dt', v: serialOf(v) };
+    case 'duration':
+      return { t: 'dur', v: Number(v.ticks) / TICKS_PER_DAY };
+    default:
+      return { t: 's', v: exportText(v, culture) };
+  }
+}
+
+function outputSource(name, table, cultureName) {
+  const culture = getCulture(cultureName);
+  const rows = [];
+  for (let r = 0; r < table.rowCount; r++) rows.push(table.cols.map((col) => snapshotCell(col[r], culture)));
+  return { name, kind: 'output', columns: [...table.columns], rows, queryLoaded: false };
+}
+
+function plannedOutputName(filePlan, unit) {
+  const action = filePlan.actions.find((a) => a.op === 'transform' && a.unit.index === unit.index);
+  return action && action.output && typeof action.output.name === 'string' && action.output.name.length > 0 ? action.output.name : null;
+}
+
+export async function runFileUnits(wb, file, filePlan, recipe, { now, localOffsetMin, isCancelled, onUnit } = {}) {
+  const units = [...filePlan.units].sort((a, b) => a.index - b.index);
+  const base = await buildSnapshot(wb);
+  const outputs = new Map();
+  const runs = [];
+  for (const unit of units) {
+    if (isCancelled && isCancelled()) return { runs, cancelled: true };
+    const clash = [...outputs.keys()].find((name) => base.sources.some((s) => s.name === name));
+    let run;
+    if (clash !== undefined) run = failed(unit, prepareQuery(recipe.query.m, file, unit).text, { code: 'unit.nameCollision', detail: clash });
+    else {
+      const withOutputs = outputs.size ? { ...base, sources: [...base.sources, ...outputs.values()] } : base;
+      run = await runUnit(wb, file, unit, recipe, { now, base: withOutputs, localOffsetMin });
+    }
+    const name = plannedOutputName(filePlan, unit);
+    if (run.status === 'ok' && name !== null) {
+      run.outputName = name;
+      if (runs.length + 1 < units.length) outputs.set(name, outputSource(name, run.table, recipe.more.culture));
+    }
+    runs.push(run);
+    if (onUnit) onUnit(run, runs.length, units.length);
+  }
+  return { runs, cancelled: false };
 }

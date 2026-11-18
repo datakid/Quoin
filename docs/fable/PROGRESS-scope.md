@@ -111,6 +111,14 @@ Row errors (F3-03): `unit.parse`, `unit.error`, `unit.notTable`, `unit.binding`,
 
 Planning errors (`plan.errors`): `scope.headerOnSheets` ("The header row filter applies to tables only."), `scope.needsInspect` (the file has not been checked for empty sheets), `scope.pattern` (the name pattern is not valid). Existing: `recipe.token`, `skip.noMatchingUnit`.
 
+## For trunk when merging
+
+- `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds exactly `src/batch/execute/units.js`, `src/batch/resolve/scope.js` and `src/batch/resolve/tokens.js`.
+- Files this branch changes: `src/batch/resolve/{resolve,scope,tokens}.js`, `src/batch/execute/units.js`, `src/core/snapshot.js`, three new test files, this progress file. It touches no file outside the Scope list. The merge of `fable` at e86d5e4 was clean.
+- Nothing in `src/app`, `src/workers` or `collect.js` calls the new code yet. Wiring is yours: call `inspectNeeds` then `resolvePlan`; in the worker call `runFileUnits` with the file's `{name, relPath}`, the file plan and the recipe, and hand each `run.table` to the output writer there.
+- Decisions to confirm with the user, because they change what people see: `{unit.index}` is the ordinal among resolved units; a name resolves to the latest earlier output, so a constant output name accumulates (chain); a sheet named like a table is `unit.nameCollision`; `{file.folder}` keeps its trailing slash.
+- Still open: who writes resolution for `inject`, `replace` and `align` (see "Gap found in the split").
+
 ## Known failures not caused by this branch
 
 `T-WB-01` (a thousand members index in under 300 ms) and `T-WB-05` (ten thousand items ranked in under 30 ms) are timing tests that fail intermittently in the one-CPU build sandbox, including on `fable` at 56b3974 with none of this branch's code. They were not changed.

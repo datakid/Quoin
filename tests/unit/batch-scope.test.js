@@ -357,3 +357,23 @@ test('resolving 500 files with a pattern, hidden sheets and pins takes under 16 
   }
   assert.ok(best < 16, `best of 15 runs ${best.toFixed(2)} ms`);
 });
+
+test('§3.3 a pin always beats the scope rule, including when the rule would pick other units or none', () => {
+  const files = [withSheets('f1', 'a.xlsx', ['Data', 'Notes']), withSheets('f2', 'b.xlsx', ['Notes'])];
+  const overrides = [{ file: 'a.xlsx', path: 'a.xlsx', units: ['Notes'] }, { file: 'b.xlsx', path: 'b.xlsx', units: ['Notes'] }];
+  const plan = resolvePlan(transform({ match: 'pattern', pattern: 'Data*' }, { overrides }), files, { now: NOW });
+  assert.deepEqual([namesOf(plan, 'f1'), plan.files[0].source], [['Notes'], 'pin']);
+  assert.deepEqual([namesOf(plan, 'f2'), plan.files[1].skipped], [['Notes'], null]);
+});
+
+test('§3.3 an explicit exclude beats an include by pattern or by position and does not promote the next sheet', () => {
+  const file = withSheets('f1', 'a.xlsx', ['A', 'B', 'C']);
+  assert.deepEqual(namesOf(resolvePlan(transform({ match: 'pattern', pattern: '*', exclude: ['B'] }), [file], { now: NOW })), ['A', 'C']);
+  assert.deepEqual(namesOf(resolvePlan(transform({ match: 'position', position: { kind: 'first' }, exclude: ['A'] }), [file], { now: NOW })), []);
+  assert.deepEqual(namesOf(resolvePlan(transform({ match: 'position', position: { kind: 'range', from: 1, to: 3 }, exclude: ['a', 'C'] }), [file], { now: NOW })), ['B']);
+});
+
+test('§3.3 an exclude is part of the rule, so a pin on the same name still wins', () => {
+  const plan = resolvePlan(transform({ exclude: ['Data'] }, { overrides: [{ file: 'a.xlsx', path: 'a.xlsx', units: ['Data'] }] }), [withSheets('f1', 'a.xlsx', ['Data', 'Notes'])], { now: NOW });
+  assert.deepEqual(namesOf(plan), ['Data']);
+});

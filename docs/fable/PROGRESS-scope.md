@@ -85,6 +85,17 @@ Decisions made inside gaps in the plan:
 - An output whose name equals a table, name or sheet unit already in the snapshot makes the next unit a `unit.nameCollision` row error. A failed unit registers nothing; later units still run, and one that needed its output reports the M error.
 - `isCancelled` is checked before each unit and `onUnit(run, done, total)` after each, so the worker can send cancel and progress messages. Both are optional.
 
+## F3-02 Precedence
+
+Layer: resolve (test only)
+Files: tests/unit/batch-scope.test.js
+Do: three tests for the rules of Fable §3.3 that resolve owns: a pin beats the scope rule; an explicit exclude beats an include by pattern or position and does not promote the next sheet; an exclude is part of the rule, so a pin on the same name wins.
+Test that fails without it: these pass on arrival because F3-01 built the behaviour. With pins ignored 2 of the 3 fail, with `exclude` ignored 1 fails (the other two exclude cases are the F3-01 tests that fail as well).
+Result: Partly done. Rules 3 (two recipes on one field: last chosen wins, the region shows what it replaced) and 4 (injecting an existing name is `replace`, with the old hash) are not in resolve's files: rule 3 is session state in `src/app` and `Action.replaces`, rule 4 is inject resolution and the Writer's execute code. Testing them here would mean writing the code the other branches own, so they stay with trunk and Writer.
+Fails without: yes (by mutation)
+Changed expectations: none
+Deviations: F3-02 was waiting on `quoin-fable.md`; the user attached it to this session, so it is read and §3 and §9 are checked against.
+
 ## Strings and codes trunk adds when it merges
 
 Row errors (F3-03): `unit.parse`, `unit.error`, `unit.notTable`, `unit.binding`, `unit.nameCollision`, `unit.missing`, plus `recipe.token` on a row. Existing: `m.rows`, `m.timeout`, `m.depth`.

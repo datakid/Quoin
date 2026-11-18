@@ -1,14 +1,16 @@
 # Parallel work on Fable
 
+The decision document is now in the repository as `docs/fable/00_FABLE.md` on `fable`. A side branch that was cut earlier gets it by merging `fable` into itself. F3-02 uses its sections 3.2 and 3.3.
+
 Three agents work at once, each on its own branch, on files that do not overlap. Every agent reads `docs/fable/01_PLAN.md` first; the task cards there are the specification.
 
 ## Who does what
 
 | Agent | Branch | Tasks | Who merges |
 | --- | --- | --- | --- |
-| Trunk (Claude) | `fable` | F0-12 (waits for `quoin-fable.md`), F1-05, F1-06, F1-07, F1-08, then every integration task from F2-10 on | Trunk merges the other two branches |
+| Trunk (Claude) | `fable` | F0-12, F1-05, F1-06, F1-07, F1-08, then every integration task from F2-10 on | Trunk merges the other two branches |
 | Writer | `fable-writer` | F2-01 to F2-09 | Trunk |
-| Scope | `fable-scope` | F3-01, F3-03, F3-04 (F3-02 waits for `quoin-fable.md`) | Trunk |
+| Scope | `fable-scope` | F3-01, F3-02, F3-03, F3-04 | Trunk |
 
 A side branch starts from the `fable` commit named in its brief and is never rebased. To get new trunk work, merge `fable` into your own branch.
 

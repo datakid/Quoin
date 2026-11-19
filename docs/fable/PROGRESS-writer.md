@@ -43,9 +43,11 @@ ChangeSet = {
 - `recipe` is an addition to the interface in `PARALLEL.md`. `FilePlan` and `Action` carry no query text, find string or hash, so the recipe has to come with the call.
 - `acknowledgeSignature` (default false) is a further addition: the caller passes true once the user has confirmed, for the whole set, that signed projects lose their signature (Q3). Without it a module replace in a signed project is refused as `vba.signature`, the same in Preview and in Run.
 - `failedResult(filePlan, code, { recipe, meta, runId })` is exported from the same file. It returns an `ApplyResult` with a `failed` row for every action and no bytes. The pool is the one that stops a job at its time limit, so it should call this with `m.timeout`; `meta` is required there because there is no workbook.
+- `alignText` is a further addition, for align recipes: the text of the chosen version, read by the caller from a file that has the chosen hash. For a query it is the query's text; for a module it is the module's full text exactly as the index hashed it (`wb.vba.project.modules[i].text`, attribute lines included). `executeFile` checks it against `recipe.align.hash` and fails every row with `align.sourceChanged` if it does not match; a missing `alignText` throws.
 - Any other option, including `dryRun`, is never read. A test pins that.
 - `bytes` and `sha256` are `null` when nothing is written: every action unchanged or skipped, or the file failed.
 - `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`, with `newName` added for a rename, and `matchCount` and `matches` added for `replaceText`. `matches` is a list of `{ line, col, before, after }` (one-based, in the old text, each side cut to 200 characters), capped at 100 entries; `matchCount` is the full count. Preview can draw its match rows from it. `oldHash` is `null` for an add and `newHash` is `null` for a remove. For a rename both hashes are the hash of the unchanged text. The card did not give the shape.
+- Hashes in rows are the index's hashes: a query's is the SHA-256 of its trimmed text, a module's is the SHA-256 of its full text with attribute lines, so a hash from the Files list or the report can be compared with a recipe's `hash`.
 - One row per action, in action order, with the Appendix B columns. `output` is left empty; the output name is assigned where outputs are named (Appendix C). `reason` is left empty; the text comes from `reason_code`.
 - Verdicts from here: `changed` (verified), `unchanged` (nothing written), `skipped` (`skip.notApplicable`), `failed` (a Quoin error such as `m.parse`), `not-released` (`write.selfcheck`). When a write fails, every changed action gets the failure; skipped and unchanged actions keep theirs.
 - An error that is not a Quoin error is thrown, as `executeFilePlan` in `collect.js` does, so the worker turns it into a failed row.
@@ -59,6 +61,7 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 | Code | Used for | Suggested text |
 |---|---|---|
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
+| `align.sourceChanged` | an align whose text does not match the chosen hash (the source file changed after the recipe was made) | "Not changed. The chosen version is no longer the one in its file." |
 | `refused.exists` | an add of a name the file already has (compared without regard to case, and against every section member) | "Not added. The file already has a query named {name}." |
 | `refused.name` | an add whose name is empty, has a space at either end or has a control character | "Not added. This name cannot be used." |
 | `refused.loaded` | a remove of a query that has a connection or loads to a table or the data model | "Not removed. This query loads to {target}." |
@@ -202,9 +205,24 @@ Decisions inside gaps (log, not yet confirmed by the user):
 - A pattern that is not valid reaches `executeFile` only if the recipe check was skipped; it throws `SyntaxError`, which is not a Quoin error, so the worker reports the file as failed.
 Counts after this task: lint 0 findings; unit 1261 tests, 1256 pass, 5 skipped.
 
+### F2-09 Align
+Layer: batch/execute (the resolve half is not in my files)
+Files: src/batch/execute/changes.js, src/batch/execute/index.js, tests/unit/batch-align.test.js (new), tests/unit/batch-execute.test.js
+Do: align actions replace a query or a module with the chosen version when its hash differs; a file already at that hash is `unchanged`; a file without it is `skipped`. The chosen text comes in as `alignText` and is checked against the recipe's hash first. The rows' hashes are the index's hashes, and a test reads the index before and after to show the output's hash equals the recipe's.
+Test that fails without it: `tests/unit/batch-align.test.js` (13 tests, all failed before the change). The browser test the card asks for is trunk's.
+Fails without, by mutation (each reverted): query source check off, 1 fails; module source check off, 1; target kind check off, 1; missing query not skipped, 1; op not relabelled, 2; query text not normalised, 1; module visible text not split from the full text, 4; module hash taken over the visible text, 4; `alignText` check off, 1; `alignText` not passed on, 12.
+Result: Done
+Changed expectations: F2-06's module hashes. Module rows hashed the visible text; the index hashes the full text with attribute lines, so a hash taken from the Files list would never have matched a row. `stageModule` now hashes the full text before and after, and the F2-06 test that pinned the visible-text hash now ties old and new hash to the index. This changes F2-06 and F2-08 module rows; query rows are unchanged.
+Deviations: none beyond the one logged at F2-03.
+Decisions inside gaps (log, not yet confirmed by the user):
+- Align replaces only the visible code of a module. If the target's attribute lines differ from the chosen version's, its full hash still differs from the recipe's after the write. The row shows the real new hash.
+- A file whose target is missing is `skipped` even when the source text is wrong; the source check is made only for files that have the target.
+- A recipe whose `align.target` is not the action's kind is `skipped`.
+Counts after this task: lint 0 findings; unit 1274 tests, 1269 pass, 5 skipped.
+
 ## Open points for the user
 
 1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.
-2. F2-09 says "resolve and execute". I build only the execute side in `align.js`. The resolve side (choosing a version by hash, `skipped` for files with no such query) is in Scope's files.
+2. F2-09 says "resolve and execute". I built only the execute side, in `changes.js` (there is no `align.js`: align shares the query and module staging with replace, so a separate file would only repeat it). The resolve side (choosing a version by hash, reading its text from the first file that has it and passing it as `alignText`) is in Scope's or trunk's files.
 3. Added queries have no connection. Excel writes a `connection` element for every query it makes, including connection-only ones, and lists them in Workbook Connections. Without one, `inject.refreshOnLoad` cannot apply to an added query, and I do not know whether Excel creates the connection itself on open. The plan says never create a load target and does not mention a connection. Options: leave it (current), or write the connection element too (needs `xl/connections.xml` to exist, or a new part, relationship and content type). The real-Excel pack result for F2-03 would settle it.
 4. Remove and rename refuse every query that has a connection, which is every query Excel made, including connection-only ones. Only queries added by Quoin can be removed or renamed. Options for remove: keep it (current), or also remove the connection element from `xl/connections.xml` for a connection-only query. Options for rename: keep it (current), or also update the connection's name, description, `Location=` and `command` the way Excel does. A query that loads to a table or the data model would still be refused for remove. I would want the real-Excel pack to confirm either change before it ships.

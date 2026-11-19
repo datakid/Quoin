@@ -5,11 +5,11 @@ import { sha256Bytes } from '../index/hash.js';
 import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
 
-export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false }) {
+export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText }) {
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
   const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));
-  const { changeSet, outcomes } = await planChanges(wb, filePlan, recipe, { acknowledgeSignature });
+  const { changeSet, outcomes } = await planChanges(wb, filePlan, recipe, { acknowledgeSignature, alignText });
   const rowsFor = (settle) =>
     filePlan.actions.map((action, i) => {
       const o = outcomes[i];

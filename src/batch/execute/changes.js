@@ -1,6 +1,6 @@
 import { normalizeQueryText, toViewText } from '../../core/pq/section.js';
 import { emptyChangeSet } from '../../core/save.js';
-import { splitLines } from '../../core/vba/module-source.js';
+import { joinModuleSource, splitLines, splitModuleSource } from '../../core/vba/module-source.js';
 import { validateModuleText } from '../../core/vba/validate.js';
 import { replaceInText } from './replace.js';
 import { queryNameProblem, queryRemovalProblem, queryRenameProblem } from '../../core/pq/members.js';
@@ -106,9 +106,9 @@ function moduleTarget(wb, name) {
 }
 
 async function stageModule(wb, project, mod, text, changeSet, acknowledgeSignature) {
-  const oldHash = await sha256Text(mod.model.visible);
-  const newHash = await sha256Text(text);
-  if (oldHash === newHash) return { verdict: 'unchanged', reason_code: '', old_hash: oldHash, new_hash: newHash, change: null };
+  const oldHash = await sha256Text(mod.text);
+  if (text === mod.model.visible) return { verdict: 'unchanged', reason_code: '', old_hash: oldHash, new_hash: oldHash, change: null };
+  const newHash = await sha256Text(joinModuleSource(mod.model, text));
   if (!project.writable) return refused(project.locked ? 'vba.locked' : 'vba.write', oldHash, newHash);
   const problems = validateModuleText({ text, codePage: project.codePage, originalBytes: mod.sourceBytes });
   if (problems.length) return { ...refused(problems[0].code, oldHash, newHash), reason: `${problems[0].line}:${problems[0].col}` };
@@ -147,13 +147,41 @@ async function replaceText(wb, action, recipe, changeSet, { acknowledgeSignature
   return withMatches(await stageModule(wb, target.project, target.mod, splitLines(found.text).join('\n'), changeSet, acknowledgeSignature), found);
 }
 
-export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature = false } = {}) {
+async function alignSource(spec, alignText) {
+  if (typeof alignText !== 'string') throw new Error('an align recipe needs alignText');
+  if (spec.target === 'query') {
+    const text = toViewText(normalizeQueryText(alignText));
+    return { ok: (await sha256Text(text)) === spec.hash, text };
+  }
+  return { ok: (await sha256Text(alignText)) === spec.hash, text: splitModuleSource(alignText).visible };
+}
+
+const asAlign = (outcome) => (outcome.change ? { ...outcome, change: { ...outcome.change, op: 'align' } } : outcome);
+
+async function alignTarget(wb, action, recipe, changeSet, source, { acknowledgeSignature }) {
+  const { type, name } = action.target;
+  if (type !== recipe.align.target) return skipped('skip.notApplicable');
+  if (type === 'query') {
+    const query = wb.queries.find((x) => x.name === name);
+    if (!query) return skipped('skip.notApplicable');
+    if (!source.ok) return { verdict: 'failed', reason_code: 'align.sourceChanged', old_hash: '', new_hash: '', change: null };
+    return asAlign(await stageQuery(query, source.text, changeSet));
+  }
+  const target = moduleTarget(wb, name);
+  if (target.outcome) return target.outcome;
+  if (!source.ok) return { verdict: 'failed', reason_code: 'align.sourceChanged', old_hash: '', new_hash: '', change: null };
+  return asAlign(await stageModule(wb, target.project, target.mod, source.text, changeSet, acknowledgeSignature));
+}
+
+export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature = false, alignText } = {}) {
   const changeSet = emptyChangeSet();
   const outcomes = [];
+  const source = recipe.recipe === 'align' ? await alignSource(recipe.align, alignText) : null;
   for (const action of filePlan.actions) {
     if (action.op === 'replace' && action.target.type === 'query') outcomes.push(await replaceQuery(wb, action, recipe, changeSet));
     else if (action.op === 'replace' && action.target.type === 'module') outcomes.push(await replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'replaceText' && (action.target.type === 'query' || action.target.type === 'module')) outcomes.push(await replaceText(wb, action, recipe, changeSet, { acknowledgeSignature }));
+    else if (action.op === 'align') outcomes.push(await alignTarget(wb, action, recipe, changeSet, source, { acknowledgeSignature }));
     else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));
     else if (action.op === 'remove' && action.target.type === 'query') outcomes.push(await removeQuery(wb, action, changeSet));
     else if (action.op === 'rename' && action.target.type === 'query') outcomes.push(await renameQuery(wb, action, recipe, changeSet));

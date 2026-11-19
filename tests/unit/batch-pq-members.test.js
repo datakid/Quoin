@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { applyChangeSet, emptyChangeSet, selfCheck } from '../../src/core/save.js';
 import { buildDataMashup } from '../../src/core/pq/datamashup.js';
-import { removeMetadataItems } from '../../src/core/pq/members.js';
+import { removeMetadataItems, renameMetadataItems } from '../../src/core/pq/members.js';
 import { base64Encode } from '../../src/core/bytes.js';
 import { applyEdits, parseXml, textContentEdit } from '../../src/core/xml.js';
 import { checkSection } from '../../src/core/m/engine.js';
@@ -319,4 +319,131 @@ test('F2-04: a workbook whose metadata does not match its section cannot take a 
   const cs = emptyChangeSet();
   cs.queries.remove.add('Extra');
   await assert.rejects(() => applyChangeSet(broken, cs, { now: NOW }), (e) => e.code === 'pq.format');
+});
+
+async function renameIn(wb, pairs, extra = {}) {
+  const cs = emptyChangeSet();
+  for (const [from, to] of pairs) cs.queries.rename.set(from, to);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection, ...extra });
+  return { res, back: await openWorkbook(res.bytes, 'out.xlsx') };
+}
+
+test('F2-05: a rename changes the member name and the metadata path and nothing else', async () => {
+  const { wb } = await reopenWith([['Extra', NEW_M]]);
+  const { res, back } = await renameIn(wb, [['Extra', 'Renamed']]);
+  assert.equal(res.queriesChanged, 1);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'Renamed']);
+  assert.equal(back.mashup.section.text, wb.mashup.section.text.replace('shared Extra =', 'shared Renamed ='));
+  assert.equal(back.mashup.model.metadata.xml, wb.mashup.model.metadata.xml.replace('<ItemPath>Section1/Extra</ItemPath>', '<ItemPath>Section1/Renamed</ItemPath>'));
+  assert.equal(back.queries[1].original, NEW_M);
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-05: a name that needs quotes is written quoted, and a quoted name becomes plain when it can', async () => {
+  const { wb } = await reopenWith([['Extra', NEW_M]]);
+  const quoted = await renameIn(wb, [['Extra', 'New Name']]);
+  assert.ok(quoted.back.mashup.section.text.includes('shared #"New Name" = '));
+  assert.ok(quoted.back.mashup.model.metadata.xml.includes('<ItemPath>Section1/New%20Name</ItemPath>'));
+  const plain = await renameIn(quoted.back, [['New Name', 'Plain']]);
+  assert.ok(plain.back.mashup.section.text.includes('shared Plain = '));
+  assert.ok(!plain.back.mashup.section.text.includes('New Name'));
+  assert.deepEqual(plain.back.warnings, []);
+});
+
+test('F2-05: the metadata renamer moves the query item and every step item and no other', async () => {
+  const wb = await openWorkbook(fixture('pq_vba_complex.xlsm'), 'pq_vba_complex.xlsm');
+  const xml = wb.mashup.model.metadata.xml;
+  const paths = (x) => [...x.matchAll(/<ItemPath>([^<]*)<\/ItemPath>/g)].map((m) => m[1]);
+  const before = paths(xml);
+  const after = paths(renameMetadataItems(xml, new Map([['RawInput', 'Raw Data']])));
+  assert.equal(after.length, before.length);
+  assert.deepEqual(after.filter((p) => !before.includes(p)), ['Section1/Raw%20Data', 'Section1/Raw%20Data/Source', 'Section1/Raw%20Data/Converted%20to%20Table', 'Section1/Raw%20Data/Renamed%20Columns']);
+  assert.deepEqual(before.filter((p) => !after.includes(p)), ['Section1/RawInput', 'Section1/RawInput/Source', 'Section1/RawInput/Converted%20to%20Table', 'Section1/RawInput/Renamed%20Columns']);
+  assert.equal(renameMetadataItems(xml, new Map([['Nothing', 'Else']])), xml);
+});
+
+test('F2-05: a change of case only is a rename', async () => {
+  const { wb } = await reopenWith([['extra', NEW_M]]);
+  const { back } = await renameIn(wb, [['extra', 'Extra']]);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'Extra']);
+});
+
+test('F2-05: two queries can swap names in one change', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', 'let\n    x = 2\nin\n    x']]);
+  const { back } = await renameIn(wb, [['A', 'B'], ['B', 'A']]);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'B', 'A']);
+  assert.equal(back.queries[1].original, NEW_M);
+  assert.equal(back.queries[2].original, 'let\n    x = 2\nin\n    x');
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-05: a rename and a replace of the same query, and a rename with an add and a remove', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', NEW_M]]);
+  const cs = emptyChangeSet();
+  cs.queries.rename.set('A', 'C');
+  cs.queries.replace.set('A', 'let\n    x = 5\nin\n    x');
+  cs.queries.remove.add('B');
+  cs.queries.add.set('D', NEW_M);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection });
+  const back = await openWorkbook(res.bytes, 'out.xlsx');
+  assert.equal(res.queriesChanged, 4);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'C', 'D']);
+  assert.equal(back.queries[1].original, 'let\n    x = 5\nin\n    x');
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-05: a query that loads to a table or has a connection cannot be renamed', async () => {
+  for (const [wb, name] of [[await openSimple(), 'StudentResults'], [await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm'), 'fGetNamedRange']]) {
+    const cs = emptyChangeSet();
+    cs.queries.rename.set(name, 'Other');
+    await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.renameLoaded/.test(e.message), name);
+  }
+});
+
+test('F2-05: a query that other queries use cannot be renamed and the users are named', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', 'A + 1']]);
+  const cs = emptyChangeSet();
+  cs.queries.rename.set('A', 'C');
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.referenced: B/.test(e.message));
+  const ok = await renameIn(wb, [['B', 'C']]);
+  assert.deepEqual(queryNames(ok.back), ['StudentResults', 'A', 'C']);
+});
+
+test('F2-05: a query that reads #shared blocks every rename', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['Reader', '#shared']]);
+  const cs = emptyChangeSet();
+  cs.queries.rename.set('A', 'C');
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.referenced: Reader/.test(e.message));
+});
+
+test('F2-05: names that clash, cannot be written, or do not change are refused before anything is written', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', NEW_M]]);
+  const cases = [[['A', 'b']], [['A', 'StudentResults']], [['A', '']], [['A', ' x']], [['A', 'A']], [['A', 'X'], ['B', 'x']]];
+  for (const pairs of cases) {
+    const cs = emptyChangeSet();
+    for (const [from, to] of pairs) cs.queries.rename.set(from, to);
+    await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError, JSON.stringify(pairs));
+  }
+  const unknown = emptyChangeSet();
+  unknown.queries.rename.set('Nope', 'X');
+  await assert.rejects(() => applyChangeSet(wb, unknown, { now: NOW }), (e) => e.code === 'pq.unknown');
+  const clash = emptyChangeSet();
+  clash.queries.rename.set('A', 'X');
+  clash.queries.remove.add('A');
+  await assert.rejects(() => applyChangeSet(wb, clash, { now: NOW }), TypeError);
+});
+
+test('F2-05: a workbook whose metadata does not match its section cannot take a rename', async () => {
+  const wb = await openSimple();
+  const broken = await openWorkbook(await mismatchedOutput(wb), 'bad.xlsx');
+  const cs = emptyChangeSet();
+  cs.queries.rename.set('Extra', 'Other');
+  await assert.rejects(() => applyChangeSet(broken, cs, { now: NOW }), (e) => e.code === 'pq.format');
+});
+
+test('F2-05: the same now gives the same bytes for a rename', async () => {
+  const { wb } = await reopenWith([['A', NEW_M]]);
+  const a = await renameIn(wb, [['A', 'B']]);
+  const b = await renameIn(wb, [['A', 'B']]);
+  assert.equal(sha(a.res.bytes), sha(b.res.bytes));
 });

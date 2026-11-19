@@ -287,3 +287,74 @@ test('F2-04: a remove of a query the file does not have is skipped', async () =>
     assert.equal(res.rows[0].reason_code, 'skip.notApplicable');
   }
 });
+
+const renameRecipe = (name, newName) => recipeFor({ op: 'rename', name, newName });
+
+test('F2-05: a rename action renames a query that nothing uses and carries the new name in its change', async () => {
+  const wb = await withAdded('Extra');
+  const hash = await sha256Text(NEW_M);
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', 'Renamed') });
+  const back = await openWorkbook(res.bytes, 'x.xlsx');
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'Renamed']);
+  assert.equal(back.queries[1].original, NEW_M);
+  assert.deepEqual(res.changes, [{ op: 'rename', target: { type: 'query', name: 'Extra' }, newName: 'Renamed', oldHash: hash, newHash: hash }]);
+  const row = res.rows[0];
+  assert.equal(row.action, 'rename');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, hash);
+  assert.equal(row.new_hash, hash);
+  assert.equal(row.verified, true);
+});
+
+test('F2-05: renaming to the name it already has is unchanged and writes nothing', async () => {
+  const wb = await withAdded('Extra');
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', 'Extra') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'unchanged');
+});
+
+test('F2-05: a rename of a query the file does not have is skipped', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['Nope'], 'rename'), { now: NOW, recipe: renameRecipe('Nope', 'Other') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'skipped');
+  assert.equal(res.rows[0].reason_code, 'skip.notApplicable');
+});
+
+test('F2-05: a rename of a loaded query is refused with its target', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['StudentResults'], 'rename'), { now: NOW, recipe: renameRecipe('StudentResults', 'Other') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'refused.renameLoaded');
+  assert.equal(res.rows[0].reason, `${wb.queries[0].load.sheet}!${wb.queries[0].load.tableName}`);
+});
+
+test('F2-05: a rename of a query other queries use is refused and names them', async () => {
+  const wb = await withAdded('A');
+  const plan = filePlanFor(['B'], 'add');
+  const second = await executeFile(wb, plan, { now: NOW, recipe: recipeFor({ op: 'add', name: 'B', text: 'A + 1' }) });
+  const both = await openWorkbook(second.bytes, 'x.xlsx');
+  const res = await executeFile(both, filePlanFor(['A'], 'rename'), { now: NOW, recipe: renameRecipe('A', 'C') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].reason_code, 'refused.referenced');
+  assert.equal(res.rows[0].reason, 'B');
+});
+
+test('F2-05: a rename to a name that is taken or cannot be written is refused', async () => {
+  const wb = await withAdded('Extra');
+  const taken = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', 'studentresults') });
+  assert.equal(taken.rows[0].verdict, 'refused');
+  assert.equal(taken.rows[0].reason_code, 'refused.exists');
+  const bad = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', ' x') });
+  assert.equal(bad.rows[0].reason_code, 'refused.name');
+  const none = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', null) });
+  assert.equal(none.rows[0].reason_code, 'refused.name');
+  assert.ok(taken.bytes === null && bad.bytes === null && none.bytes === null);
+});
+
+test('F2-05: a change of case only is a rename in the output', async () => {
+  const wb = await withAdded('Extra');
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', 'EXTRA') });
+  assert.deepEqual((await openWorkbook(res.bytes, 'x.xlsx')).queries.map((q) => q.name), ['StudentResults', 'EXTRA']);
+});

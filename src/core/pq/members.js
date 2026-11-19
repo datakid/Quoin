@@ -130,15 +130,18 @@ export function queryReferencers(wb, name) {
   return [...names].sort();
 }
 
-export function queryRemovalProblem(wb, name) {
+function blockingProblem(wb, name, loadedCode, usedCode) {
   const query = wb.queries.find((x) => x.name === name);
   if (!query) return null;
   const target = loadTarget(query);
-  if (target) return { code: 'refused.loaded', detail: target };
+  if (target) return { code: loadedCode, detail: target };
   const users = queryReferencers(wb, name);
-  if (users.length) return { code: 'refused.usedBy', detail: users.join(', ') };
+  if (users.length) return { code: usedCode, detail: users.join(', ') };
   return null;
 }
+
+export const queryRemovalProblem = (wb, name) => blockingProblem(wb, name, 'refused.loaded', 'refused.usedBy');
+export const queryRenameProblem = (wb, name) => blockingProblem(wb, name, 'refused.renameLoaded', 'refused.referenced');
 
 function checkRemovals(wb, queries) {
   for (const name of queries.remove) {
@@ -149,9 +152,26 @@ function checkRemovals(wb, queries) {
   }
 }
 
-export function removeMetadataItems(xml, names) {
-  const doc = parseXml(xml, 'Metadata');
-  const edits = [];
+function checkRenames(wb, mashup, queries) {
+  for (const [from, to] of queries.rename) {
+    if (!wb.queries.some((x) => x.name === from)) throw new QuoinError('pq.unknown', from);
+    if (queries.remove.has(from)) throw new TypeError(`${from} cannot be both renamed and removed`);
+    if (from === to) throw new TypeError(`${from} is renamed to the same name`);
+    const nameProblem = queryNameProblem(to);
+    if (nameProblem) throw new TypeError(`query name is not allowed: ${nameProblem}`);
+    const problem = queryRenameProblem(wb, from);
+    if (problem) throw new TypeError(`${problem.code}: ${problem.detail}`);
+  }
+  if (!queries.rename.size) return;
+  const final = mashup.split.members.filter((m) => !queries.remove.has(m.name)).map((m) => (queries.rename.has(m.name) ? queries.rename.get(m.name) : m.name));
+  const seen = new Set();
+  for (const name of [...final, ...queries.add.keys()]) {
+    if (seen.has(name.toLowerCase())) throw new TypeError(`more than one query would be named ${name}`);
+    seen.add(name.toLowerCase());
+  }
+}
+
+function* formulaItems(doc) {
   for (const item of doc.root.findAll('Item')) {
     const location = item.child('ItemLocation');
     const path = location && location.child('ItemPath');
@@ -165,7 +185,23 @@ export function removeMetadataItems(xml, names) {
     } catch {
       name = segments[1];
     }
-    if (names.has(name)) edits.push(removeElementEdit(item));
+    yield { item, path, segments, name };
+  }
+}
+
+export function removeMetadataItems(xml, names) {
+  const edits = [];
+  for (const { item, name } of formulaItems(parseXml(xml, 'Metadata'))) if (names.has(name)) edits.push(removeElementEdit(item));
+  return applyEdits(xml, edits);
+}
+
+export function renameMetadataItems(xml, renames) {
+  const edits = [];
+  for (const { path, segments, name } of formulaItems(parseXml(xml, 'Metadata'))) {
+    if (!renames.has(name)) continue;
+    const moved = segments.slice();
+    moved[1] = encodeURIComponent(renames.get(name));
+    edits.push(textContentEdit(path, moved.join('/')));
   }
   return applyEdits(xml, edits);
 }
@@ -199,6 +235,7 @@ function appendMember(text, name, view) {
 
 function rewriteSection(text, split, members, queries) {
   const pieces = removalRanges(split, queries.remove).map((r) => ({ start: r.start, end: r.end, replacement: '' }));
+  for (const m of split.members) if (queries.rename.has(m.name)) pieces.push({ start: m.nameStart, end: m.nameEnd, replacement: memberName(queries.rename.get(m.name)) });
   for (const m of members) {
     if (!queries.replace.has(m.name)) continue;
     const eol = memberEol(text, m);
@@ -214,10 +251,10 @@ function rewriteSection(text, split, members, queries) {
 }
 
 export async function writeQueryChanges(wb, pkg, queries, { now, refreshOnLoad = true, refreshNames = new Set(), checkSection = null } = {}) {
-  if (queries.rename.size) throw new TypeError('query rename is not applied yet');
-  const mashup = assertWritable(wb, queries.add.size > 0 || queries.remove.size > 0);
+  const mashup = assertWritable(wb, queries.add.size > 0 || queries.remove.size > 0 || queries.rename.size > 0);
   checkAdds(mashup, queries.add);
   checkRemovals(wb, queries);
+  checkRenames(wb, mashup, queries);
   const edits = queries.replace;
   const touched = [];
   const members = mashup.split.members.filter((m) => edits.has(m.name));
@@ -227,10 +264,12 @@ export async function writeQueryChanges(wb, pkg, queries, { now, refreshOnLoad =
     if (problem) throw new QuoinError('m.parse', `${problem.message} Line ${problem.line}, column ${problem.col}.`, mashup.part);
   }
   let metadata = mashup.model.raw.metadata;
-  if (queries.add.size || queries.remove.size) {
+  if (queries.add.size || queries.remove.size || queries.rename.size) {
     const sectionName = mashup.split.header ? mashup.split.header.name : 'Section1';
-    const kept = queries.remove.size ? removeMetadataItems(mashup.model.metadata.xml, queries.remove) : mashup.model.metadata.xml;
-    const xml = queries.add.size ? insertItems(kept, [...queries.add].map(([name, text]) => addedItem(sectionName, name, text))) : kept;
+    let xml = mashup.model.metadata.xml;
+    if (queries.remove.size) xml = removeMetadataItems(xml, queries.remove);
+    if (queries.rename.size) xml = renameMetadataItems(xml, queries.rename);
+    if (queries.add.size) xml = insertItems(xml, [...queries.add].map(([name, text]) => addedItem(sectionName, name, text)));
     metadata = metadataBytes(mashup.model, xml);
   }
   const bytes = await mashupBytes(mashup.model, { text: sectionText, bom: mashup.section.bom }, metadata, now);

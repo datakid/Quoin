@@ -43,7 +43,7 @@ ChangeSet = {
 - `recipe` is an addition to the interface in `PARALLEL.md`. `FilePlan` and `Action` carry no query text, find string or hash, so the recipe has to come with the call.
 - Any other option, including `dryRun`, is never read. A test pins that.
 - `bytes` and `sha256` are `null` when nothing is written: every action unchanged or skipped, or the file failed.
-- `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`. The card did not give the shape.
+- `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`, with `newName` added for a rename. `oldHash` is `null` for an add and `newHash` is `null` for a remove. For a rename both hashes are the hash of the unchanged text. The card did not give the shape.
 - One row per action, in action order, with the Appendix B columns. `output` is left empty; the output name is assigned where outputs are named (Appendix C). `reason` is left empty; the text comes from `reason_code`.
 - Verdicts from here: `changed` (verified), `unchanged` (nothing written), `skipped` (`skip.notApplicable`), `failed` (a Quoin error such as `m.parse`), `not-released` (`write.selfcheck`). When a write fails, every changed action gets the failure; skipped and unchanged actions keep theirs.
 - An error that is not a Quoin error is thrown, as `executeFilePlan` in `collect.js` does, so the worker turns it into a failed row.
@@ -60,6 +60,8 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 | `refused.exists` | an add of a name the file already has (compared without regard to case, and against every section member) | "Not added. The file already has a query named {name}." |
 | `refused.name` | an add whose name is empty, has a space at either end or has a control character | "Not added. This name cannot be used." |
 | `refused.loaded` | a remove of a query that has a connection or loads to a table or the data model | "Not removed. This query loads to {target}." |
+| `refused.referenced` | a rename of a query that another query uses, or while a query reads `#shared` | "Not renamed. Referenced by {names}." (Appendix E) |
+| `refused.renameLoaded` | a rename of a query that has a connection or loads to a table or the data model | "Not renamed. This query loads to {target}." |
 | `refused.usedBy` | a remove of a query that another query uses, or while a query reads `#shared` | "Not removed. Used by {names}." |
 
 For the two `refused.*` codes above, and for later ones that take a parameter, the report row's `reason` column holds only the parameter: the target (`Sheet1!Table1`, `data model`, or `connection Query - Name`) or the user names joined with a comma and a space. The sentence is built from the code in `strings.js`.
@@ -148,9 +150,24 @@ Decisions inside gaps (log, not yet confirmed by the user):
 - Section text removed: for a run of removed members followed by a kept one, from the first removed member's start to the kept member's start; for a run at the end, from the end of the member before it (or the section header) to the last removed member's end. A comment between a removed member and the next one goes with it.
 Counts after this task: lint 0 findings; unit 1211 tests, 1206 pass, 5 skipped.
 
+### F2-05 Query rename
+Layer: core/pq, with the execute wiring for `rename` actions
+Files: src/core/pq/members.js, src/batch/execute/changes.js, tests/unit/batch-pq-members.test.js, tests/unit/batch-execute.test.js
+Do: `writeQueryChanges` renames the member name token and rewrites the metadata path of the query item and its step items, in one pass so two queries can swap names. Uses `indexSection` from `src/core/wb/deps.js` (the module behind `wb-deps.test.js`) for references. A query that another query uses is refused (`refused.referenced`, A5). A query that has a connection or loads to a table or the data model is refused (`refused.renameLoaded`).
+Test that fails without it: 12 new tests in `tests/unit/batch-pq-members.test.js` (the file failed to load before the change, for the missing `renameMetadataItems` export) and 7 in `tests/unit/batch-execute.test.js`.
+Fails without, by mutation (each reverted): section name not renamed, 7 fail; metadata not renamed, 2; step items not renamed, 1; loaded check off, 2; users check off, 4; same-name check off, 1; name check off, 1; uniqueness check off, 1; unknown source off, 1; rename with remove check off, 1; mismatch guard off, 1. In `changes.js`: same-name handling off, 1; name check off, 1; taken check off, 1; taken check counting itself, 1; refusal off, 2; new name left out of the change, 1.
+Result: Done
+Changed expectations: none
+Deviations: none beyond the one logged at F2-03.
+Decisions inside gaps (log, not yet confirmed by the user):
+- A rename of a query with a connection is refused. The plan says rename the member and its metadata item. For a loaded query that would leave the connection (`Location=Name` in its connection string, the connection name and its description) pointing at the old name, which Excel would report as broken. Updating those four values is what Excel does itself; I did not do it because I cannot check it against Excel. See the open points.
+- A change of case only is a rename. Two names that differ only by case are the same name for clash checks.
+- A rename in a ChangeSet is keyed by the old name; a replace for the same query is keyed by the old name as well.
+Counts after this task: lint 0 findings; unit 1230 tests, 1225 pass, 5 skipped.
+
 ## Open points for the user
 
 1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.
 2. F2-09 says "resolve and execute". I build only the execute side in `align.js`. The resolve side (choosing a version by hash, `skipped` for files with no such query) is in Scope's files.
 3. Added queries have no connection. Excel writes a `connection` element for every query it makes, including connection-only ones, and lists them in Workbook Connections. Without one, `inject.refreshOnLoad` cannot apply to an added query, and I do not know whether Excel creates the connection itself on open. The plan says never create a load target and does not mention a connection. Options: leave it (current), or write the connection element too (needs `xl/connections.xml` to exist, or a new part, relationship and content type). The real-Excel pack result for F2-03 would settle it.
-4. Remove refuses every query that has a connection, which is every query Excel made, including connection-only ones. Only queries added by Quoin can be removed. Options: keep it (current), or also remove the connection element from `xl/connections.xml` for a connection-only query. A query that loads to a table or the data model would still be refused.
+4. Remove and rename refuse every query that has a connection, which is every query Excel made, including connection-only ones. Only queries added by Quoin can be removed or renamed. Options for remove: keep it (current), or also remove the connection element from `xl/connections.xml` for a connection-only query. Options for rename: keep it (current), or also update the connection's name, description, `Location=` and `command` the way Excel does. A query that loads to a table or the data model would still be refused for remove. I would want the real-Excel pack to confirm either change before it ships.

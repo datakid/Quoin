@@ -1,6 +1,6 @@
 import { normalizeQueryText, toViewText } from '../../core/pq/section.js';
 import { emptyChangeSet } from '../../core/save.js';
-import { queryNameProblem, queryRemovalProblem } from '../../core/pq/members.js';
+import { queryNameProblem, queryRemovalProblem, queryRenameProblem } from '../../core/pq/members.js';
 import { sha256Text } from '../index/hash.js';
 import { REPORT_COLUMNS } from './collect.js';
 
@@ -30,6 +30,22 @@ export function reportRow(meta, action, recipe, values) {
 
 const skipped = (code) => ({ verdict: 'skipped', reason_code: code, old_hash: '', new_hash: '', change: null });
 const refused = (code, oldHash = '', newHash = '') => ({ verdict: 'refused', reason_code: code, old_hash: oldHash, new_hash: newHash, change: null });
+
+async function renameQuery(wb, action, recipe, changeSet) {
+  const name = action.target.name;
+  const to = recipe.inject.newName;
+  const query = wb.queries.find((x) => x.name === name);
+  if (!query) return skipped('skip.notApplicable');
+  const hash = await sha256Text(normalizeQueryText(query.original));
+  if (name === to) return { verdict: 'unchanged', reason_code: '', old_hash: hash, new_hash: hash, change: null };
+  if (queryNameProblem(to)) return refused('refused.name', hash, hash);
+  const taken = wb.mashup.split.members.find((m) => m.name !== name && m.name.toLowerCase() === to.toLowerCase());
+  if (taken) return refused('refused.exists', hash, hash);
+  const problem = queryRenameProblem(wb, name);
+  if (problem) return { ...refused(problem.code, hash, hash), reason: problem.detail };
+  changeSet.queries.rename.set(name, to);
+  return { verdict: 'changed', reason_code: '', old_hash: hash, new_hash: hash, change: { op: 'rename', target: { type: 'query', name }, newName: to, oldHash: hash, newHash: hash } };
+}
 
 async function removeQuery(wb, action, changeSet) {
   const name = action.target.name;
@@ -78,6 +94,7 @@ export async function planChanges(wb, filePlan, recipe) {
     if (action.op === 'replace' && action.target.type === 'query') outcomes.push(await replaceQuery(wb, action, recipe, changeSet));
     else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));
     else if (action.op === 'remove' && action.target.type === 'query') outcomes.push(await removeQuery(wb, action, changeSet));
+    else if (action.op === 'rename' && action.target.type === 'query') outcomes.push(await renameQuery(wb, action, recipe, changeSet));
     else throw new Error(`${action.op} ${action.target.type} is not supported yet`);
   }
   return { changeSet, outcomes };

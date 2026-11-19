@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { applyChangeSet, emptyChangeSet, selfCheck } from '../../src/core/save.js';
 import { buildDataMashup } from '../../src/core/pq/datamashup.js';
+import { removeMetadataItems } from '../../src/core/pq/members.js';
 import { base64Encode } from '../../src/core/bytes.js';
 import { applyEdits, parseXml, textContentEdit } from '../../src/core/xml.js';
 import { checkSection } from '../../src/core/m/engine.js';
@@ -188,5 +189,134 @@ test('F2-03: a workbook whose metadata already does not match its section cannot
   assert.ok(broken.warnings.some((w) => w.code === 'pq.countMismatch'));
   const cs = emptyChangeSet();
   cs.queries.add.set('Another', NEW_M);
+  await assert.rejects(() => applyChangeSet(broken, cs, { now: NOW }), (e) => e.code === 'pq.format');
+});
+
+async function reopenWith(adds) {
+  const wb = await openSimple();
+  const { back } = await addTo(wb, adds);
+  return { first: wb, wb: back };
+}
+
+async function removeFrom(wb, names, extra = {}) {
+  const cs = emptyChangeSet();
+  for (const name of names) cs.queries.remove.add(name);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection, ...extra });
+  return { res, back: await openWorkbook(res.bytes, 'out.xlsx') };
+}
+
+const queryNames = (wb) => wb.queries.map((q) => q.name);
+
+test('F2-04: removing the only added query brings back the original section and metadata exactly', async () => {
+  const { first, wb } = await reopenWith([['Extra', NEW_M]]);
+  const { res, back } = await removeFrom(wb, ['Extra']);
+  assert.equal(res.queriesChanged, 1);
+  assert.deepEqual(queryNames(back), ['StudentResults']);
+  assert.equal(back.mashup.section.text, first.mashup.section.text);
+  assert.equal(back.mashup.model.metadata.xml, first.mashup.model.metadata.xml);
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-04: removing a middle query leaves its neighbours and their metadata', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', 'let\n    x = 2\nin\n    x'], ['C', NEW_M]]);
+  const { back } = await removeFrom(wb, ['B']);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'A', 'C']);
+  assert.equal(back.queries[1].original, NEW_M);
+  assert.equal(back.queries[2].original, NEW_M);
+  assert.equal(back.queries[0].original, wb.queries[0].original);
+  assert.ok(!back.mashup.section.text.includes('shared B'));
+  assert.ok(!back.mashup.model.metadata.xml.includes('Section1/B<'));
+  assert.ok(back.mashup.model.metadata.xml.includes('Section1/A<'));
+  assert.ok(back.mashup.model.metadata.xml.includes('Section1/C<'));
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-04: removing the first and the last of several gives the same text as never adding them', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', NEW_M], ['C', NEW_M]]);
+  const { back } = await removeFrom(wb, ['A', 'C']);
+  const only = await reopenWith([['B', NEW_M]]);
+  assert.equal(back.mashup.section.text, only.wb.mashup.section.text);
+  assert.equal(back.mashup.model.metadata.xml.replace(/QueryID" Value="s[^"]+/g, ''), only.wb.mashup.model.metadata.xml.replace(/QueryID" Value="s[^"]+/g, ''));
+});
+
+test('F2-04: removing two neighbours at the end and then everything added', async () => {
+  const { first, wb } = await reopenWith([['A', NEW_M], ['B', NEW_M], ['C', NEW_M]]);
+  const { back } = await removeFrom(wb, ['B', 'C']);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'A']);
+  const gone = await removeFrom(wb, ['A', 'B', 'C']);
+  assert.equal(gone.back.mashup.section.text, first.mashup.section.text);
+});
+
+test('F2-04: the metadata remover takes the query item and every step item and nothing else', async () => {
+  const wb = await openWorkbook(fixture('pq_vba_complex.xlsm'), 'pq_vba_complex.xlsm');
+  const xml = wb.mashup.model.metadata.xml;
+  const paths = (x) => [...x.matchAll(/<ItemPath>([^<]*)<\/ItemPath>/g)].map((m) => m[1]);
+  const after = paths(removeMetadataItems(xml, new Set(['RawInput'])));
+  assert.deepEqual(paths(xml).filter((p) => !after.includes(p)), ['Section1/RawInput', 'Section1/RawInput/Source', 'Section1/RawInput/Converted%20to%20Table', 'Section1/RawInput/Renamed%20Columns']);
+  assert.equal(removeMetadataItems(xml, new Set(['Nothing'])), xml);
+});
+
+test('F2-04: a query that loads to a table or has a connection cannot be removed', async () => {
+  for (const [wb, name] of [[await openSimple(), 'StudentResults'], [await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm'), 'fGetNamedRange'], [await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm'), 'FinalTable']]) {
+    const cs = emptyChangeSet();
+    cs.queries.remove.add(name);
+    await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError, name);
+  }
+});
+
+test('F2-04: a query that other queries use cannot be removed, and the user can be named', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', 'A + 1']]);
+  const cs = emptyChangeSet();
+  cs.queries.remove.add('A');
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.referenced/.test(e.message) && /B/.test(e.message));
+  const both = await removeFrom(wb, ['B']);
+  assert.deepEqual(queryNames(both.back), ['StudentResults', 'A']);
+});
+
+test('F2-04: removing a name the file does not have fails with pq.unknown, and remove with replace on one name is refused', async () => {
+  const { wb } = await reopenWith([['A', NEW_M]]);
+  const unknown = emptyChangeSet();
+  unknown.queries.remove.add('Nope');
+  await assert.rejects(() => applyChangeSet(wb, unknown, { now: NOW }), (e) => e.code === 'pq.unknown');
+  const clash = emptyChangeSet();
+  clash.queries.remove.add('A');
+  clash.queries.replace.set('A', 'let\n    x = 3\nin\n    x');
+  await assert.rejects(() => applyChangeSet(wb, clash, { now: NOW }), TypeError);
+});
+
+test('F2-04: a remove together with an add and a replace in one ChangeSet', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['B', NEW_M]]);
+  const cs = emptyChangeSet();
+  cs.queries.remove.add('A');
+  cs.queries.add.set('Z', NEW_M);
+  cs.queries.replace.set('B', 'let\n    x = 9\nin\n    x');
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection });
+  const back = await openWorkbook(res.bytes, 'out.xlsx');
+  assert.equal(res.queriesChanged, 3);
+  assert.deepEqual(queryNames(back), ['StudentResults', 'B', 'Z']);
+  assert.equal(back.queries[1].original, 'let\n    x = 9\nin\n    x');
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-04: the same now gives the same bytes for a remove', async () => {
+  const { wb } = await reopenWith([['A', NEW_M]]);
+  const a = await removeFrom(wb, ['A']);
+  const b = await removeFrom(wb, ['A']);
+  assert.equal(sha(a.res.bytes), sha(b.res.bytes));
+});
+
+test('F2-04: a query that reads #shared can reach every query, so nothing can be removed while it is there', async () => {
+  const { wb } = await reopenWith([['A', NEW_M], ['Reader', '#shared']]);
+  const cs = emptyChangeSet();
+  cs.queries.remove.add('A');
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.referenced: Reader/.test(e.message));
+});
+
+test('F2-04: a workbook whose metadata does not match its section cannot take a remove', async () => {
+  const wb = await openSimple();
+  const broken = await openWorkbook(await mismatchedOutput(wb), 'bad.xlsx');
+  assert.ok(broken.queries.some((q) => q.name === 'Extra'));
+  const cs = emptyChangeSet();
+  cs.queries.remove.add('Extra');
   await assert.rejects(() => applyChangeSet(broken, cs, { now: NOW }), (e) => e.code === 'pq.format');
 });

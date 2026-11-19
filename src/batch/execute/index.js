@@ -13,7 +13,7 @@ export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '' 
   const rowsFor = (settle) =>
     filePlan.actions.map((action, i) => {
       const o = outcomes[i];
-      return reportRow(file, action, recipe, { run_id: runId, old_hash: o.old_hash, new_hash: o.new_hash, ...settle(o), duration_ms: Math.round(performance.now() - started) });
+      return reportRow(file, action, recipe, { run_id: runId, old_hash: o.old_hash, new_hash: o.new_hash, reason: o.reason || '', ...settle(o), duration_ms: Math.round(performance.now() - started) });
     });
   const changes = outcomes.filter((o) => o.change).map((o) => o.change);
   const none = { fileId: filePlan.fileId, bytes: null, sha256: null, changes: [], warnings };

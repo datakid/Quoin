@@ -2,7 +2,8 @@ import { QuoinError } from '../errors.js';
 import { base64Encode, concat, le32, u32, utf8Encode, decodeTextBytes, encodeTextBytes } from '../bytes.js';
 import { crc32 } from '../crc32.js';
 import { KEYWORDS, lex } from '../m/lexer.js';
-import { applyEdits, attributeEdit, textContentEdit, escapeText, parseXml } from '../xml.js';
+import { applyEdits, attributeEdit, removeElementEdit, textContentEdit, escapeText, parseXml } from '../xml.js';
+import { indexSection } from '../wb/deps.js';
 import { writeZip, rawFromEntry } from '../zip-write.js';
 import { SECTION_PART } from './datamashup.js';
 import { dominantEol, fromViewText, memberEol } from './section.js';
@@ -114,6 +115,80 @@ function checkAdds(mashup, adds) {
   }
 }
 
+export function loadTarget(query) {
+  if (query.load.kind === 'table') return `${query.load.sheet}!${query.load.tableName}`;
+  if (query.load.kind === 'model') return 'data model';
+  return query.connection ? `connection ${query.connection.name}` : null;
+}
+
+export function queryReferencers(wb, name) {
+  if (!wb.mashup || wb.mashup.error) return [];
+  const index = indexSection(wb.mashup.section.text);
+  const names = new Set(index.usedBy.get(name) || []);
+  for (const dynamic of index.dynamic) names.add(dynamic);
+  names.delete(name);
+  return [...names].sort();
+}
+
+export function queryRemovalProblem(wb, name) {
+  const query = wb.queries.find((x) => x.name === name);
+  if (!query) return null;
+  const target = loadTarget(query);
+  if (target) return { code: 'refused.loaded', detail: target };
+  const users = queryReferencers(wb, name);
+  if (users.length) return { code: 'refused.referenced', detail: users.join(', ') };
+  return null;
+}
+
+function checkRemovals(wb, queries) {
+  for (const name of queries.remove) {
+    if (!wb.queries.some((x) => x.name === name)) throw new QuoinError('pq.unknown', name);
+    if (queries.replace.has(name)) throw new TypeError(`${name} cannot be both removed and replaced`);
+    const problem = queryRemovalProblem(wb, name);
+    if (problem) throw new TypeError(`${problem.code}: ${problem.detail}`);
+  }
+}
+
+export function removeMetadataItems(xml, names) {
+  const doc = parseXml(xml, 'Metadata');
+  const edits = [];
+  for (const item of doc.root.findAll('Item')) {
+    const location = item.child('ItemLocation');
+    const path = location && location.child('ItemPath');
+    const type = location && location.child('ItemType');
+    if (!path || !type || type.text() !== 'Formula') continue;
+    const segments = path.text().split('/');
+    if (segments.length < 2) continue;
+    let name;
+    try {
+      name = decodeURIComponent(segments[1]);
+    } catch {
+      name = segments[1];
+    }
+    if (names.has(name)) edits.push(removeElementEdit(item));
+  }
+  return applyEdits(xml, edits);
+}
+
+function removalRanges(split, remove) {
+  const members = split.members;
+  const ranges = [];
+  let i = 0;
+  while (i < members.length) {
+    if (!remove.has(members[i].name)) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < members.length && remove.has(members[j + 1].name)) j++;
+    const next = members[j + 1];
+    if (next) ranges.push({ start: members[i].start, end: next.start });
+    else ranges.push({ start: i > 0 ? members[i - 1].end : split.header ? split.header.end : 0, end: members[j].end });
+    i = j + 1;
+  }
+  return ranges;
+}
+
 function appendMember(text, name, view) {
   const eol = dominantEol(text) || '\r\n';
   let expr = fromViewText(view, eol);
@@ -122,8 +197,8 @@ function appendMember(text, name, view) {
   return `${text.slice(0, text.length - trailing.length)}${eol}${eol}shared ${memberName(name)} = ${expr};${trailing}`;
 }
 
-function rewriteSection(text, members, queries) {
-  const pieces = [];
+function rewriteSection(text, split, members, queries) {
+  const pieces = removalRanges(split, queries.remove).map((r) => ({ start: r.start, end: r.end, replacement: '' }));
   for (const m of members) {
     if (!queries.replace.has(m.name)) continue;
     const eol = memberEol(text, m);
@@ -139,21 +214,24 @@ function rewriteSection(text, members, queries) {
 }
 
 export async function writeQueryChanges(wb, pkg, queries, { now, refreshOnLoad = true, refreshNames = new Set(), checkSection = null } = {}) {
-  if (queries.rename.size || queries.remove.size) throw new TypeError('query rename and remove are not applied yet');
-  const mashup = assertWritable(wb, queries.add.size > 0);
+  if (queries.rename.size) throw new TypeError('query rename is not applied yet');
+  const mashup = assertWritable(wb, queries.add.size > 0 || queries.remove.size > 0);
   checkAdds(mashup, queries.add);
+  checkRemovals(wb, queries);
   const edits = queries.replace;
   const touched = [];
   const members = mashup.split.members.filter((m) => edits.has(m.name));
-  const sectionText = rewriteSection(mashup.section.text, members, queries);
+  const sectionText = rewriteSection(mashup.section.text, mashup.split, members, queries);
   if (checkSection) {
     const problem = checkSection(sectionText);
     if (problem) throw new QuoinError('m.parse', `${problem.message} Line ${problem.line}, column ${problem.col}.`, mashup.part);
   }
   let metadata = mashup.model.raw.metadata;
-  if (queries.add.size) {
+  if (queries.add.size || queries.remove.size) {
     const sectionName = mashup.split.header ? mashup.split.header.name : 'Section1';
-    metadata = metadataBytes(mashup.model, insertItems(mashup.model.metadata.xml, [...queries.add].map(([name, text]) => addedItem(sectionName, name, text))));
+    const kept = queries.remove.size ? removeMetadataItems(mashup.model.metadata.xml, queries.remove) : mashup.model.metadata.xml;
+    const xml = queries.add.size ? insertItems(kept, [...queries.add].map(([name, text]) => addedItem(sectionName, name, text))) : kept;
+    metadata = metadataBytes(mashup.model, xml);
   }
   const bytes = await mashupBytes(mashup.model, { text: sectionText, bom: mashup.section.bom }, metadata, now);
   const encoded = wrapBase64(base64Encode(bytes), mashup.lineLength);

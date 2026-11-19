@@ -230,3 +230,60 @@ test('F2-03: an add and a replace in one file give one write and one row each', 
   assert.deepEqual(res.rows.map((r) => [r.action, r.verdict]), [['add', 'changed'], ['replace', 'changed']]);
   assert.equal(res.changes.length, 2);
 });
+
+async function withAdded(...names) {
+  const wb = await open();
+  const plan = filePlanFor(names, 'add');
+  const res = await executeFile(wb, plan, { now: NOW, recipe: recipeFor({ op: 'add', name: names[0] }) });
+  return openWorkbook(res.bytes, 'x.xlsx');
+}
+
+const removeRecipe = (name) => recipeFor({ op: 'remove', name });
+
+test('F2-04: a remove action takes out a query that nothing uses and reports its old hash', async () => {
+  const wb = await withAdded('Extra');
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'remove'), { now: NOW, recipe: removeRecipe('Extra') });
+  const back = await openWorkbook(res.bytes, 'x.xlsx');
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults']);
+  assert.deepEqual(res.changes, [{ op: 'remove', target: { type: 'query', name: 'Extra' }, oldHash: await sha256Text(NEW_M), newHash: null }]);
+  const row = res.rows[0];
+  assert.equal(row.action, 'remove');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, await sha256Text(NEW_M));
+  assert.equal(row.new_hash, '');
+  assert.equal(row.verified, true);
+});
+
+test('F2-04: a query that loads to a table is refused with its target and nothing is written', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['StudentResults'], 'remove'), { now: NOW, recipe: removeRecipe('StudentResults') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'refused.loaded');
+  assert.equal(res.rows[0].reason, `${wb.queries[0].load.sheet}!${wb.queries[0].load.tableName}`);
+  assert.equal(res.rows[0].old_hash, await sha256Text(normalizeQueryText(wb.queries[0].original)));
+});
+
+test('F2-04: a query that another query uses is refused and names the users', async () => {
+  const wb = await open();
+  const plan = filePlanFor(['A', 'B'], 'add');
+  const base = await executeFile(wb, { ...plan, actions: [plan.actions[0]] }, { now: NOW, recipe: recipeFor({ op: 'add', name: 'A' }) });
+  const withA = await openWorkbook(base.bytes, 'x.xlsx');
+  const second = await executeFile(withA, { ...plan, actions: [plan.actions[1]] }, { now: NOW, recipe: recipeFor({ op: 'add', name: 'B', text: 'A + 1' }) });
+  const both = await openWorkbook(second.bytes, 'x.xlsx');
+  const res = await executeFile(both, filePlanFor(['A'], 'remove'), { now: NOW, recipe: removeRecipe('A') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'refused.referenced');
+  assert.equal(res.rows[0].reason, 'B');
+});
+
+test('F2-04: a remove of a query the file does not have is skipped', async () => {
+  for (const name of ['pq_simple.xlsx', 'plain_table.xlsx']) {
+    const wb = await open(name);
+    const res = await executeFile(wb, filePlanFor(['Nope'], 'remove'), { now: NOW, recipe: removeRecipe('Nope') });
+    assert.ok(res.bytes === null);
+    assert.equal(res.rows[0].verdict, 'skipped');
+    assert.equal(res.rows[0].reason_code, 'skip.notApplicable');
+  }
+});

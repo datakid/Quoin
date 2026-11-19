@@ -59,6 +59,10 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
 | `refused.exists` | an add of a name the file already has (compared without regard to case, and against every section member) | "Not added. The file already has a query named {name}." |
 | `refused.name` | an add whose name is empty, has a space at either end or has a control character | "Not added. This name cannot be used." |
+| `refused.loaded` | a remove of a query that has a connection or loads to a table or the data model | "Not removed. This query loads to {target}." |
+| `refused.referenced` | a remove of a query that another query uses, or while a query reads `#shared` | "Not removed. Used by {names}." |
+
+For the two `refused.*` codes above, and for later ones that take a parameter, the report row's `reason` column holds only the parameter: the target (`Sheet1!Table1`, `data model`, or `connection Query - Name`) or the user names joined with a comma and a space. The sentence is built from the code in `strings.js`.
 
 `pq.none` and `pq.format` are used as `reason_code` for refused adds (no query data, and query data Quoin does not write). Both are already in `ERRORS`.
 
@@ -129,8 +133,24 @@ Decisions inside gaps (log, not yet confirmed by the user). The metadata item co
 Real-Excel pack item (for F2-15): add a query to a workbook made by Excel, open it in Excel, and check that it appears in Queries and Connections and in the Power Query editor, that the text is unchanged, and that the workbook saves without a repair message. Repeat with a name that has a space and a name with parentheses.
 Counts after this task: lint 0 findings; unit 1195 tests, 1190 pass, 5 skipped.
 
+### F2-04 Query remove
+Layer: core/pq, with the execute wiring for `remove` actions
+Files: src/core/pq/members.js, src/batch/execute/changes.js, src/batch/execute/index.js, tests/unit/batch-pq-members.test.js, tests/unit/batch-execute.test.js
+Do: `writeQueryChanges` removes the member from the section and every metadata item of the query (the query item and its per-step items). A query that has a connection or loads to a table or the data model is refused (`refused.loaded`), and so is one that another query uses (`refused.referenced`). Core throws `TypeError` for a refusal as a guard; `executeFile` refuses first and writes a row.
+Test that fails without it: 11 new tests in `tests/unit/batch-pq-members.test.js` (the file failed to load before the change, for the missing `removeMetadataItems` export) and 4 in `tests/unit/batch-execute.test.js`.
+Fails without, by mutation (each reverted): last-member range wrong, 3 fail; step items kept, 1; loaded check off, 1; referenced check off, 2; `#shared` not counted, 1; unknown name check off, 1; remove-with-replace check off, 1; metadata left alone, 7; mismatch guard off for remove, 1. In `changes.js`: refusal off, 2; reason dropped, 2; missing query not skipped, 1; old hash dropped, 1.
+Result: Done
+Changed expectations: none
+Deviations: none beyond the one logged at F2-03 (execute wiring in the same commit).
+Decisions inside gaps (log, not yet confirmed by the user):
+- A query that another query uses is refused (`refused.referenced`). The plan only names the connection or load target case. Without this a remove would leave a query that fails on refresh. A query that reads `#shared` counts as using every query.
+- The rule "has a connection" is read literally: `connection-only` queries that Excel made also have a connection element, so they are refused. Only a query added by F2-03 (no connection) can be removed in practice. See the open points.
+- Section text removed: for a run of removed members followed by a kept one, from the first removed member's start to the kept member's start; for a run at the end, from the end of the member before it (or the section header) to the last removed member's end. A comment between a removed member and the next one goes with it.
+Counts after this task: lint 0 findings; unit 1211 tests, 1206 pass, 5 skipped.
+
 ## Open points for the user
 
-1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I will take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.
-3. Added queries have no connection. Excel lists connection-only queries it makes in Workbook Connections and writes a `connection` element for each. Without one, `inject.refreshOnLoad` cannot apply to an added query, and I do not know whether Excel creates the connection itself on open. The plan says never create a load target and does not mention a connection. Options: leave it (current), or write the connection element too (needs `xl/connections.xml` to exist, or a new part, relationship and content type). The real-Excel pack result for F2-03 would settle it.
-2. F2-09 says "resolve and execute". I will build only the execute side in `align.js`. The resolve side (choosing a version by hash, `skipped` for files with no such query) is in Scope's files.
+1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.
+2. F2-09 says "resolve and execute". I build only the execute side in `align.js`. The resolve side (choosing a version by hash, `skipped` for files with no such query) is in Scope's files.
+3. Added queries have no connection. Excel writes a `connection` element for every query it makes, including connection-only ones, and lists them in Workbook Connections. Without one, `inject.refreshOnLoad` cannot apply to an added query, and I do not know whether Excel creates the connection itself on open. The plan says never create a load target and does not mention a connection. Options: leave it (current), or write the connection element too (needs `xl/connections.xml` to exist, or a new part, relationship and content type). The real-Excel pack result for F2-03 would settle it.
+4. Remove refuses every query that has a connection, which is every query Excel made, including connection-only ones. Only queries added by Quoin can be removed. Options: keep it (current), or also remove the connection element from `xl/connections.xml` for a connection-only query. A query that loads to a table or the data model would still be refused.

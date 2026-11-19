@@ -274,7 +274,7 @@ test('F2-04: a query that another query uses is refused and names the users', as
   const res = await executeFile(both, filePlanFor(['A'], 'remove'), { now: NOW, recipe: removeRecipe('A') });
   assert.ok(res.bytes === null);
   assert.equal(res.rows[0].verdict, 'refused');
-  assert.equal(res.rows[0].reason_code, 'refused.referenced');
+  assert.equal(res.rows[0].reason_code, 'refused.usedBy');
   assert.equal(res.rows[0].reason, 'B');
 });
 

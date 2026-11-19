@@ -268,7 +268,7 @@ test('F2-04: a query that other queries use cannot be removed, and the user can 
   const { wb } = await reopenWith([['A', NEW_M], ['B', 'A + 1']]);
   const cs = emptyChangeSet();
   cs.queries.remove.add('A');
-  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.referenced/.test(e.message) && /B/.test(e.message));
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.usedBy/.test(e.message) && /B/.test(e.message));
   const both = await removeFrom(wb, ['B']);
   assert.deepEqual(queryNames(both.back), ['StudentResults', 'A']);
 });
@@ -309,7 +309,7 @@ test('F2-04: a query that reads #shared can reach every query, so nothing can be
   const { wb } = await reopenWith([['A', NEW_M], ['Reader', '#shared']]);
   const cs = emptyChangeSet();
   cs.queries.remove.add('A');
-  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.referenced: Reader/.test(e.message));
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.usedBy: Reader/.test(e.message));
 });
 
 test('F2-04: a workbook whose metadata does not match its section cannot take a remove', async () => {

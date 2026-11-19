@@ -136,7 +136,7 @@ export function queryRemovalProblem(wb, name) {
   const target = loadTarget(query);
   if (target) return { code: 'refused.loaded', detail: target };
   const users = queryReferencers(wb, name);
-  if (users.length) return { code: 'refused.referenced', detail: users.join(', ') };
+  if (users.length) return { code: 'refused.usedBy', detail: users.join(', ') };
   return null;
 }
 

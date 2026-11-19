@@ -60,7 +60,7 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 | `refused.exists` | an add of a name the file already has (compared without regard to case, and against every section member) | "Not added. The file already has a query named {name}." |
 | `refused.name` | an add whose name is empty, has a space at either end or has a control character | "Not added. This name cannot be used." |
 | `refused.loaded` | a remove of a query that has a connection or loads to a table or the data model | "Not removed. This query loads to {target}." |
-| `refused.referenced` | a remove of a query that another query uses, or while a query reads `#shared` | "Not removed. Used by {names}." |
+| `refused.usedBy` | a remove of a query that another query uses, or while a query reads `#shared` | "Not removed. Used by {names}." |
 
 For the two `refused.*` codes above, and for later ones that take a parameter, the report row's `reason` column holds only the parameter: the target (`Sheet1!Table1`, `data model`, or `connection Query - Name`) or the user names joined with a comma and a space. The sentence is built from the code in `strings.js`.
 
@@ -136,14 +136,14 @@ Counts after this task: lint 0 findings; unit 1195 tests, 1190 pass, 5 skipped.
 ### F2-04 Query remove
 Layer: core/pq, with the execute wiring for `remove` actions
 Files: src/core/pq/members.js, src/batch/execute/changes.js, src/batch/execute/index.js, tests/unit/batch-pq-members.test.js, tests/unit/batch-execute.test.js
-Do: `writeQueryChanges` removes the member from the section and every metadata item of the query (the query item and its per-step items). A query that has a connection or loads to a table or the data model is refused (`refused.loaded`), and so is one that another query uses (`refused.referenced`). Core throws `TypeError` for a refusal as a guard; `executeFile` refuses first and writes a row.
+Do: `writeQueryChanges` removes the member from the section and every metadata item of the query (the query item and its per-step items). A query that has a connection or loads to a table or the data model is refused (`refused.loaded`), and so is one that another query uses (`refused.usedBy`). Core throws `TypeError` for a refusal as a guard; `executeFile` refuses first and writes a row.
 Test that fails without it: 11 new tests in `tests/unit/batch-pq-members.test.js` (the file failed to load before the change, for the missing `removeMetadataItems` export) and 4 in `tests/unit/batch-execute.test.js`.
 Fails without, by mutation (each reverted): last-member range wrong, 3 fail; step items kept, 1; loaded check off, 1; referenced check off, 2; `#shared` not counted, 1; unknown name check off, 1; remove-with-replace check off, 1; metadata left alone, 7; mismatch guard off for remove, 1. In `changes.js`: refusal off, 2; reason dropped, 2; missing query not skipped, 1; old hash dropped, 1.
 Result: Done
 Changed expectations: none
 Deviations: none beyond the one logged at F2-03 (execute wiring in the same commit).
 Decisions inside gaps (log, not yet confirmed by the user):
-- A query that another query uses is refused (`refused.referenced`). The plan only names the connection or load target case. Without this a remove would leave a query that fails on refresh. A query that reads `#shared` counts as using every query.
+- A query that another query uses is refused (`refused.usedBy`; `refused.referenced` is kept for rename, where Appendix E gives it). The plan only names the connection or load target case. Without this a remove would leave a query that fails on refresh. A query that reads `#shared` counts as using every query.
 - The rule "has a connection" is read literally: `connection-only` queries that Excel made also have a connection element, so they are refused. Only a query added by F2-03 (no connection) can be removed in practice. See the open points.
 - Section text removed: for a run of removed members followed by a kept one, from the first removed member's start to the kept member's start; for a run at the end, from the end of the member before it (or the section header) to the last removed member's end. A comment between a removed member and the next one goes with it.
 Counts after this task: lint 0 findings; unit 1211 tests, 1206 pass, 5 skipped.

@@ -29,3 +29,8 @@ export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '',
   const sha256 = await sha256Bytes(written.bytes);
   return { fileId: filePlan.fileId, bytes: written.bytes, sha256, changes, warnings, rows: rowsFor((o) => ({ verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'changed' || o.verdict === 'unchanged', signature_removed: o.verdict === 'changed' && written.signatureRemoved })) };
 }
+
+export function failedResult(filePlan, code, { recipe, meta, runId = '' }) {
+  const rows = filePlan.actions.map((action) => reportRow(meta, action, recipe, { run_id: runId, verdict: 'failed', reason_code: code, verified: false }));
+  return { fileId: filePlan.fileId, bytes: null, sha256: null, changes: [], warnings: [], rows };
+}

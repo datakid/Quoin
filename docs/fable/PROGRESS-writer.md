@@ -42,9 +42,10 @@ ChangeSet = {
 - `now` is the Plan's ISO UTC string. `recipe` is `plan.recipe`. `meta` is `{ name, relPath }` for the report row and defaults to `wb.fileName`. `runId` fills the `run_id` column.
 - `recipe` is an addition to the interface in `PARALLEL.md`. `FilePlan` and `Action` carry no query text, find string or hash, so the recipe has to come with the call.
 - `acknowledgeSignature` (default false) is a further addition: the caller passes true once the user has confirmed, for the whole set, that signed projects lose their signature (Q3). Without it a module replace in a signed project is refused as `vba.signature`, the same in Preview and in Run.
+- `failedResult(filePlan, code, { recipe, meta, runId })` is exported from the same file. It returns an `ApplyResult` with a `failed` row for every action and no bytes. The pool is the one that stops a job at its time limit, so it should call this with `m.timeout`; `meta` is required there because there is no workbook.
 - Any other option, including `dryRun`, is never read. A test pins that.
 - `bytes` and `sha256` are `null` when nothing is written: every action unchanged or skipped, or the file failed.
-- `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`, with `newName` added for a rename. `oldHash` is `null` for an add and `newHash` is `null` for a remove. For a rename both hashes are the hash of the unchanged text. The card did not give the shape.
+- `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`, with `newName` added for a rename, and `matchCount` and `matches` added for `replaceText`. `matches` is a list of `{ line, col, before, after }` (one-based, in the old text, each side cut to 200 characters), capped at 100 entries; `matchCount` is the full count. Preview can draw its match rows from it. `oldHash` is `null` for an add and `newHash` is `null` for a remove. For a rename both hashes are the hash of the unchanged text. The card did not give the shape.
 - One row per action, in action order, with the Appendix B columns. `output` is left empty; the output name is assigned where outputs are named (Appendix C). `reason` is left empty; the text comes from `reason_code`.
 - Verdicts from here: `changed` (verified), `unchanged` (nothing written), `skipped` (`skip.notApplicable`), `failed` (a Quoin error such as `m.parse`), `not-released` (`write.selfcheck`). When a write fails, every changed action gets the failure; skipped and unchanged actions keep theirs.
 - An error that is not a Quoin error is thrown, as `executeFilePlan` in `collect.js` does, so the worker turns it into a failed row.
@@ -182,6 +183,24 @@ Decisions inside gaps (log, not yet confirmed by the user):
 - A signed project without acknowledgement is refused at plan time, not failed at write time, so Preview and Run agree.
 - A module that exists but could not be parsed (`model` is null) is refused as `vba.unreadable`; a module the file does not have is skipped.
 Counts after this task: lint 0 findings; unit 1239 tests, 1234 pass, 5 skipped.
+
+### F2-08 Replace in code
+Layer: batch/execute
+Files: src/batch/execute/replace.js (new), src/batch/execute/changes.js, src/batch/execute/index.js, tests/unit/batch-replace.test.js (new), tests/unit/redos-worker.mjs (new, used by that test)
+Do: `replaceInText` for plain and regex finds over a query's text or a module's visible text. `replaceText` actions go through the same staging as replace-query and replace-module, so the M parse check, `validateModuleText`, the writable check and the signature gate apply unchanged. The recipe's `in` list decides whether queries (`m`) or modules (`vba`) are searched. Each change lists its matches for Preview.
+Test that fails without it: `tests/unit/batch-replace.test.js` (22 tests; the file failed at import before the change, `Cannot find module` for `src/batch/execute/replace.js`). The pathological-regex test runs `executeFile` with `(a+)+$` against 45 letters and a `b` in a real worker thread: the job never returns, `terminate()` stops it within 3 seconds with no error, and a second worker then runs another file to a `changed` row. The Preview and browser tests the card asks for are in `src/ui` and `tests/e2e`, which are not in my file list; they are for trunk.
+Fails without, by mutation (each reverted): case flag ignored, 2 fail; case flag always on, 3; plain find not escaped, 1; empty matches replaced, 1; plain replacement expanded, 1; `$$`, `$&`, `` $` ``, `$'` and `$<name>` each, 1; two-digit groups, 1; group number beyond the count not literal, 1; match list not capped, 1; sides not cut, 1; column zero based, 3; line zero based, 3; no-match text lost, 3. In `changes.js`: `in` filter off, 1; op name wrong, 1; matches dropped, 1.
+Result: Done
+Changed expectations: none
+Deviations:
+- The time limit is not in this layer. A regex cannot be interrupted from inside the thread that runs it, so the limit and the stop are the pool's, as the plan has it. This task adds `failedResult` so the pool can write the `m.timeout` rows in the same shape as every other row, and the worker test shows the job can be stopped without side effects. Wiring `executeFile` into the worker and the pool is the integration task.
+Decisions inside gaps (log, not yet confirmed by the user):
+- Regex flags are `g`, plus `i` when the recipe does not ask for case to match. No `m`, `s` or `u`: the recipe check compiles the pattern with no flags and `^` and `$` therefore mean the start and end of the whole text.
+- A match with no characters is never replaced, so `x*` cannot insert text between every character.
+- For a regex the replacement follows the usual JavaScript patterns: `$$`, `$&`, `` $` ``, `$'`, `$1` to `$99` and `$<name>`. For a plain find the replacement is literal.
+- The text searched is the query's text as the editor shows it (breaks as `\n`, trimmed) and the module's visible text, never its hidden attribute lines.
+- A pattern that is not valid reaches `executeFile` only if the recipe check was skipped; it throws `SyntaxError`, which is not a Quoin error, so the worker reports the file as failed.
+Counts after this task: lint 0 findings; unit 1261 tests, 1256 pass, 5 skipped.
 
 ## Open points for the user
 

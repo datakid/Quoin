@@ -8,7 +8,7 @@ Started from `fable` at 56b3974. Tasks: F3-01, F3-03, F3-04, then F3-02 for the 
 
 ## Interface for trunk
 
-- `resolvePlan(recipe, indexes, {now})` is unchanged for callers. It now resolves `collect` and `transform`. `inject`, `replace` and `align` still throw `… recipes are not resolved yet`; `batch-resolve.test.js` still passes unedited.
+- `resolvePlan(recipe, indexes, {now})` is unchanged for callers. It now resolves `collect` and `transform`. `replace` and `align` still throw `… recipes are not resolved yet`; `batch-resolve.test.js` still passes unedited.
 - New export `inspectNeeds(recipe, indexes)` in `src/batch/resolve/scope.js` (re-exported from `resolve.js`): ids of ready files whose sheets still have `nonEmpty: null` while the recipe filters on non-empty sheets. Trunk sends `inspect` with `need: ['nonEmpty']` for those, replaces their indexes, then calls `resolvePlan`.
 - `src/batch/resolve/tokens.js` holds the one token substitution used by resolve (output names) and by `execute/units.js` (query text): `substituteTokens(text, file, unit)`, `unknownQueryTokens(text)`, `templateFor(text)` with `fileContext(file)` (the same substitution, compiled once for many units), `baseName`, `folderOf`. Output naming (F3-05 onward) should import it, not rewrite it.
 
@@ -111,13 +111,33 @@ Row errors (F3-03): `unit.parse`, `unit.error`, `unit.notTable`, `unit.binding`,
 
 Planning errors (`plan.errors`): `scope.headerOnSheets` ("The header row filter applies to tables only."), `scope.needsInspect` (the file has not been checked for empty sheets), `scope.pattern` (the name pattern is not valid). Existing: `recipe.token`, `skip.noMatchingUnit`.
 
+## Resolve side of the inject recipe (taken from the gap above)
+
+Layer: resolve
+Files: src/batch/resolve/resolve.js, tests/unit/batch-resolve-inject.test.js (new)
+Do: `resolvePlan` now resolves `inject` recipes, which closes the `inject` half of the gap. Each file gets one workbook unit and one action per target: `op` is the recipe's `add`, `replace`, `rename` or `remove`, and `target` is `{type: 'query' | 'module', name}`. A recipe with `match: 'name'` gets its action in every file, whether or not the file has the target, because Writer's `executeFile` reports a missing target as `skipped / skip.notApplicable`. `match: 'pattern'` expands the glob over the queries or modules the file has, in file order and without regard to case; a file where it matches nothing is skipped with `skip.notApplicable` and the pattern as detail, with no units. `replace` (find and replace in code) and `align` still throw.
+Test that fails without it: `batch-resolve-inject.test.js`, 13 tests. 12 fail with `inject recipes are not resolved yet`; with pattern expansion removed 3 fail; with the change 13 pass.
+End-to-end check, not committed: a plan resolved here run through Writer's `executeFile` (`fable-writer` at 8c0fd6a) on `pq_simple.xlsx`. `replace` by name and by pattern and `add` gave `changed`, verified, with bytes; `replace` of a missing query gave `skipped / skip.notApplicable` and no bytes.
+Result: Done
+Fails without: yes
+Changed expectations: none (`batch-resolve.test.js` uses `align` as its unresolved example, so it still passes)
+Deviations: none
+
+Decisions made inside gaps in the plan:
+
+- `add` never expands. A pattern on an `add` is the planning error `recipe.patternAdd`, and the action still carries the literal name.
+- `newName` for a rename, `text` and `refreshOnLoad` stay in the recipe. Actions carry no text, as Writer's `executeFile` already assumes.
+- Still open, for Writer and trunk to agree before I build it: the actions for `replace` (find and replace in code: one action per query or module, or one per match, with which target and what for files with no match) and `align` (where the text for a hash comes from).
+
+New strings for trunk: planning error `recipe.patternAdd`; skip reason `skip.notApplicable` for a file where a pattern matched nothing (Writer already uses the code for a missing target).
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds exactly `src/batch/execute/units.js`, `src/batch/resolve/scope.js` and `src/batch/resolve/tokens.js`.
 - Files this branch changes: `src/batch/resolve/{resolve,scope,tokens}.js`, `src/batch/execute/units.js`, `src/core/snapshot.js`, three new test files, this progress file. It touches no file outside the Scope list. The merge of `fable` at e86d5e4 was clean.
 - Nothing in `src/app`, `src/workers` or `collect.js` calls the new code yet. Wiring is yours: call `inspectNeeds` then `resolvePlan`; in the worker call `runFileUnits` with the file's `{name, relPath}`, the file plan and the recipe, and hand each `run.table` to the output writer there.
 - Decisions to confirm with the user, because they change what people see: `{unit.index}` is the ordinal among resolved units; a name resolves to the latest earlier output, so a constant output name accumulates (chain); a sheet named like a table is `unit.nameCollision`; `{file.folder}` keeps its trailing slash.
-- Still open: who writes resolution for `inject`, `replace` and `align` (see "Gap found in the split").
+- Still open: resolution for `replace` and `align` recipes (see "Gap found in the split"); `inject` is done.
 
 ## Known failures not caused by this branch
 

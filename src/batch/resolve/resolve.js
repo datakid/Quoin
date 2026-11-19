@@ -5,7 +5,7 @@ import { buildMatcher, matchPins, pinnedUnits, ruleUnits, unknownNonEmpty, works
 export { inspectNeeds } from './scope.js';
 
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-const RESOLVED = ['collect', 'transform'];
+const RESOLVED = ['collect', 'inject', 'transform'];
 const TARGET_TYPE = { workbook: 'sheet', sheet: 'sheet', table: 'range' };
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -23,6 +23,26 @@ function planCollectFile(index) {
     source: 'rule',
     units: [unit],
     actions: [...index.queries.map((q) => action('query', q.name)), ...index.modules.map((m) => action('module', m.name))],
+    skipped: null
+  };
+}
+
+function injectNames(index, inject, matcher) {
+  if (inject.op === 'add' || inject.match !== 'pattern') return [inject.name];
+  return (inject.target === 'module' ? index.modules : index.queries).filter((m) => matcher.test(m.name)).map((m) => m.name);
+}
+
+function planInjectFile(index, ctx) {
+  if (index.status === 'refused') return skippedFile(index);
+  const { inject } = ctx.recipe;
+  const names = injectNames(index, inject, ctx.matcher);
+  if (!names.length) return { fileId: index.id, source: 'rule', units: [], actions: [], skipped: { code: 'skip.notApplicable', detail: inject.name } };
+  const unit = workbookUnit(index);
+  return {
+    fileId: index.id,
+    source: 'rule',
+    units: [unit],
+    actions: names.map((name) => ({ unit, op: inject.op, target: { type: inject.target, name }, compute: null, output: null, replaces: null })),
     skipped: null
   };
 }
@@ -78,6 +98,7 @@ function summarise(files) {
 function recipeErrors(recipe) {
   const errors = [];
   if (recipe.output && typeof recipe.output.name === 'string') for (const token of unknownTokens(recipe.output.name)) errors.push({ code: 'recipe.token', detail: token });
+  if (recipe.recipe === 'inject' && recipe.inject.op === 'add' && recipe.inject.match === 'pattern') errors.push({ code: 'recipe.patternAdd', detail: recipe.inject.name });
   if (recipe.recipe === 'transform') {
     for (const token of unknownQueryTokens(recipe.query.m)) errors.push({ code: 'recipe.token', detail: token });
     if (recipe.scope.type === 'sheets' && recipe.scope.onlyWithHeader) errors.push({ code: 'scope.headerOnSheets', detail: 'onlyWithHeader' });
@@ -100,6 +121,10 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
     const template = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : null;
     const ctx = { recipe, scope: recipe.scope, matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
     files = ordered.map((ix) => planTransformFile(ix, ctx));
+  } else if (recipe.recipe === 'inject') {
+    const matcher = buildMatcher({ match: recipe.inject.match, pattern: recipe.inject.name });
+    if (matcher.error) errors.push(matcher.error);
+    files = ordered.map((ix) => planInjectFile(ix, { recipe, matcher }));
   } else files = ordered.map(planCollectFile);
   return { recipe: structuredClone(recipe), now, createdBy: 'resolve', summary: summarise(files), files, orphanPins: orphans, errors };
 }

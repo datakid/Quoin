@@ -358,3 +358,121 @@ test('F2-05: a change of case only is a rename in the output', async () => {
   const res = await executeFile(wb, filePlanFor(['Extra'], 'rename'), { now: NOW, recipe: renameRecipe('Extra', 'EXTRA') });
   assert.deepEqual((await openWorkbook(res.bytes, 'x.xlsx')).queries.map((q) => q.name), ['StudentResults', 'EXTRA']);
 });
+
+const openMixed = () => openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+const moduleOf = (wb, name) => wb.vba.project.modules.find((m) => m.name === name);
+
+function modulePlan(names, op = 'replace') {
+  const unit = { fileId: 'f0001', kind: 'workbook', name: 'mixed', index: 1 };
+  return { fileId: 'f0001', source: 'rule', units: [unit], actions: names.map((name) => ({ unit, op, target: { type: 'module', name }, compute: null, output: null, replaces: null })), skipped: null };
+}
+
+const moduleRecipe = (name, text) => recipeFor({ target: 'module', op: 'replace', name, text });
+
+test('F2-06: a replace action for a module writes the new text and reports both hashes', async () => {
+  const wb = await openMixed();
+  const before = moduleOf(wb, 'Module1').model.visible;
+  const text = `${before}\n' recipe edit`;
+  const res = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', text) });
+  const back = await openWorkbook(res.bytes, 'x.xlsm');
+  assert.equal(moduleOf(back, 'Module1').model.visible, text);
+  assert.equal(moduleOf(back, 'ThisWorkbook').model.visible, moduleOf(wb, 'ThisWorkbook').model.visible);
+  assert.deepEqual(res.changes, [{ op: 'replace', target: { type: 'module', name: 'Module1' }, oldHash: await sha256Text(before), newHash: await sha256Text(text) }]);
+  const row = res.rows[0];
+  assert.equal(row.action, 'replace');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, await sha256Text(before));
+  assert.equal(row.new_hash, await sha256Text(text));
+  assert.equal(row.verified, true);
+  assert.equal(row.signature_removed, false);
+});
+
+test('F2-06: module text with Windows or old Mac line breaks is stored with one break style', async () => {
+  const wb = await openMixed();
+  const text = "Option Explicit\r\nSub A()\r\nEnd Sub\rSub B()\nEnd Sub";
+  const res = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', text) });
+  assert.equal(moduleOf(await openWorkbook(res.bytes, 'x.xlsm'), 'Module1').model.visible, 'Option Explicit\nSub A()\nEnd Sub\nSub B()\nEnd Sub');
+});
+
+test('F2-06: the same text as the module is unchanged and writes nothing', async () => {
+  const wb = await openMixed();
+  const res = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', moduleOf(wb, 'Module1').model.visible) });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'unchanged');
+});
+
+test('F2-06: a module the file does not have, or a file with no macros, is skipped', async () => {
+  const wb = await openMixed();
+  const missing = await executeFile(wb, modulePlan(['Nope']), { now: NOW, recipe: moduleRecipe('Nope', 'x') });
+  assert.equal(missing.rows[0].verdict, 'skipped');
+  assert.equal(missing.rows[0].reason_code, 'skip.notApplicable');
+  const plain = await open();
+  const none = await executeFile(plain, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'x') });
+  assert.ok(none.bytes === null);
+  assert.equal(none.rows[0].verdict, 'skipped');
+});
+
+test('F2-06: text a macro cannot hold blocks the row with the line and column', async () => {
+  const wb = await openMixed();
+  const res = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Option Explicit\nDim a\u0000') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'vba.nul');
+  assert.equal(res.rows[0].reason, '2:6');
+  assert.equal(res.rows[0].verified, false);
+  const wide = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Sub A()\n  x = "\u0100"\nEnd Sub') });
+  assert.equal(wide.rows[0].reason_code, 'vba.encoding');
+  assert.equal(wide.rows[0].reason, '2:8');
+});
+
+test('F2-06: a signed project is refused until the signature loss is acknowledged, then the row says it was removed', async () => {
+  const wb = await openWorkbook(generated('signed.xlsm'), 'signed.xlsm');
+  const text = `${moduleOf(wb, 'Module1').model.visible}\n' recipe edit`;
+  const refused = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', text) });
+  assert.ok(refused.bytes === null);
+  assert.equal(refused.rows[0].verdict, 'refused');
+  assert.equal(refused.rows[0].reason_code, 'vba.signature');
+  const done = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', text), acknowledgeSignature: true });
+  assert.equal(done.rows[0].verdict, 'changed');
+  assert.equal(done.rows[0].signature_removed, true);
+  assert.equal((await openWorkbook(done.bytes, 'x.xlsm')).vba.signed, false);
+});
+
+test('F2-06: an unsigned project is not marked as losing a signature even when the caller acknowledges', async () => {
+  const wb = await openMixed();
+  const res = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Option Explicit'), acknowledgeSignature: true });
+  assert.equal(res.rows[0].signature_removed, false);
+});
+
+test('F2-06: a locked or unreadable project is refused with its own reason', async () => {
+  const locked = await openMixed();
+  locked.vba.project.writable = false;
+  locked.vba.project.locked = true;
+  const a = await executeFile(locked, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Option Explicit') });
+  assert.equal(a.rows[0].verdict, 'refused');
+  assert.equal(a.rows[0].reason_code, 'vba.locked');
+  const broken = await openMixed();
+  broken.vba = { ...broken.vba, project: null, error: 'vba.dir' };
+  const b = await executeFile(broken, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Option Explicit') });
+  assert.equal(b.rows[0].reason_code, 'vba.dir');
+  const other = await openMixed();
+  other.vba.project.writable = false;
+  const c = await executeFile(other, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Option Explicit') });
+  assert.equal(c.rows[0].reason_code, 'vba.write');
+  const unread = await openMixed();
+  moduleOf(unread, 'Module1').model = null;
+  const d = await executeFile(unread, modulePlan(['Module1']), { now: NOW, recipe: moduleRecipe('Module1', 'Option Explicit') });
+  assert.equal(d.rows[0].reason_code, 'vba.unreadable');
+  assert.ok(a.bytes === null && b.bytes === null && c.bytes === null && d.bytes === null);
+});
+
+test('F2-06: the same now gives the same bytes for a module replace, even when the clock moves', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 14, 10, 0, 0) });
+  const wb = await openMixed();
+  const recipe = moduleRecipe('Module1', 'Option Explicit\nSub A()\nEnd Sub');
+  const first = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe });
+  t.mock.timers.tick(30000);
+  const second = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe });
+  assert.equal(first.sha256, second.sha256);
+  assert.equal(first.rows[0].verified, true);
+});

@@ -1,5 +1,7 @@
 import { normalizeQueryText, toViewText } from '../../core/pq/section.js';
 import { emptyChangeSet } from '../../core/save.js';
+import { splitLines } from '../../core/vba/module-source.js';
+import { validateModuleText } from '../../core/vba/validate.js';
 import { queryNameProblem, queryRemovalProblem, queryRenameProblem } from '../../core/pq/members.js';
 import { sha256Text } from '../index/hash.js';
 import { REPORT_COLUMNS } from './collect.js';
@@ -30,6 +32,28 @@ export function reportRow(meta, action, recipe, values) {
 
 const skipped = (code) => ({ verdict: 'skipped', reason_code: code, old_hash: '', new_hash: '', change: null });
 const refused = (code, oldHash = '', newHash = '') => ({ verdict: 'refused', reason_code: code, old_hash: oldHash, new_hash: newHash, change: null });
+
+async function replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }) {
+  const name = action.target.name;
+  if (!wb.vba) return skipped('skip.notApplicable');
+  if (wb.vba.error) return refused(wb.vba.error);
+  const project = wb.vba.project;
+  if (!project) return refused('vba.unreadable');
+  const mod = project.modules.find((m) => m.name === name);
+  if (!mod) return skipped('skip.notApplicable');
+  if (!mod.model) return refused('vba.unreadable');
+  const text = splitLines(recipe.inject.text).join('\n');
+  const oldHash = await sha256Text(mod.model.visible);
+  const newHash = await sha256Text(text);
+  if (oldHash === newHash) return { verdict: 'unchanged', reason_code: '', old_hash: oldHash, new_hash: newHash, change: null };
+  if (!project.writable) return refused(project.locked ? 'vba.locked' : 'vba.write', oldHash, newHash);
+  const problems = validateModuleText({ text, codePage: project.codePage, originalBytes: mod.sourceBytes });
+  if (problems.length) return { ...refused(problems[0].code, oldHash, newHash), reason: `${problems[0].line}:${problems[0].col}` };
+  if (wb.vba.signed && !acknowledgeSignature) return refused('vba.signature', oldHash, newHash);
+  changeSet.modules.replace.set(name, text);
+  if (wb.vba.signed) changeSet.acknowledgeSignature = true;
+  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: { op: 'replace', target: { type: 'module', name }, oldHash, newHash } };
+}
 
 async function renameQuery(wb, action, recipe, changeSet) {
   const name = action.target.name;
@@ -87,11 +111,12 @@ async function replaceQuery(wb, action, recipe, changeSet) {
   return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: { op: 'replace', target: { type: 'query', name }, oldHash, newHash } };
 }
 
-export async function planChanges(wb, filePlan, recipe) {
+export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature = false } = {}) {
   const changeSet = emptyChangeSet();
   const outcomes = [];
   for (const action of filePlan.actions) {
     if (action.op === 'replace' && action.target.type === 'query') outcomes.push(await replaceQuery(wb, action, recipe, changeSet));
+    else if (action.op === 'replace' && action.target.type === 'module') outcomes.push(await replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));
     else if (action.op === 'remove' && action.target.type === 'query') outcomes.push(await removeQuery(wb, action, changeSet));
     else if (action.op === 'rename' && action.target.type === 'query') outcomes.push(await renameQuery(wb, action, recipe, changeSet));

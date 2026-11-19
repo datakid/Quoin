@@ -41,6 +41,7 @@ ChangeSet = {
 
 - `now` is the Plan's ISO UTC string. `recipe` is `plan.recipe`. `meta` is `{ name, relPath }` for the report row and defaults to `wb.fileName`. `runId` fills the `run_id` column.
 - `recipe` is an addition to the interface in `PARALLEL.md`. `FilePlan` and `Action` carry no query text, find string or hash, so the recipe has to come with the call.
+- `acknowledgeSignature` (default false) is a further addition: the caller passes true once the user has confirmed, for the whole set, that signed projects lose their signature (Q3). Without it a module replace in a signed project is refused as `vba.signature`, the same in Preview and in Run.
 - Any other option, including `dryRun`, is never read. A test pins that.
 - `bytes` and `sha256` are `null` when nothing is written: every action unchanged or skipped, or the file failed.
 - `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`, with `newName` added for a rename. `oldHash` is `null` for an add and `newHash` is `null` for a remove. For a rename both hashes are the hash of the unchanged text. The card did not give the shape.
@@ -67,6 +68,8 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 For the two `refused.*` codes above, and for later ones that take a parameter, the report row's `reason` column holds only the parameter: the target (`Sheet1!Table1`, `data model`, or `connection Query - Name`) or the user names joined with a comma and a space. The sentence is built from the code in `strings.js`.
 
 `pq.none` and `pq.format` are used as `reason_code` for refused adds (no query data, and query data Quoin does not write). Both are already in `ERRORS`.
+
+For a module that fails validation the row is `refused`, `reason_code` is the validator's code (`vba.nul`, `vba.surrogate`, `vba.encoding`, `vba.lineLength`, `vba.attribute`, `vba.tooLarge`) and `reason` is `line:col` of the first problem; the sentence is built from the code and the position in `strings.js`. A project that cannot be written is `refused` with `vba.locked`, `vba.write` or the code the project failed to open with (`vba.dir`, `vba.unreadable`). All of these codes are already in `ERRORS`.
 
 Verdict `not-released` carries `write.selfcheck`; verdict `failed` carries the `QuoinError` code (`m.parse` so far). Both codes are already in `ERRORS`.
 
@@ -164,6 +167,21 @@ Decisions inside gaps (log, not yet confirmed by the user):
 - A change of case only is a rename. Two names that differ only by case are the same name for clash checks.
 - A rename in a ChangeSet is keyed by the old name; a replace for the same query is keyed by the old name as well.
 Counts after this task: lint 0 findings; unit 1230 tests, 1225 pass, 5 skipped.
+
+### F2-06 Module replace across files
+Layer: batch/execute
+Files: src/batch/execute/changes.js, src/batch/execute/index.js, tests/unit/batch-execute.test.js
+Do: replace-module actions go into the ChangeSet through the existing VBA writer. `validateModuleText` problems refuse the row with the line and column. A locked, unwritable or unreadable project is refused with its own code. A signed project is refused until `acknowledgeSignature` is passed; with it the row has `signature_removed: true`.
+Test that fails without it: 9 new tests in `tests/unit/batch-execute.test.js` (all failed before the change). The browser test the card asks for is in `tests/e2e`, which is not in my file list; it is for trunk.
+Fails without, by mutation (each reverted): line breaks not normalised, 1 fails; validation off, 1; column dropped from the reason, 1; signature gate off, 1; writable gate off, 1; locked and unwritable not told apart, 1; project error ignored, 1; unreadable module check off, 1; file with no macros not skipped, 1; signature acknowledgement not passed to the write, 1; `signature_removed` always false, 1; `signature_removed` set for unsigned files, 3.
+Result: Done
+Changed expectations: none
+Deviations: none
+Decisions inside gaps (log, not yet confirmed by the user):
+- Module text from the recipe has its line breaks converted to `\n` before it is compared and written, because the editor's view text and `joinModuleSource` work on `\n`.
+- A signed project without acknowledgement is refused at plan time, not failed at write time, so Preview and Run agree.
+- A module that exists but could not be parsed (`model` is null) is refused as `vba.unreadable`; a module the file does not have is skipped.
+Counts after this task: lint 0 findings; unit 1239 tests, 1234 pass, 5 skipped.
 
 ## Open points for the user
 

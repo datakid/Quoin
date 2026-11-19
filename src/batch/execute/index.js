@@ -5,11 +5,11 @@ import { sha256Bytes } from '../index/hash.js';
 import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
 
-export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '' }) {
+export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false }) {
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
   const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));
-  const { changeSet, outcomes } = await planChanges(wb, filePlan, recipe);
+  const { changeSet, outcomes } = await planChanges(wb, filePlan, recipe, { acknowledgeSignature });
   const rowsFor = (settle) =>
     filePlan.actions.map((action, i) => {
       const o = outcomes[i];
@@ -27,5 +27,5 @@ export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '' 
     return { ...none, rows: rowsFor((o) => (o.change ? { verdict, reason_code: e.code, verified: false } : { verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'unchanged' })) };
   }
   const sha256 = await sha256Bytes(written.bytes);
-  return { fileId: filePlan.fileId, bytes: written.bytes, sha256, changes, warnings, rows: rowsFor((o) => ({ verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'changed' || o.verdict === 'unchanged' })) };
+  return { fileId: filePlan.fileId, bytes: written.bytes, sha256, changes, warnings, rows: rowsFor((o) => ({ verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'changed' || o.verdict === 'unchanged', signature_removed: o.verdict === 'changed' && written.signatureRemoved })) };
 }

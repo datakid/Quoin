@@ -68,6 +68,50 @@
   display: none;
 }
 
+.set-file-open {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  border-radius: var(--r-1);
+}
+
+.set-file-open[aria-current="true"] .set-file-name {
+  font-weight: 600;
+}
+
+.set-file:has(.set-file-open[aria-current="true"]) {
+  background: var(--raised);
+}
+
+.set-shell[data-mode="file"] {
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+}
+
+.set-shell[data-mode="file"] .set-result,
+.set-shell[data-mode="file"] .set-runbar,
+.set-recipe[data-hosting] > .set-pane-title {
+  display: none;
+}
+
+.set-recipe[data-hosting] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.set-recipe[data-hosting] > .workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .set-file {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -189,6 +233,11 @@
 }
 
 @media (max-width: 899px) {
+  .set-shell[data-mode="file"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(70vh, auto);
+  }
+
   .set-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(160px, auto) minmax(120px, auto) minmax(120px, auto) auto;

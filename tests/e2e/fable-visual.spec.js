@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers.js';
+import { readFileSync } from 'node:fs';
+import { openApp, dropTree, waitForSet, ext } from './helpers.js';
 import { SET_STATES, setUpSetState, settle } from './states.js';
 
 const VIEWS = [
@@ -20,4 +21,20 @@ for (const state of SET_STATES) {
       await ctx.close();
     });
   }
+}
+
+for (const view of VIEWS) {
+  test(`T-I-04-FABLE: set shell with a file open at ${view.size} in the ${view.theme} theme`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: view.theme, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await openApp(page);
+    const b64 = (name) => readFileSync(ext(name)).toString('base64');
+    await dropTree(page, [{ name: 'books', children: [{ name: 'pq_vba_complex.xlsm', data: b64('pq_vba_complex.xlsm') }, { name: 'pq_simple.xlsx', data: b64('pq_simple.xlsx') }] }]);
+    await waitForSet(page);
+    await page.locator('.set-file', { hasText: 'pq_vba_complex.xlsm' }).getByRole('button').click();
+    await page.waitForSelector('.workspace');
+    await settle(page);
+    await expect(page).toHaveScreenshot(`fable-shell-file-open-${view.size}-${view.theme}.png`, { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' });
+    await ctx.close();
+  });
 }

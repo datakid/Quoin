@@ -99,10 +99,12 @@ test('fable shell: every state is reachable and the shell animates only colour, 
   expect(offenders).toEqual([]);
 });
 
-test('fable shell: Tab reaches the filter, the recipe region and the result region in order', async ({ page }) => {
+test('fable shell: Tab reaches the filter, the files list, the recipe region and the result region in order', async ({ page }) => {
   await openApp(page);
   await setUpSetState(page, 'ready');
   await page.getByRole('searchbox', { name: 'Filter files' }).focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.set-file-open').first()).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('region', { name: 'Recipe' })).toBeFocused();
   await page.keyboard.press('Tab');

@@ -43,12 +43,15 @@ function splitPath(relPath, name) {
 }
 
 export class SetShell {
-  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {} } = {}) {
+  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {} } = {}) {
     this.container = container;
     this.session = session;
     this.onSummary = onSummary;
     this.onCollect = onCollect;
     this.onCancel = onCancel;
+    this.onOpen = onOpen;
+    this.openId = null;
+    this.rovingId = null;
     this.query = '';
     this.scheduled = false;
     this.build();
@@ -64,6 +67,11 @@ export class SetShell {
     });
     this.count = h('span', { class: 'set-count item-meta' });
     this.list = h('ul', { class: 'set-list' });
+    this.list.addEventListener('keydown', (e) => this.onListKey(e));
+    this.list.addEventListener('focusin', (e) => {
+      const btn = e.target.closest && e.target.closest('.set-file-open');
+      if (btn) this.rovingId = btn.dataset.id;
+    });
     this.empty = h('p', { class: 'set-empty item-meta' });
     this.files = h('section', { class: 'set-pane set-files', 'aria-label': S.setFiles }, h('div', { class: 'set-pane-head' }, h('h2', { class: 'set-pane-title' }, S.setFiles), this.count), this.filter, this.list, this.empty);
     this.recipe = h('section', { class: 'set-pane set-recipe', 'aria-label': S.setRecipe, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setRecipe));
@@ -90,9 +98,12 @@ export class SetShell {
     const all = this.session.list();
     const shown = this.query ? all.filter((f) => f.relPath.toLowerCase().includes(this.query)) : all;
     this.root.dataset.state = this.session.state;
+    this.root.dataset.mode = this.openId ? 'file' : 'set';
     this.count.textContent = all.length ? S.setCount(shown.length, all.length) : '';
+    const focused = this.list.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.id : null;
     clear(this.list);
     for (const f of shown) this.list.append(this.row(f));
+    this.settleRoving(focused);
     this.empty.hidden = shown.length > 0;
     this.empty.textContent = all.length === 0 ? S.setEmpty : S.setNoMatch;
     this.filter.hidden = all.length === 0;
@@ -114,12 +125,60 @@ export class SetShell {
     const badge = f.badge || 'pending';
     const note = noteOf(f);
     const dir = splitPath(f.relPath, f.name);
+    const main = h('span', { class: 'set-file-main' },
+      h('span', { class: 'set-file-name', text: f.name }),
+      dir ? h('span', { class: 'set-file-dir item-meta', text: dir }) : null);
+    const openable = f.status === 'ready';
+    const lead = openable
+      ? h('button', { class: 'set-file-open', type: 'button', tabindex: -1, 'data-id': f.id, 'aria-current': f.id === this.openId ? 'true' : null, onclick: () => this.onOpen(f.id) }, main)
+      : main;
     return h('li', { class: 'set-file', 'data-id': f.id, 'data-badge': badge },
-      h('span', { class: 'set-file-main' },
-        h('span', { class: 'set-file-name', text: f.name }),
-        dir ? h('span', { class: 'set-file-dir item-meta', text: dir }) : null),
+      lead,
       h('span', { class: 'set-badge', text: BADGE_TEXT[badge] }),
       note ? h('span', { class: 'set-file-note item-meta', text: note }) : null);
+  }
+
+  buttons() {
+    return [...this.list.querySelectorAll('.set-file-open')];
+  }
+
+  settleRoving(focusedId) {
+    const buttons = this.buttons();
+    if (!buttons.length) return;
+    const wanted = buttons.find((b) => b.dataset.id === (focusedId || this.rovingId)) || buttons.find((b) => b.dataset.id === this.openId) || buttons[0];
+    wanted.tabIndex = 0;
+    this.rovingId = wanted.dataset.id;
+    if (focusedId && wanted.dataset.id === focusedId) wanted.focus();
+  }
+
+  onListKey(e) {
+    const buttons = this.buttons();
+    const at = buttons.indexOf(document.activeElement);
+    if (at < 0) return;
+    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: buttons.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    const next = buttons[Math.max(0, Math.min(buttons.length - 1, to))];
+    for (const b of buttons) b.tabIndex = b === next ? 0 : -1;
+    next.focus();
+  }
+
+  get host() {
+    return this.recipe;
+  }
+
+  openFile(id) {
+    this.openId = id;
+    this.root.dataset.mode = 'file';
+    this.recipe.dataset.hosting = 'true';
+    this.render();
+  }
+
+  closeFile() {
+    this.openId = null;
+    this.root.dataset.mode = 'set';
+    delete this.recipe.dataset.hosting;
+    this.render();
   }
 
   destroy() {

@@ -228,6 +228,7 @@ export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature =
     else if (action.op === 'replace' && action.target.type === 'module') outcomes.push(await replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'replaceText' && (action.target.type === 'query' || action.target.type === 'module')) outcomes.push(await replaceText(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'align') outcomes.push(await alignTarget(wb, action, recipe, changeSet, source, { acknowledgeSignature }));
+    else if (action.op === 'rename' && action.target.type === 'module') outcomes.push(refused('refused.unsupported'));
     else if (action.op === 'add' && action.target.type === 'module') outcomes.push(await addModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'remove' && action.target.type === 'module') outcomes.push(await removeModule(wb, action, changeSet, { acknowledgeSignature }));
     else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));

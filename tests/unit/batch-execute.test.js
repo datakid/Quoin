@@ -631,3 +631,17 @@ test('F2-07: the same now gives the same bytes for a module add, even when the c
   const b = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
   assert.equal(a.sha256, b.sha256);
 });
+
+test('F2-07: renaming a module is a refused row with its own reason, not a failure of the whole file', async () => {
+  const wb = await openMixed();
+  const plan = modulePlan(['Module1', 'Nope'], 'rename');
+  const res = await executeFile(wb, plan, { now: NOW, recipe: recipeFor({ target: 'module', op: 'rename', name: 'Module1', newName: 'Renamed' }) });
+  assert.ok(res.bytes === null);
+  assert.deepEqual(res.rows.map((r) => [r.action, r.verdict, r.reason_code, r.verified]), [['rename', 'refused', 'refused.unsupported', false], ['rename', 'refused', 'refused.unsupported', false]]);
+  assert.deepEqual(res.changes, []);
+});
+
+test('F2-07: a rename of a module in a file with no macros is refused the same way', async () => {
+  const res = await executeFile(await open(), modulePlan(['Module1'], 'rename'), { now: NOW, recipe: recipeFor({ target: 'module', op: 'rename', name: 'Module1', newName: 'Renamed' }) });
+  assert.equal(res.rows[0].reason_code, 'refused.unsupported');
+});

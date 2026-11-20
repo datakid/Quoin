@@ -4,6 +4,8 @@ Branch `fable-writer`, started from `fable` at 56b3974. Owner of `src/core/save.
 
 ## Status
 
+Messages for Scope and trunk are in `docs/fable/MESSAGES-writer.md`.
+
 All Writer tasks are done in code: F2-01 to F2-09. Nothing is waiting on a decision. Two things need real Excel before release (see the real-Excel pack items under F2-03 and F2-07), and three product questions are under "Open points". Last check on the merged tree: lint 0 findings; unit 1314 tests, 1309 pass, 5 skipped.
 
 CI on this branch: the Browser tests step fails on every commit because `src/core/pq/members.js` is not in `asset-manifest.json` (T-PRIV-1; `npm run build` after the merge regenerates it). The Unit tests step failed once, on the merge commit 9f060dd, and passed on a re-run of the same commit with no change; thirteen local runs, five of them on one CPU, passed too. The flaky test on trunk described under "Notes for the merge" is the likely cause.
@@ -68,6 +70,7 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 |---|---|---|
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
 | `align.sourceChanged` | an align whose text does not match the chosen hash (the source file changed after the recipe was made) | "Not changed. The chosen version is no longer the one in its file." |
+| `refused.unsupported` | a rename of a module (the plan builds add and remove only) | "Not changed. This change is not available yet." |
 | `refused.noMacros` | a module add to a file with no macro project | "Not added. This file has no macros, and Quoin does not create a macro project." |
 | `refused.moduleKind` | a module remove for a sheet or workbook module or a form; `reason` is the kind (`document`, `form`) | "Not removed. This module belongs to {kind}." |
 | `refused.exists` | an add of a name the file already has (for modules: also the project, a reference or a stream name; compared without regard to case, and for queries against every section member) | "Not added. The file already has a query named {name}." |

@@ -1,5 +1,6 @@
 import { h, clear } from '../dom.js';
 import { S, errorMessage } from '../strings.js';
+import { ResultMatrix } from './result-matrix.js';
 
 const BADGE_TEXT = { ready: S.setBadgeReady, edited: S.setBadgeEdited, skipped: S.setBadgeSkipped, failed: S.setBadgeFailed, pending: S.setBadgePending };
 
@@ -52,6 +53,7 @@ export class SetShell {
     this.onOpen = onOpen;
     this.openId = null;
     this.rovingId = null;
+    this.matrix = null;
     this.query = '';
     this.scheduled = false;
     this.build();
@@ -98,6 +100,7 @@ export class SetShell {
     const all = this.session.list();
     const shown = this.query ? all.filter((f) => f.relPath.toLowerCase().includes(this.query)) : all;
     this.root.dataset.state = this.session.state;
+    if (this.session.state === 'running' || this.session.state === 'empty') this.clearResult();
     this.root.dataset.mode = this.openId ? 'file' : 'set';
     this.count.textContent = all.length ? S.setCount(shown.length, all.length) : '';
     const focused = this.list.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.id : null;
@@ -161,6 +164,20 @@ export class SetShell {
     const next = buttons[Math.max(0, Math.min(buttons.length - 1, to))];
     for (const b of buttons) b.tabIndex = b === next ? 0 : -1;
     next.focus();
+  }
+
+  showResult(rows, mode = 'report') {
+    this.clearResult();
+    this.matrix = new ResultMatrix(this.result, { mode });
+    this.matrix.setRows(rows);
+    this.result.dataset.matrix = 'true';
+  }
+
+  clearResult() {
+    if (!this.matrix) return;
+    this.matrix.destroy();
+    this.matrix = null;
+    delete this.result.dataset.matrix;
   }
 
   get host() {

@@ -190,6 +190,29 @@
   min-height: calc(var(--s-8) * 2);
 }
 
+.set-result[data-matrix] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.set-result[data-matrix] > .grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.grid-cell.status-good {
+  color: var(--celadon-ink);
+}
+
+.grid-cell.status-bad {
+  color: var(--madder-ink);
+}
+
+.grid-cell.status-neutral {
+  color: var(--ink-2);
+}
+
 .set-runbar {
   grid-column: 1 / -1;
   display: flex;

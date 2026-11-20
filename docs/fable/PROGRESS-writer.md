@@ -2,6 +2,12 @@
 
 Branch `fable-writer`, started from `fable` at 56b3974. Owner of `src/core/save.js`, `src/core/vba/**`, `src/core/pq/members.js`, `src/batch/execute/{index,changes,replace,align}.js` and the tests named in `PARALLEL.md`.
 
+## Status
+
+All Writer tasks are done in code: F2-01 to F2-09. Nothing is waiting on a decision. Two things need real Excel before release (see the real-Excel pack items under F2-03 and F2-07), and three product questions are under "Open points". Last check on the merged tree: lint 0 findings; unit 1314 tests, 1309 pass, 5 skipped.
+
+CI on this branch: the Browser tests step fails on every commit because `src/core/pq/members.js` is not in `asset-manifest.json` (T-PRIV-1; `npm run build` after the merge regenerates it). The Unit tests step failed once, on the merge commit 9f060dd, and passed on a re-run of the same commit with no change; thirteen local runs, five of them on one CPU, passed too. The flaky test on trunk described under "Notes for the merge" is the likely cause.
+
 Baseline at 56b3974: lint 0 findings; unit 1131 tests, 1126 pass, 5 skipped.
 
 ## Interfaces for trunk

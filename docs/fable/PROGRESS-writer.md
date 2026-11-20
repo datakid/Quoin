@@ -29,7 +29,7 @@ ChangeSet = {
 
 - `now` is a `Date`, as `writeZip` takes it. It reaches the outer package and the inner DataMashup package. Callers that hold an ISO string convert with `zipClock` from `src/batch/execute/collect.js`.
 - Without `now` the clock is read at write time, as `buildWorkbook` always did.
-- Change kinds that are declared but not built yet (`modules.add`, `modules.remove`, `sheets.*`) throw `TypeError` and write nothing. Query add, rename and remove throw `TypeError` from `members.js` until F2-03, F2-04 and F2-05.
+- Sheet changes (`sheets.*`) are declared but not built; they throw `TypeError` and write nothing.
 
 ### selfCheck
 
@@ -62,8 +62,10 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 |---|---|---|
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
 | `align.sourceChanged` | an align whose text does not match the chosen hash (the source file changed after the recipe was made) | "Not changed. The chosen version is no longer the one in its file." |
-| `refused.exists` | an add of a name the file already has (compared without regard to case, and against every section member) | "Not added. The file already has a query named {name}." |
-| `refused.name` | an add whose name is empty, has a space at either end or has a control character | "Not added. This name cannot be used." |
+| `refused.noMacros` | a module add to a file with no macro project | "Not added. This file has no macros, and Quoin does not create a macro project." |
+| `refused.moduleKind` | a module remove for a sheet or workbook module or a form; `reason` is the kind (`document`, `form`) | "Not removed. This module belongs to {kind}." |
+| `refused.exists` | an add of a name the file already has (for modules: also the project, a reference or a stream name; compared without regard to case, and for queries against every section member) | "Not added. The file already has a query named {name}." |
+| `refused.name` | an add whose name cannot be used: for a query empty, a space at either end or a control character; for a module not 1 to 31 ASCII letters, digits and underscores starting with a letter, or a VBA keyword | "Not added. This name cannot be used." |
 | `refused.loaded` | a remove of a query that has a connection or loads to a table or the data model | "Not removed. This query loads to {target}." |
 | `refused.referenced` | a rename of a query that another query uses, or while a query reads `#shared` | "Not renamed. Referenced by {names}." (Appendix E) |
 | `refused.renameLoaded` | a rename of a query that has a connection or loads to a table or the data model | "Not renamed. This query loads to {target}." |
@@ -221,12 +223,27 @@ Decisions inside gaps (log, not yet confirmed by the user):
 Counts after this task: lint 0 findings; unit 1274 tests, 1269 pass, 5 skipped.
 
 ### F2-07 Module add and remove
-Layer: core/vba
-Result: Stopped, as the card says, to ask whether to build it now or defer. Not started.
-What I checked: `writeVbaProject` replaces the compressed source of modules that already exist and rewrites their offsets in the existing `dir` records. Nothing writes the `PROJECT` text stream, the module count or the module records of the `dir` stream, or the `PROJECTwm` name map, so it cannot change the module list. The CFB writer (`writeCfb`) can write any tree, so the missing part is the project metadata, not the container.
-Until it is built, `ChangeSet.modules.add` and `ChangeSet.modules.remove` make `applyChangeSet` throw `TypeError` and write nothing, and a test pins that.
-Options: build it now (new records in the `dir` stream, the `Module=` lines in `PROJECT`, the name map, a new CFB stream per module, and a real-Excel pack item: a macro file that Excel opens without a repair message with a module added and with one removed), or defer it and have Preview say that adding and removing modules is not available yet.
-My recommendation: defer. Our own reader is more forgiving than Excel, so `selfCheck` could pass on a project Excel then repairs by dropping the macros, and only the real-Excel pack can catch that.
+Layer: core/vba, with the `applyChangeSet` integration and the execute wiring for `add` and `remove` actions on modules
+Files: src/core/vba/writeback.js, src/core/vba/dir-stream.js, src/core/save.js, src/batch/execute/changes.js, tests/unit/batch-vba-members.test.js (new), tests/unit/batch-save.test.js, tests/unit/batch-execute.test.js
+History: I first stopped, as the card says, because `writeVbaProject` could only swap the source of modules that already exist. You then told me to finish the work, so I built it, with the safeguards below, and it needs the real-Excel check before release.
+Do: `writeVbaProject(project, edits, { add, remove })` now changes the module list. For each added module it writes one record group in the `dir` stream (the same eleven records Excel writes), a `Module=` line after the last module or document line of the PROJECT stream, a workspace line, an entry in the `PROJECTwm` name map, and a new stream in the `VBA` storage holding the compressed source from offset zero. For each removed module it takes out all of those, and the module count record follows. Only standard and class modules can be removed; sheet and workbook modules and forms are refused. A write with no add or remove produces the same bytes as before.
+`selfCheck` now also fails when the output's project has an anomaly the input did not have (a module count that does not match, for one) and when an added module reads back as anything but a standard module.
+Test that fails without it: 20 tests in `tests/unit/batch-vba-members.test.js` (the file failed at import before the change, for the missing exports), 9 in `tests/unit/batch-save.test.js` and 14 in `tests/unit/batch-execute.test.js`. A strong one: adding a module to an Excel-made project and then removing it gives back the same PROJECT stream, the same name map, the same record ids and the same module texts. Another: rebuilding the name map of the Excel-made fixture from its module list reproduces Excel's bytes exactly.
+Fails without, by mutation (each reverted): count record not updated, 5 fail; removed record group kept, 3; removed stream kept, 1; PROJECT stream untouched, 2; name map untouched, 2; group inserted after the terminator, 7; wrong cookie, 1; wrong module type, 2; removal kind check off, 1; name check off, 2; duplicate add check off, 1; edit-and-remove check off, 1; reserved words off, 1; reference name check off, 1; stream name check off, 1; workspace line not added, 2; `Module=` line placed first, 2; class lines not removed, 1; workspace line not removed, 3; name map terminator missing, 2; module header missing, 1. In `save.js`: add not passed on, 6; remove not passed on, 3; signature gate ignoring add and remove, 7; kind check off, 1; anomaly check off, 1; module count ignoring add and remove, 3. In `changes.js`: 17 mutations, each caught by at least one test.
+Result: Done in code. Not verified in Excel.
+Changed expectations: none. The two "not applied yet" refusals for module add and remove in `batch-save.test.js` are gone; sheets are still refused.
+Deviations: none beyond the one logged at F2-03.
+Decisions inside gaps (log, not yet confirmed by the user). The records and stream layouts follow Excel's own output in `pq_vba_complex.xlsm` and the MS-OVBA record layout:
+- Added modules are standard modules only. The recipe has no field for a class module, a form or a document module.
+- Names: 1 to 31 ASCII letters, digits and underscores, starting with a letter; not a VBA keyword; not the name of an existing module, the project, a reference library, or any stream or storage in the project. These are my rules; the plan gives none. A name that is only a case variant of an existing one is refused.
+- A module's code must be ASCII or characters of the project's code page, as for a replace; a new module has no original bytes, so a double-byte code page accepts ASCII only.
+- The module cookie is `0xFFFF` as the specification says. Excel writes other values and ignores them on read.
+- The module text is `Attribute VB_Name = "Name"` and then the code, with `\r\n` breaks and a final break. Code with its own `Attribute` lines is refused by `validateModuleText`.
+- The workspace line for a new module is `Name=0, 0, 0, 0, C`, which is what Excel writes for a module that has never been opened.
+- Nothing checks whether other modules call the module being removed. VBA has no dependency analysis in this codebase, so a removal can leave a call that fails to compile.
+- A workbook with no macro project is refused (`refused.noMacros`); creating a project from nothing is not attempted.
+Counts after this task: lint 0 findings; unit 1314 tests, 1309 pass, 5 skipped.
+Real-Excel pack item (for F2-15; the plan's list for the pack does not include module add and remove, so please add it): add a module to a macro workbook made by Excel and open it in Excel; check that the module is listed in the VBA editor with its code, that the project compiles, that no repair message appears and that the macros still run. Then remove a standard module from another workbook and check the same. Do both once with a project that is signed and once with a protected project (the add should be refused or the project stay protected).
 
 ## Open points for the user
 

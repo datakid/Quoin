@@ -42,10 +42,7 @@ function completeChangeSet(changeSet) {
 }
 
 function refuseUnapplied(cs) {
-  const open = [];
-  if (cs.modules.add.size || cs.modules.remove.size) open.push('module add and remove');
-  if (cs.sheets.add.length || cs.sheets.write.length) open.push('sheet writes');
-  if (open.length) throw new TypeError(`${open.join(' and ')} are not applied yet`);
+  if (cs.sheets.add.length || cs.sheets.write.length) throw new TypeError('sheet writes are not applied yet');
 }
 
 export async function buildWorkbook(wb, { queryEdits = new Map(), vbaEdits = new Map(), refreshOnLoad = true, checkSection = null, acknowledgeSignature = false, faultInject = false } = {}) {
@@ -67,10 +64,10 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
     for (const part of written.touched) touched.add(part);
   }
   let signatureRemoved = false;
-  if (cs.modules.replace.size) {
+  if (cs.modules.replace.size || cs.modules.add.size || cs.modules.remove.size) {
     if (!wb.vba || !wb.vba.project) throw new QuoinError('vba.unreadable', 'no readable VBA project');
     if (wb.vba.signed && !cs.acknowledgeSignature) throw new QuoinError('vba.signature', 'signature removal was not confirmed');
-    const bytes = writeVbaProject(wb.vba.project, cs.modules.replace);
+    const bytes = writeVbaProject(wb.vba.project, cs.modules.replace, { add: cs.modules.add, remove: cs.modules.remove });
     pkg.set(wb.vba.part, bytes);
     touched.add(wb.vba.part);
     if (wb.vba.signed) {
@@ -133,6 +130,9 @@ export async function selfCheck(wb, bytes, { changes, touched, addedParts, remov
         if (want.edited ? !got.model || got.model.visible !== want.text : got.text !== want.text) throw new QuoinError('check.vba', want.edited ? 'module text differs after write' : 'untouched module changed', name);
       }
       for (const got of backModules) if (!wantModules.has(got.name)) throw new QuoinError('check.vba', 'module was not declared', got.name);
+      for (const name of m.add.keys()) if (backModules.find((x) => x.name === name).kind !== 'standard') throw new QuoinError('check.vba', 'added module is not a standard module', name);
+      const knownAnomalies = new Set(wb.vba.project.anomalies);
+      for (const code of back.vba.project.anomalies) if (!knownAnomalies.has(code)) throw new QuoinError('check.vba', `new anomaly ${code}`, code);
     }
     for (const entry of back.pkg.zip.entries) await entry.read();
     const original = new Set(wb.pkg.zip.entries.map((e) => e.name));

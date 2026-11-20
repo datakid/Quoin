@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { buildWorkbook, applyChangeSet, emptyChangeSet, selfCheck } from '../../src/core/save.js';
+import { readCfb } from '../../src/core/vba/cfb-read.js';
+import { writeCfb } from '../../src/core/vba/cfb-write.js';
+import { compress } from '../../src/core/vba/ovba-compress.js';
+import { decompress } from '../../src/core/vba/ovba-decompress.js';
+import { parseDir, serializeDir, REC } from '../../src/core/vba/dir-stream.js';
 import { fixture, generated } from './helpers.js';
 
 process.env.TZ = 'UTC';
@@ -115,8 +120,6 @@ test('F2-01: a partial change set is completed, so a caller names only what it c
 test('F2-01: change kinds that are not applied yet are refused and never ignored', async () => {
   const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
   const refused = [
-    (cs) => cs.modules.add.set('Module9', 'Option Explicit'),
-    (cs) => cs.modules.remove.add('Module1'),
     (cs) => cs.sheets.add.push({ name: 'Result', cells: [] }),
     (cs) => cs.sheets.write.push({ sheet: 'Sheet1', range: 'A1', cells: [] })
   ];
@@ -206,4 +209,101 @@ test('F2-01: selfCheck rejects a module that the declaration does not expect', a
   const changes = emptyChangeSet();
   changes.modules.remove.add('Module1');
   await assert.rejects(() => selfCheck(wb, res.bytes, declared({ changes, touched: new Set([wb.vba.part]) })), (e) => e.code === 'write.selfcheck' && e.part === 'Module1');
+});
+
+const CODE = 'Sub Added()\n    MsgBox "added"\nEnd Sub\n';
+
+async function applyModules(wb, { add = [], remove = [], replace = [], ack = false } = {}) {
+  const cs = emptyChangeSet();
+  for (const [n, t] of add) cs.modules.add.set(n, t);
+  for (const n of remove) cs.modules.remove.add(n);
+  for (const [n, t] of replace) cs.modules.replace.set(n, t);
+  cs.acknowledgeSignature = ack;
+  const res = await applyChangeSet(wb, cs, { now: new Date(2026, 10, 14, 10, 0, 0) });
+  return { res, back: await openWorkbook(res.bytes, 'out.xlsm') };
+}
+
+test('F2-07: applyChangeSet adds a module and the output opens with it and nothing else changed', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const { res, back } = await applyModules(wb, { add: [['Module2', CODE]] });
+  assert.equal(res.modulesChanged, 1);
+  assert.deepEqual(back.vba.project.modules.map((m) => m.name), ['Module1', 'ThisWorkbook', 'Sheet1', 'Module2']);
+  assert.equal(back.vba.project.modules[3].model.visible, CODE);
+  assert.deepEqual(back.vba.project.anomalies, []);
+  assert.deepEqual(back.queries.map((q) => q.name), wb.queries.map((q) => q.name));
+});
+
+test('F2-07: applyChangeSet removes a module', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const { res, back } = await applyModules(wb, { remove: ['Module1'] });
+  assert.equal(res.modulesChanged, 1);
+  assert.deepEqual(back.vba.project.modules.map((m) => m.name), ['ThisWorkbook', 'Sheet1']);
+  assert.deepEqual(back.vba.project.anomalies, []);
+});
+
+test('F2-07: an add, a replace and a remove together, with the same bytes each time', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const options = { add: [['Module2', CODE]], remove: ['Module1'], replace: [['Sheet1', 'Option Explicit\n']] };
+  const a = await applyModules(wb, options);
+  const b = await applyModules(wb, options);
+  assert.equal(sha(a.res.bytes), sha(b.res.bytes));
+  assert.equal(a.res.modulesChanged, 3);
+  assert.deepEqual(a.back.vba.project.modules.map((m) => m.name), ['ThisWorkbook', 'Sheet1', 'Module2']);
+});
+
+test('F2-07: adding or removing a module in a signed project needs the acknowledgement and then removes the signature', async () => {
+  const wb = await openWorkbook(generated('signed.xlsm'), 'signed.xlsm');
+  await assert.rejects(() => applyModules(wb, { add: [['Module2', CODE]] }), (e) => e.code === 'vba.signature');
+  await assert.rejects(() => applyModules(wb, { remove: ['Module1'] }), (e) => e.code === 'vba.signature');
+  const { res, back } = await applyModules(wb, { add: [['Module2', CODE]], ack: true });
+  assert.equal(res.signatureRemoved, true);
+  assert.equal(back.vba.signed, false);
+});
+
+test('F2-07: a workbook with no macro project cannot take a module', async () => {
+  const wb = await openWorkbook(fixture('pq_simple.xlsx'), 'pq_simple.xlsx');
+  await assert.rejects(() => applyModules(wb, { add: [['Module2', CODE]] }), (e) => e.code === 'vba.unreadable');
+});
+
+test('F2-07: a module the project does not allow, or a name it does not accept, stops the write before any bytes are made', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  await assert.rejects(() => applyModules(wb, { remove: ['Sheet1'] }), (e) => e.code === 'vba.write');
+  await assert.rejects(() => applyModules(wb, { add: [['Module1', CODE]] }), (e) => e.code === 'vba.write');
+});
+
+test('F2-07: selfCheck rejects an output whose module records do not match its module list', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const good = await applyModules(wb, { add: [['Module2', CODE]] });
+  const pkg = wb.pkg.clone();
+  const cfb = readCfb(good.back.vba.bytes);
+  const vba = cfb.root.children.find((c) => c.name === 'VBA');
+  const dirNode = vba.children.find((c) => c.name === 'dir');
+  const parsed = parseDir(decompress(dirNode.data));
+  parsed.records = parsed.records.map((r) => (r.id === REC.MODULES ? { ...r, data: Uint8Array.of(9, 0) } : r));
+  dirNode.data = compress(serializeDir(parsed.records));
+  pkg.set(wb.vba.part, writeCfb(cfb.root));
+  const bytes = await pkg.write({ now: new Date(2026, 10, 14, 10, 0, 0) });
+  const changes = emptyChangeSet();
+  changes.modules.add.set('Module2', CODE);
+  await assert.rejects(
+    () => selfCheck(wb, bytes, { changes, touched: new Set([wb.vba.part]), addedParts: new Set(), removedParts: new Set(), signatureRemoved: false }),
+    (e) => e.code === 'write.selfcheck' && e.part === 'vba.moduleCount'
+  );
+});
+
+test('F2-07: selfCheck rejects an added module that reads back as something other than a standard module', async () => {
+  const wb = await openWorkbook(generated('mixed.xlsm'), 'mixed.xlsm');
+  const good = await applyModules(wb, { add: [['Module2', CODE]] });
+  const pkg = wb.pkg.clone();
+  const cfb = readCfb(good.back.vba.bytes);
+  const projectNode = cfb.root.children.find((c) => c.name === 'PROJECT');
+  projectNode.data = Buffer.from(Buffer.from(projectNode.data).toString('latin1').replace('Module=Module2', 'Class=Module2'), 'latin1');
+  pkg.set(wb.vba.part, writeCfb(cfb.root));
+  const bytes = await pkg.write({ now: new Date(2026, 10, 14, 10, 0, 0) });
+  const changes = emptyChangeSet();
+  changes.modules.add.set('Module2', CODE);
+  await assert.rejects(
+    () => selfCheck(wb, bytes, { changes, touched: new Set([wb.vba.part]), addedParts: new Set(), removedParts: new Set(), signatureRemoved: false }),
+    (e) => e.code === 'write.selfcheck' && e.part === 'Module2'
+  );
 });

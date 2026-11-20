@@ -1,6 +1,7 @@
 import { normalizeQueryText, toViewText } from '../../core/pq/section.js';
 import { emptyChangeSet } from '../../core/save.js';
 import { joinModuleSource, splitLines, splitModuleSource } from '../../core/vba/module-source.js';
+import { moduleNameProblem, moduleRemovalProblem, newModuleText } from '../../core/vba/writeback.js';
 import { validateModuleText } from '../../core/vba/validate.js';
 import { replaceInText } from './replace.js';
 import { queryNameProblem, queryRemovalProblem, queryRenameProblem } from '../../core/pq/members.js';
@@ -105,14 +106,27 @@ function moduleTarget(wb, name) {
   return { project, mod };
 }
 
+const notWritable = (project, oldHash, newHash) => (project.writable ? null : refused(project.locked ? 'vba.locked' : 'vba.write', oldHash, newHash));
+const notAcknowledged = (wb, acknowledgeSignature, oldHash, newHash) => (wb.vba.signed && !acknowledgeSignature ? refused('vba.signature', oldHash, newHash) : null);
+
+function invalidText(project, text, originalBytes, oldHash, newHash) {
+  const problems = validateModuleText({ text, codePage: project.codePage, originalBytes });
+  return problems.length ? { ...refused(problems[0].code, oldHash, newHash), reason: `${problems[0].line}:${problems[0].col}` } : null;
+}
+
+function projectOf(wb) {
+  if (!wb.vba) return { outcome: refused('refused.noMacros') };
+  if (wb.vba.error) return { outcome: refused(wb.vba.error) };
+  if (!wb.vba.project) return { outcome: refused('vba.unreadable') };
+  return { project: wb.vba.project };
+}
+
 async function stageModule(wb, project, mod, text, changeSet, acknowledgeSignature) {
   const oldHash = await sha256Text(mod.text);
   if (text === mod.model.visible) return { verdict: 'unchanged', reason_code: '', old_hash: oldHash, new_hash: oldHash, change: null };
   const newHash = await sha256Text(joinModuleSource(mod.model, text));
-  if (!project.writable) return refused(project.locked ? 'vba.locked' : 'vba.write', oldHash, newHash);
-  const problems = validateModuleText({ text, codePage: project.codePage, originalBytes: mod.sourceBytes });
-  if (problems.length) return { ...refused(problems[0].code, oldHash, newHash), reason: `${problems[0].line}:${problems[0].col}` };
-  if (wb.vba.signed && !acknowledgeSignature) return refused('vba.signature', oldHash, newHash);
+  const blocked = notWritable(project, oldHash, newHash) || invalidText(project, text, mod.sourceBytes, oldHash, newHash) || notAcknowledged(wb, acknowledgeSignature, oldHash, newHash);
+  if (blocked) return blocked;
   changeSet.modules.replace.set(mod.name, text);
   if (wb.vba.signed) changeSet.acknowledgeSignature = true;
   return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: { op: 'replace', target: { type: 'module', name: mod.name }, oldHash, newHash } };
@@ -122,6 +136,38 @@ async function replaceModule(wb, action, recipe, changeSet, { acknowledgeSignatu
   const found = moduleTarget(wb, action.target.name);
   if (found.outcome) return found.outcome;
   return stageModule(wb, found.project, found.mod, splitLines(recipe.inject.text).join('\n'), changeSet, acknowledgeSignature);
+}
+
+async function addModule(wb, action, recipe, changeSet, { acknowledgeSignature }) {
+  const name = action.target.name;
+  const found = projectOf(wb);
+  if (found.outcome) return found.outcome;
+  const { project } = found;
+  const problem = moduleNameProblem(project, name);
+  if (problem) return refused(problem === 'exists' ? 'refused.exists' : 'refused.name');
+  const joined = splitLines(recipe.inject.text).join('\n');
+  const text = joined.endsWith('\n') ? joined : `${joined}\n`;
+  const newHash = await sha256Text(newModuleText(name, text));
+  const blocked = notWritable(project, '', newHash) || invalidText(project, text, undefined, '', newHash) || notAcknowledged(wb, acknowledgeSignature, '', newHash);
+  if (blocked) return blocked;
+  changeSet.modules.add.set(name, text);
+  if (wb.vba.signed) changeSet.acknowledgeSignature = true;
+  return { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: { op: 'add', target: { type: 'module', name }, oldHash: null, newHash } };
+}
+
+async function removeModule(wb, action, changeSet, { acknowledgeSignature }) {
+  const name = action.target.name;
+  const found = moduleTarget(wb, name);
+  if (found.outcome) return found.outcome;
+  const { project, mod } = found;
+  const oldHash = await sha256Text(mod.text);
+  const kind = moduleRemovalProblem(project, name);
+  if (kind) return { ...refused('refused.moduleKind', oldHash), reason: kind };
+  const blocked = notWritable(project, oldHash, '') || notAcknowledged(wb, acknowledgeSignature, oldHash, '');
+  if (blocked) return blocked;
+  changeSet.modules.remove.add(name);
+  if (wb.vba.signed) changeSet.acknowledgeSignature = true;
+  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: '', change: { op: 'remove', target: { type: 'module', name }, oldHash, newHash: null } };
 }
 
 const CODE_KIND = { query: 'm', module: 'vba' };
@@ -182,6 +228,8 @@ export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature =
     else if (action.op === 'replace' && action.target.type === 'module') outcomes.push(await replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'replaceText' && (action.target.type === 'query' || action.target.type === 'module')) outcomes.push(await replaceText(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'align') outcomes.push(await alignTarget(wb, action, recipe, changeSet, source, { acknowledgeSignature }));
+    else if (action.op === 'add' && action.target.type === 'module') outcomes.push(await addModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
+    else if (action.op === 'remove' && action.target.type === 'module') outcomes.push(await removeModule(wb, action, changeSet, { acknowledgeSignature }));
     else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));
     else if (action.op === 'remove' && action.target.type === 'query') outcomes.push(await removeQuery(wb, action, changeSet));
     else if (action.op === 'rename' && action.target.type === 'query') outcomes.push(await renameQuery(wb, action, recipe, changeSet));

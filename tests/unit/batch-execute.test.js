@@ -9,6 +9,7 @@ import { REPORT_COLUMNS, zipClock } from '../../src/batch/execute/collect.js';
 import { sha256Text, sha256Bytes } from '../../src/batch/index/hash.js';
 import { normalizeQueryText } from '../../src/core/pq/section.js';
 import { joinModuleSource } from '../../src/core/vba/module-source.js';
+import { newModuleText } from '../../src/core/vba/writeback.js';
 import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { fixture, generated } from './helpers.js';
 
@@ -484,4 +485,149 @@ test('F2-06: the same now gives the same bytes for a module replace, even when t
   const second = await executeFile(wb, modulePlan(['Module1']), { now: NOW, recipe });
   assert.equal(first.sha256, second.sha256);
   assert.equal(first.rows[0].verified, true);
+});
+
+const NEW_VBA = 'Sub Added()\n    MsgBox "added"\nEnd Sub\n';
+const moduleAddRecipe = (name, text = NEW_VBA) => recipeFor({ target: 'module', op: 'add', name, text });
+const moduleRemoveRecipe = (name) => recipeFor({ target: 'module', op: 'remove', name });
+const indexed = (bytes, name) => indexWorkbook(bytes, { name, relPath: name, size: bytes.length, mtime: 0 });
+
+test('F2-07: an add action for a module writes a standard module and its hash is the index hash', async () => {
+  const wb = await openMixed();
+  const res = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
+  const back = await openWorkbook(res.bytes, 'x.xlsm');
+  assert.deepEqual(back.vba.project.modules.map((m) => m.name), ['Module1', 'ThisWorkbook', 'Sheet1', 'Module2']);
+  assert.equal(moduleOf(back, 'Module2').model.visible, NEW_VBA);
+  assert.equal(moduleOf(back, 'Module2').kind, 'standard');
+  const hash = await sha256Text(newModuleText('Module2', NEW_VBA));
+  assert.deepEqual(res.changes, [{ op: 'add', target: { type: 'module', name: 'Module2' }, oldHash: null, newHash: hash }]);
+  const row = res.rows[0];
+  assert.equal(row.action, 'add');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, '');
+  assert.equal(row.new_hash, hash);
+  assert.equal(row.verified, true);
+  assert.equal(row.signature_removed, false);
+  assert.equal((await indexed(res.bytes, 'x.xlsm')).modules.find((m) => m.name === 'Module2').hash, hash);
+});
+
+test('F2-07: added module text gets one break style and a final line break', async () => {
+  const wb = await openMixed();
+  const res = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2', 'Sub A()\r\nEnd Sub') });
+  assert.equal(moduleOf(await openWorkbook(res.bytes, 'x.xlsm'), 'Module2').model.visible, 'Sub A()\nEnd Sub\n');
+});
+
+test('F2-07: an add of a name the project has, or a name VBA would not accept, is refused', async () => {
+  const wb = await openMixed();
+  const taken = await executeFile(wb, modulePlan(['module1'], 'add'), { now: NOW, recipe: moduleAddRecipe('module1') });
+  assert.equal(taken.rows[0].verdict, 'refused');
+  assert.equal(taken.rows[0].reason_code, 'refused.exists');
+  for (const name of ['1abc', 'Sub', 'a b', '']) {
+    const res = await executeFile(wb, modulePlan([name], 'add'), { now: NOW, recipe: moduleAddRecipe(name) });
+    assert.equal(res.rows[0].reason_code, 'refused.name', JSON.stringify(name));
+    assert.ok(res.bytes === null);
+  }
+  assert.ok(taken.bytes === null);
+});
+
+test('F2-07: an add to a file with no macro project is refused', async () => {
+  const res = await executeFile(await open(), modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
+  assert.ok(res.bytes === null);
+  assert.equal(res.rows[0].verdict, 'refused');
+  assert.equal(res.rows[0].reason_code, 'refused.noMacros');
+});
+
+test('F2-07: added module text a macro cannot hold is refused with its line and column', async () => {
+  const wb = await openMixed();
+  const nul = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2', 'Sub A()\nx = 1\u0000\nEnd Sub') });
+  assert.equal(nul.rows[0].reason_code, 'vba.nul');
+  assert.equal(nul.rows[0].reason, '2:6');
+  const wide = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2', 'x = "\u0100"') });
+  assert.equal(wide.rows[0].reason_code, 'vba.encoding');
+  const attr = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2', 'Attribute VB_Name = "X"\nSub A()\nEnd Sub') });
+  assert.equal(attr.rows[0].reason_code, 'vba.attribute');
+  assert.ok(nul.bytes === null && wide.bytes === null && attr.bytes === null);
+});
+
+test('F2-07: adding a module to a signed project is refused until acknowledged, then the signature is gone', async () => {
+  const wb = await openWorkbook(generated('signed.xlsm'), 'signed.xlsm');
+  const refused = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
+  assert.equal(refused.rows[0].reason_code, 'vba.signature');
+  assert.ok(refused.bytes === null);
+  const done = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2'), acknowledgeSignature: true });
+  assert.equal(done.rows[0].verdict, 'changed');
+  assert.equal(done.rows[0].signature_removed, true);
+  assert.equal((await openWorkbook(done.bytes, 'x.xlsm')).vba.signed, false);
+});
+
+test('F2-07: a locked, unwritable or unreadable project is refused for an add and for a remove', async () => {
+  const cases = [
+    [(wb) => { wb.vba.project.writable = false; wb.vba.project.locked = true; }, 'vba.locked'],
+    [(wb) => { wb.vba.project.writable = false; }, 'vba.write'],
+    [(wb) => { wb.vba = { ...wb.vba, project: null, error: 'vba.dir' }; }, 'vba.dir']
+  ];
+  for (const [tamper, code] of cases) {
+    const a = await openMixed();
+    tamper(a);
+    const add = await executeFile(a, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
+    assert.equal(add.rows[0].reason_code, code);
+    const b = await openMixed();
+    tamper(b);
+    const remove = await executeFile(b, modulePlan(['Module1'], 'remove'), { now: NOW, recipe: moduleRemoveRecipe('Module1') });
+    assert.equal(remove.rows[0].reason_code, code);
+    assert.ok(add.bytes === null && remove.bytes === null);
+  }
+});
+
+test('F2-07: a remove action takes out a standard module and reports its index hash', async () => {
+  const wb = await openMixed();
+  const full = moduleOf(wb, 'Module1').text;
+  const res = await executeFile(wb, modulePlan(['Module1'], 'remove'), { now: NOW, recipe: moduleRemoveRecipe('Module1') });
+  const back = await openWorkbook(res.bytes, 'x.xlsm');
+  assert.deepEqual(back.vba.project.modules.map((m) => m.name), ['ThisWorkbook', 'Sheet1']);
+  assert.deepEqual(res.changes, [{ op: 'remove', target: { type: 'module', name: 'Module1' }, oldHash: await sha256Text(full), newHash: null }]);
+  const row = res.rows[0];
+  assert.equal(row.action, 'remove');
+  assert.equal(row.verdict, 'changed');
+  assert.equal(row.old_hash, (await indexed(generated('mixed.xlsm'), 'mixed.xlsm')).modules.find((m) => m.name === 'Module1').hash);
+  assert.equal(row.new_hash, '');
+  assert.equal(row.verified, true);
+});
+
+test('F2-07: a sheet or workbook module cannot be removed and the reason names its kind', async () => {
+  const wb = await openMixed();
+  for (const name of ['ThisWorkbook', 'Sheet1']) {
+    const res = await executeFile(wb, modulePlan([name], 'remove'), { now: NOW, recipe: moduleRemoveRecipe(name) });
+    assert.ok(res.bytes === null);
+    assert.equal(res.rows[0].verdict, 'refused');
+    assert.equal(res.rows[0].reason_code, 'refused.moduleKind');
+    assert.equal(res.rows[0].reason, 'document');
+    assert.equal(res.rows[0].old_hash, await sha256Text(moduleOf(wb, name).text));
+  }
+});
+
+test('F2-07: a remove of a module the file does not have, or from a file with no macros, is skipped', async () => {
+  const wb = await openMixed();
+  const missing = await executeFile(wb, modulePlan(['Nope'], 'remove'), { now: NOW, recipe: moduleRemoveRecipe('Nope') });
+  assert.equal(missing.rows[0].verdict, 'skipped');
+  assert.equal(missing.rows[0].reason_code, 'skip.notApplicable');
+  const none = await executeFile(await open(), modulePlan(['Module1'], 'remove'), { now: NOW, recipe: moduleRemoveRecipe('Module1') });
+  assert.equal(none.rows[0].verdict, 'skipped');
+});
+
+test('F2-07: removing a module in a signed project is refused until acknowledged', async () => {
+  const wb = await openWorkbook(generated('signed.xlsm'), 'signed.xlsm');
+  const refused = await executeFile(wb, modulePlan(['Module1'], 'remove'), { now: NOW, recipe: moduleRemoveRecipe('Module1') });
+  assert.equal(refused.rows[0].reason_code, 'vba.signature');
+  const done = await executeFile(wb, modulePlan(['Module1'], 'remove'), { now: NOW, recipe: moduleRemoveRecipe('Module1'), acknowledgeSignature: true });
+  assert.equal(done.rows[0].signature_removed, true);
+});
+
+test('F2-07: the same now gives the same bytes for a module add, even when the clock moves', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 14, 10, 0, 0) });
+  const wb = await openMixed();
+  const a = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
+  t.mock.timers.tick(30000);
+  const b = await executeFile(wb, modulePlan(['Module2'], 'add'), { now: NOW, recipe: moduleAddRecipe('Module2') });
+  assert.equal(a.sha256, b.sha256);
 });

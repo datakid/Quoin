@@ -296,6 +296,41 @@ export const S = {
     toggle: 'Steps',
     toggleAria: 'Show or hide the steps panel'
   },
+  nav: {
+    searchLabel: 'Search queries',
+    searchPlaceholder: 'Search, or code: and step: to look inside',
+    group: 'Group by',
+    sort: 'Sort by',
+    groups: { none: 'No grouping', folder: 'Folder', load: 'Load target', status: 'Status', layer: 'Layer' },
+    sorts: { section: 'Workbook order', name: 'Name', lastRun: 'Last run', duration: 'Duration', rows: 'Rows' },
+    chips: { edited: 'Edited', errors: 'Errors', stale: 'Stale', never: 'Never run', loaded: 'Loaded', connection: 'Connection only', functions: 'Functions', macro: 'Linked to a macro' },
+    more: 'More',
+    chipsLabel: 'Filters',
+    none: 'No queries match.',
+    noFolder: 'No folder',
+    layers: { sources: 'Sources', staging: 'Staging', outputs: 'Outputs' },
+    loads: { table: 'Loaded to a sheet', connection: 'Connection only', function: 'Functions' },
+    states: { error: 'Errors', stale: 'Out of date', running: 'Running', queued: 'Waiting', stopped: 'Stopped', cancelled: 'Cancelled', never: 'Never run', ok: 'Ran', skipped: 'Functions' },
+    groupCounts: (n, st) => {
+      const parts = [String(n)];
+      if (st.error) parts.push(`${st.error} ${st.error === 1 ? 'error' : 'errors'}`);
+      if (st.stale) parts.push(`${st.stale} stale`);
+      return parts.join(' \u00b7 ');
+    },
+    matches: (n) => (n === 1 ? '1 match' : `${n} matches`),
+    selected: (n) => `${n} selected`,
+    run: 'Run',
+    runDownstream: 'Run with downstream',
+    moreActions: 'More actions',
+    revert: 'Revert',
+    showInGraph: 'Show in graph',
+    copyNames: 'Copy names',
+    copied: (n) => `Copied ${n} names.`,
+    clearSelection: 'Clear selection',
+    asEdited: 'Edited',
+    rowsOf: (n) => (n === 1 ? '1 row' : `${n} rows`),
+    position: (i, n) => `${i} of ${n}`
+  },
   deps: {
     dependsOn: 'Depends on',
     usedBy: 'Used by',

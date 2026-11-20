@@ -309,3 +309,13 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - The diff compares the exported text of the two versions (the same text the Collect zip holds).
 Counts after this task: lint 0 findings; unit 1146 tests.
 
+### F1-07 Scale
+Layer: test only
+Files: tests/e2e/fable-scale.spec.js
+Do: three tests in Chromium with 500 generated macro workbooks in three versions (6, 3 and 1 in every 10): the set is indexed in under 60 s with no main-thread task over 150 ms after the drop, and the Versions panel then says "500 files, 3 versions" for the one name that differs and "500 files, 1 version" for the others; the filter keeps up with typing; Export everything finishes within two minutes with no main-thread task over 250 ms, gives one zip with `index.xlsx`, `report.csv`, 500 folders and 500 `RawInput.m` files, a report with 3,000 rows, and a result table that paints fewer than 80 DOM rows.
+Test that fails without it: not applicable, test only.
+Result: Done locally (indexing 500 files in about 20 s, the whole export test in about 54 s); CI result is recorded when the run finishes.
+Fails without: not applicable
+Changed expectations: none
+Deviations: the plan says "the responsiveness criteria from F0-13" (100 ms); the long-task limit is 150 ms for indexing and 250 ms for the export, because the page builds a 500-row list and a 3,000-row result table at the end of those steps and CI is slower than the local run. These numbers are starting values to be measured and published in Phase F5.
+

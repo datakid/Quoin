@@ -212,7 +212,7 @@ export function confirmDialog({ title, body, confirmLabel, cancelLabel }) {
   });
 }
 
-function diffTable(name, before, after) {
+export function diffTable(name, before, after) {
   const rows = hunkLines(diffLines(before, after), 3);
   const glyph = { add: '+', del: '−', same: ' ' };
   const label = { add: S.diffAdded, del: S.diffRemoved, same: S.diffContext };

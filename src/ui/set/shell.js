@@ -1,6 +1,7 @@
 import { h, clear } from '../dom.js';
 import { S, errorMessage } from '../strings.js';
 import { ResultMatrix } from './result-matrix.js';
+import { VariantsPanel } from './variants.js';
 
 const BADGE_TEXT = { ready: S.setBadgeReady, edited: S.setBadgeEdited, skipped: S.setBadgeSkipped, failed: S.setBadgeFailed, pending: S.setBadgePending };
 
@@ -44,7 +45,7 @@ function splitPath(relPath, name) {
 }
 
 export class SetShell {
-  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {} } = {}) {
+  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
     this.container = container;
     this.session = session;
     this.onSummary = onSummary;
@@ -54,6 +55,10 @@ export class SetShell {
     this.openId = null;
     this.rovingId = null;
     this.matrix = null;
+    this.loadVariantText = loadVariantText;
+    this.groupVariants = groupVariants;
+    this.variants = null;
+    this.variantsSignature = '';
     this.query = '';
     this.scheduled = false;
     this.build();
@@ -110,6 +115,7 @@ export class SetShell {
     this.empty.hidden = shown.length > 0;
     this.empty.textContent = all.length === 0 ? S.setEmpty : S.setNoMatch;
     this.filter.hidden = all.length === 0;
+    this.renderVariants(all);
     this.runText.textContent = runBarText(this.session);
     const bar = runBarProgress(this.session);
     this.bar.hidden = !bar;
@@ -166,6 +172,24 @@ export class SetShell {
     next.focus();
   }
 
+  renderVariants(all) {
+    if (this.session.state === 'indexing') return;
+    const indexes = all.filter((f) => f.status === 'ready' && f.index).map((f) => f.index);
+    const signature = indexes.map((i) => i.id).join(',');
+    if (signature === this.variantsSignature) return;
+    this.variantsSignature = signature;
+    if (!indexes.length) {
+      if (this.variants) {
+        this.variants.destroy();
+        this.variants = null;
+      }
+      return;
+    }
+    if (!this.variants) this.variants = new VariantsPanel(this.recipe, { loadText: (item, version) => this.loadVariantText(item, version) });
+    this.variants.setData(this.groupVariants(indexes));
+    this.variants.root.hidden = this.openId !== null;
+  }
+
   showResult(rows, mode = 'report') {
     this.clearResult();
     this.matrix = new ResultMatrix(this.result, { mode });
@@ -188,6 +212,7 @@ export class SetShell {
     this.openId = id;
     this.root.dataset.mode = 'file';
     this.recipe.dataset.hosting = 'true';
+    if (this.variants) this.variants.root.hidden = true;
     this.render();
   }
 
@@ -195,6 +220,7 @@ export class SetShell {
     this.openId = null;
     this.root.dataset.mode = 'set';
     delete this.recipe.dataset.hosting;
+    if (this.variants) this.variants.root.hidden = false;
     this.render();
   }
 

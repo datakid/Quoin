@@ -18,6 +18,8 @@ import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
+import { createVariantTextLoader } from './variant-text.js';
+import { groupVariants } from '../batch/verify/variants.js';
 
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
 
@@ -221,7 +223,9 @@ export class App {
       },
       onCollect: () => this.collectSet(),
       onCancel: () => this.cancelSetRun(),
-      onOpen: (id) => this.openFromSet(id)
+      onOpen: (id) => this.openFromSet(id),
+      loadVariantText: (item, version) => this.variantText(item, version),
+      groupVariants
     });
   }
 
@@ -319,6 +323,14 @@ export class App {
     }
     if (unreadable.length) this.status.set({ alertText: S.unreadableItems(unreadable.length) });
     indexPending(this.set, sharedPool());
+  }
+
+  variantText(item, version) {
+    if (!this.variantLoader) {
+      const now = new Date().toISOString();
+      this.variantLoader = createVariantTextLoader({ pool: sharedPool(), session: this.set, now, runId: `v${now}` });
+    }
+    return this.variantLoader(item, version);
   }
 
   openFromSet(id) {

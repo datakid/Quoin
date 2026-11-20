@@ -1,5 +1,5 @@
 {
-  "version": "74e1ef34f2e085f0",
+  "version": "c29d045c8a98c987",
   "files": [
     "./",
     "index.html",
@@ -35,6 +35,7 @@
     "src/app/session.js",
     "src/app/set-session.js",
     "src/app/theme-init.js",
+    "src/app/variant-text.js",
     "src/app/workspace.js",
     "src/batch/execute/collect.js",
     "src/batch/index/file-index.js",
@@ -44,6 +45,7 @@
     "src/batch/protocol.js",
     "src/batch/recipe/recipe.js",
     "src/batch/resolve/resolve.js",
+    "src/batch/verify/variants.js",
     "src/core/bytes.js",
     "src/core/cells.js",
     "src/core/compare/cache-compare.js",
@@ -128,6 +130,7 @@
     "src/ui/print-render.js",
     "src/ui/set/result-matrix.js",
     "src/ui/set/shell.js",
+    "src/ui/set/variants.js",
     "src/ui/strings.js",
     "src/ui/wb/palette.js",
     "src/ui/wb/steps-panel.js",

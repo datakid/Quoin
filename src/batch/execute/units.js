@@ -1,7 +1,6 @@
 import { runOnce, MTable } from '../../core/m/engine.js';
 import { kindOf } from '../../core/m/values.js';
-import { getCulture } from '../../core/m/culture.js';
-import { cellValue, serialOf, exportText } from '../../core/export/cells.js';
+import { tableCells } from '../../core/sheet/grid.js';
 import { buildSnapshot, buildUnitSnapshot } from '../../core/snapshot.js';
 import { substituteTokens, unknownQueryTokens } from '../resolve/tokens.js';
 
@@ -44,38 +43,6 @@ export async function runUnit(wb, file, unit, recipe, { now, base, localOffsetMi
   const options = { sectionText: `${HEAD}${prepared.text};`, queryName: QUERY, snapshot: built.snapshot, culture: recipe.more.culture, limits: recipe.more.limits, now, previewRows: 1 };
   if (localOffsetMin !== undefined) options.localOffsetMin = localOffsetMin;
   return describe(unit, prepared.text, runOnce(options));
-}
-
-const TICKS_PER_DAY = 864000000000;
-
-function snapshotCell(raw, culture) {
-  const cv = cellValue(raw);
-  if (!cv.ok) return { t: 'e', v: '#VALUE!' };
-  const v = cv.v;
-  switch (kindOf(v)) {
-    case 'null':
-      return null;
-    case 'number':
-      return Number.isFinite(v) ? { t: 'n', v } : { t: 'e', v: '#NUM!' };
-    case 'logical':
-      return { t: 'b', v };
-    case 'date':
-    case 'datetime':
-    case 'datetimezone':
-    case 'time':
-      return { t: 'dt', v: serialOf(v) };
-    case 'duration':
-      return { t: 'dur', v: Number(v.ticks) / TICKS_PER_DAY };
-    default:
-      return { t: 's', v: exportText(v, culture) };
-  }
-}
-
-export function tableCells(table, cultureName) {
-  const culture = getCulture(cultureName);
-  const rows = [];
-  for (let r = 0; r < table.rowCount; r++) rows.push(table.cols.map((col) => snapshotCell(col[r], culture)));
-  return rows;
 }
 
 function outputSource(name, table, cultureName) {

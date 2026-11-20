@@ -144,3 +144,79 @@ test('executeFile hands a transform recipe to the transform step and returns its
   assert.deepEqual(viaEntry.outputs.map((o) => [o.name, o.sha256]), direct.outputs.map((o) => [o.name, o.sha256]));
   assert.deepEqual(viaEntry.rows.map((r) => r.verdict), ['changed', 'changed']);
 });
+
+const runSheet = async (name, recipe, extra = {}) => {
+  const s = await setup(name, recipe);
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', ...extra });
+  return { ...s, result, back: result.outputs && result.outputs.length ? await openWorkbook(result.outputs[0].bytes, 'copy.xlsx') : null };
+};
+
+test('a new sheet per unit is added to one copy of the source workbook and the source content is untouched', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newSheet', name: 'Clean-{unit.index}' });
+  const { wb, result, back } = await runSheet('pq_simple.xlsx', recipe);
+  assert.equal(result.outputs.length, 1);
+  assert.deepEqual(back.sheets.map((s) => s.name), [...wb.sheets.map((s) => s.name), 'Clean-1', 'Clean-2']);
+  assert.deepEqual(back.queries.map((q) => q.original), wb.queries.map((q) => q.original));
+  const source = (await buildSnapshot(wb)).sources.find((s) => s.name === 'StudentNames');
+  assert.deepEqual(await readUsedGrid(back, 'Clean-1'), [source.columns.map((c) => ({ t: 's', v: c })), ...source.rows]);
+});
+
+test('the copy is named the way the editor names a saved copy, and the output carries its hash', async () => {
+  const { wb, result } = await runSheet('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newSheet' }));
+  assert.match(result.outputs[0].name, /\.xlsx$/);
+  assert.equal(result.outputs[0].name, result.rows[0].output.split(' [')[0]);
+  assert.match(result.outputs[0].sha256, /^[0-9a-f]{64}$/);
+  assert.deepEqual([result.bytes, result.sha256], [result.outputs[0].bytes, result.outputs[0].sha256]);
+  assert.ok(wb.sheets.length >= 1);
+});
+
+test('without a name template every sheet is called Result and a taken name gets -2, -3 without regard to case', async () => {
+  const { back } = await runSheet('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newSheet' }));
+  assert.deepEqual(back.sheets.map((s) => s.name).slice(-2), ['Result', 'Result-2']);
+  const clash = await runSheet('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newSheet', name: 'studentresults' }));
+  assert.deepEqual(clash.back.sheets.map((s) => s.name).slice(-2), ['studentresults-2', 'studentresults-3']);
+});
+
+test('the report has one row per unit naming the copy and the sheet, verified after the file was read back', async () => {
+  const { result } = await runSheet('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newSheet', name: 'Clean-{unit.index}' }));
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified, r.new_hash === result.outputs[0].sha256]), [['StudentNames', 'changed', '', true, true], ['StudentResults', 'changed', '', true, true]]);
+  assert.ok(result.rows[0].output.endsWith(' [Clean-1]'));
+  assert.ok(result.rows[1].output.endsWith(' [Clean-2]'));
+});
+
+test('a unit that fails adds no sheet and the others still land in the copy', async () => {
+  const m = `let T = ${CURRENT} in if {unit.index} = 1 then error "boom" else T`;
+  const { result, back } = await runSheet('pq_simple.xlsx', recipeOf(m, { mode: 'newSheet', name: 'Clean-{unit.index}' }));
+  assert.deepEqual(back.sheets.map((s) => s.name).slice(-1), ['Clean-2']);
+  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['failed', 'unit.error'], ['changed', '']]);
+});
+
+test('when no unit gives a table there is no copy at all', async () => {
+  const { result } = await runSheet('pq_simple.xlsx', recipeOf('1 + 1', { mode: 'newSheet' }));
+  assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
+  assert.deepEqual(result.rows.map((r) => r.verdict), ['failed', 'failed']);
+});
+
+test('a result that does not fit a sheet is refused and the copy holds only the others', async () => {
+  const m = 'if {unit.index} = 1 then #table({"A"}, {{Text.Repeat("x", 40000)}}) else Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]';
+  const { result, back } = await runSheet('pq_simple.xlsx', recipeOf(m, { mode: 'newSheet', name: 'Clean-{unit.index}' }));
+  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['refused', 'refused.cellTooLong'], ['changed', '']]);
+  assert.deepEqual(back.sheets.map((s) => s.name).slice(-1), ['Clean-2']);
+});
+
+test('a macro workbook gets its new sheet and keeps every module', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newSheet', name: 'Out' }, { scope: { type: 'tables', match: 'position', position: { kind: 'first' } } });
+  const s = await setup('pq_vba_complex.xlsm', recipe);
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  const back = await openWorkbook(result.outputs[0].bytes, 'copy.xlsm');
+  assert.deepEqual(back.vba.project.modules.map((m) => [m.name, m.text]), s.wb.vba.project.modules.map((m) => [m.name, m.text]));
+  assert.equal(back.sheets.at(-1).name, 'Out');
+  assert.match(result.outputs[0].name, /\.xlsm$/);
+});
+
+test('the same file run twice gives the same copy byte for byte', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newSheet' });
+  const a = await runSheet('pq_simple.xlsx', recipe);
+  const b = await runSheet('pq_simple.xlsx', recipe);
+  assert.equal(a.result.outputs[0].sha256, b.result.outputs[0].sha256);
+});

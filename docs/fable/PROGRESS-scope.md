@@ -169,6 +169,25 @@ Decisions made inside gaps in the plan:
 - Names of new files are not made unique inside a worker. Worker outputs carry the plan's names and the main thread runs them through one `NameBook` for the whole zip.
 - Output is refused, never cut, when it would not fit a sheet.
 
+## F3-06 Output: new sheet
+
+Layer: core sheet, save and execute
+Files: src/core/sheet/add-sheets.js, sheet-xml.js, grid.js (new), src/core/export/limits.js (new), src/batch/execute/transform.js, src/batch/resolve/resolve.js (default sheet name `Result`), tests/unit/sheet-add.test.js (new, 15 tests), tests/unit/batch-transform.test.js (9 more). Edits to files owned by others: `src/core/save.js` (Writer: `refuseUnapplied` now refuses only `sheets.write`; `applyChangeSet` calls `addSheetsToPackage`; `selfCheck` calls `verifyAddedSheets`; three small hunks) and `src/core/export/xlsx.js` (trunk: `tableToXlsx` now builds its sheet with the shared `sheetXml`, output bytes unchanged), `src/batch/execute/index.js` (Writer: passes `apply` to the transform step).
+Do: `ChangeSet.sheets.add` is `[{name, table, culture}]`. `addSheetsToPackage` adds `xl/worksheets/sheetN.xml` (next free N), one `<sheet>` at the end of `<sheets>` with the next free `sheetId` and `rIdN`, one relationship, one content-type override, and appends five cell styles (date, date-time, time, duration, bold header) to the workbook's own `styles.xml`, reusing number formats it already has. Every other part is byte-identical, and `selfCheck` enforces that. Inline strings are used, so `sharedStrings.xml` is untouched. After the write, `verifyAddedSheets` re-opens the file and compares the sheet list and every cell of each new sheet with the table. In `executeTransform`, `output.mode: 'newSheet'` adds one sheet per unit to a single copy of the source workbook, named by the plan's template (default `Result`) through `NameBook` seeded with the workbook's sheet names (`Result`, `Result-2`, case-insensitive, 31 code points); the copy is named by `suggestedFileName`; one report row per unit, `output` is `<copy name> [<sheet name>]`, all rows share the file hash. Units that fail or do not fit a sheet add nothing; no usable unit means no copy.
+Test that fails without it: `sheet-add.test.js` fails on a missing module and the nine new-sheet tests in `batch-transform.test.js` fail with `newSheet output is not supported yet`; with the sheet comparison removed from the check 1 fails, with the relationship prefix fixed to `r:` 1 fails; with the change all pass.
+Checked outside Quoin: a typed sheet added to each of the 9 fixture workbooks (5 macro workbooks, `xlsxwriter` files and a Microsoft template) opens in openpyxl with the right values, types and formats and converts in LibreOffice without error.
+Result: Done locally; the real-Excel pack item is pending (open the copy in Excel: no repair prompt, new sheet last, date formats right, macros still run, Power Query still refreshes).
+Fails without: yes
+Changed expectations: `batch-chain.test.js` is my own: its "no output name" case now uses `combined`, because `newSheet` has a default name.
+Deviations: none beyond the edits listed.
+
+Decisions made inside gaps in the plan:
+
+- The new sheet is always last, never selected, with a bold header and no column widths.
+- `docProps/app.xml` is left as it was. Its sheet-name list is metadata and goes out of date; this is the likeliest thing for the real-Excel pack to catch.
+- A styles part that cannot take new entries (no `fonts` or `cellXfs`, or prefixed names) fails the file as `check.part`; none of the 9 fixtures does.
+- Names are made valid and unique by the caller; `addSheetsToPackage` throws a `TypeError` for a bad or repeated name, because that is a bug and not a user condition.
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.

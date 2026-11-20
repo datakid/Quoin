@@ -96,7 +96,7 @@ test('an output keeps its values and types when a later unit reads it', async ()
 });
 
 test('a recipe with no output name has nothing to chain and registers nothing', async () => {
-  const recipe = recipeOf(`try ${TABLE('Combined')} otherwise ${CURRENT}`, { mode: 'newSheet' });
+  const recipe = recipeOf(`try ${TABLE('Combined')} otherwise ${CURRENT}`, { mode: 'combined' });
   const { wb, file, filePlan } = await setup('pq_simple.xlsx', recipe);
   const { runs } = await runFileUnits(wb, file, filePlan, recipe, { now: NOW });
   assert.deepEqual(runs.map((r) => r.outputName), [null, null]);

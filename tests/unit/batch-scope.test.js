@@ -301,9 +301,11 @@ test('a new file without a name template gets the default file name', () => {
   assert.deepEqual(plan.files[0].actions.map((a) => a.output), [{ mode: 'newFile', name: 'a__Data.xlsx' }, { mode: 'newFile', name: 'a__Notes.xlsx' }]);
 });
 
-test('a mode without a name template has a null name', () => {
-  const plan = resolvePlan(transform({}, { output: { mode: 'newSheet' } }), [withSheets('f1', 'a.xlsx', ['Data'])], { now: NOW });
-  assert.deepEqual(plan.files[0].actions[0].output, { mode: 'newSheet', name: null });
+test('a new sheet without a name template gets the default sheet name and the other modes have a null name', () => {
+  const sheet = resolvePlan(transform({}, { output: { mode: 'newSheet' } }), [withSheets('f1', 'a.xlsx', ['Data'])], { now: NOW });
+  assert.deepEqual(sheet.files[0].actions[0].output, { mode: 'newSheet', name: 'Result' });
+  const combined = resolvePlan(transform({}, { output: { mode: 'combined' } }), [withSheets('f1', 'a.xlsx', ['Data'])], { now: NOW });
+  assert.deepEqual(combined.files[0].actions[0].output, { mode: 'combined', name: null });
 });
 
 test('an unknown token in the output name or in the query text is a planning error and the plan is still made', () => {

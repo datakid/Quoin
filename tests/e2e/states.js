@@ -118,15 +118,15 @@ export async function setUpSetState(page, state) {
     const ref = (i) => ({ name: `book${i}.xlsx`, relPath: `east/book${i}.xlsx`, size: 10, lastModified: 1, file: new Blob([new Uint8Array(1)]) });
     set.addFiles([1, 2, 3, 4].map(ref));
     if (state === 'indexing') {
-      set.indexed('f0001', { status: 'ready', queries: [{ name: 'A' }] });
+      set.indexed('f0001', { status: 'ready', queries: [{ name: 'A', hash: 'a'.repeat(64) }], modules: [] });
       return;
     }
     if (state === 'empty') {
       for (const f of set.list()) set.removeFile(f.id);
       return;
     }
-    set.indexed('f0001', { status: 'ready', queries: [{ name: 'A' }, { name: 'B' }] });
-    set.indexed('f0002', { status: 'ready', queries: [{ name: 'C' }] });
+    set.indexed('f0001', { status: 'ready', queries: [{ name: 'A', hash: 'a'.repeat(64) }, { name: 'B', hash: 'b'.repeat(64) }], modules: [] });
+    set.indexed('f0002', { status: 'ready', queries: [{ name: 'C', hash: 'c'.repeat(64) }], modules: [] });
     set.refused('f0003', 'file.encrypted');
     set.failed('f0004', 'boom');
     if (state === 'previewing') set.beginPreview();

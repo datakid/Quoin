@@ -39,3 +39,19 @@ for (const theme of ['light', 'dark']) {
     await audit(page, `${theme} file open`);
   });
 }
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations with a result table, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await setUpSetState(page, 'done');
+    await page.evaluate(() => {
+      const verdicts = ['unchanged', 'changed', 'skipped', 'failed', 'refused'];
+      const rows = verdicts.map((v, i) => ({ run_id: 'r', file: `b${i}.xlsx`, folder: 'east/', unit: 'b', unit_index: 1, recipe: 'collect', action: 'collect', compute: '', verdict: v, reason_code: '', reason: v === 'skipped' ? 'Skipped. Quoin opens .xlsx, .xlsm, .xltx and .xltm files.' : '', old_hash: 'a'.repeat(64), new_hash: 'b'.repeat(64), output: '', verified: true, signature_removed: false, duration_ms: 1 }));
+      window.__quoin.shell.showResult(rows, 'report');
+    });
+    await page.waitForSelector('[role=grid]');
+    await audit(page, `${theme} matrix`);
+  });
+}

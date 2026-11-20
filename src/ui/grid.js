@@ -82,7 +82,8 @@ function compareKeys(a, b) {
 }
 
 export class Grid {
-  constructor(host, { onDrill = null, onError = null } = {}) {
+  constructor(host, { onDrill = null, onError = null, cellClass = null } = {}) {
+    this.cellClass = cellClass;
     this.onDrill = onDrill;
     this.onError = onError;
     this.columns = [];
@@ -305,6 +306,8 @@ export class Grid {
       if (d.cls) classes.push(d.cls);
       const diff = this.diffs && this.diffs.has(`${realIndex}:${c}`);
       if (diff) classes.push('diff');
+      const extra = data && this.cellClass ? this.cellClass(realIndex, c, v) : '';
+      if (extra) classes.push(extra);
       if (this.isSelected(i, c)) classes.push('sel');
       if (this.active && this.active.r === i && this.active.c === c) classes.push('active');
       const attrs = { class: classes.join(' '), role: 'gridcell', id: `gc-${i}-${c}`, 'aria-colindex': String(c + 2) };

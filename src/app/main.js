@@ -168,7 +168,7 @@ export class App {
     this.registry = buildRegistry(this);
     this.fileHead = h('span', { class: 'fn-head' });
     this.fileTail = h('span', { class: 'fn-tail' });
-    this.backBtn = h('button', { class: 'btn btn-quiet back-button', type: 'button', hidden: true, onclick: () => this.backToSet() }, S.setBack);
+    this.backBtn = h('button', { class: 'btn btn-quiet back-button', type: 'button', onclick: () => this.backToSet() }, S.setBack);
     this.fileBtn = h('button', { class: 'file-name', type: 'button', hidden: true, onclick: () => this.showDetails() }, this.fileHead, this.fileTail);
     this.fileMeta = h('span', { class: 'file-meta item-meta', hidden: true });
     this.paletteBtn = h('button', { class: 'btn btn-quiet palette-button', type: 'button', hidden: true, 'aria-keyshortcuts': 'Control+K Meta+K', onclick: () => this.openPalette() }, S.palette.trigger, h('span', { class: 'kbd', 'aria-hidden': 'true' }, S.palette.kbd));
@@ -179,7 +179,7 @@ export class App {
     this.downloadBtn = h('button', { class: 'btn', type: 'button', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': false, 'aria-disabled': true, title: S.downloadNone, onclick: () => this.openDownload() }, S.download, this.downloadCount);
     this.topbar = h('header', { class: 'topbar' },
       h('h1', { class: 'brand' }, markImg('brand-mark', 28), h('span', { class: 'wordmark' }, S.appName)),
-      this.backBtn, this.fileBtn, this.fileMeta, h('span', { class: 'spacer' }), this.paletteBtn, this.printBtn, this.exportBtn, this.settingsBtn, this.downloadBtn);
+      this.fileBtn, this.fileMeta, h('span', { class: 'spacer' }), this.paletteBtn, this.printBtn, this.exportBtn, this.settingsBtn, this.downloadBtn);
     this.input = h('input', { type: 'file', class: 'sr-only', accept: '.xlsx,.xlsm,.xltx,.xltm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', tabindex: '-1', 'aria-label': S.chooseFile });
     this.input.addEventListener('change', () => {
       if (this.input.files && this.input.files[0]) this.openFile(this.input.files[0]);
@@ -344,7 +344,8 @@ export class App {
     this.ws = null;
     this.session = new Session();
     this.status.set({ run: null, compare: null, note: '', edits: 0, counts: '', alertText: '' });
-    for (const el of [this.backBtn, this.fileBtn, this.paletteBtn, this.printBtn, this.exportBtn, this.downloadBtn]) el.hidden = true;
+    this.backBtn.remove();
+    for (const el of [this.fileBtn, this.paletteBtn, this.printBtn, this.exportBtn, this.downloadBtn]) el.hidden = true;
     this.syncLeaveGuard();
     this.shell.closeFile();
     this.fileMeta.hidden = false;
@@ -363,7 +364,10 @@ export class App {
     this.setRun = run;
     return run.promise.then((out) => {
       if (this.setRun === run) this.setRun = null;
-      if (out.ok) saveBytes(out.bytes, out.name, 'application/zip');
+      if (out.ok) {
+        saveBytes(out.bytes, out.name, 'application/zip');
+        if (this.shell) this.shell.showResult(out.rows, 'report');
+      }
       else if (out.code) this.status.set({ alertText: errorMessage(out.code) });
       return out;
     });
@@ -496,7 +500,8 @@ export class App {
     }
     if (this.fromSet && this.fromSet !== setId) this.set.setEdited(this.fromSet, false);
     this.fromSet = inSet ? setId : null;
-    this.backBtn.hidden = !inSet;
+    if (inSet) this.fileBtn.before(this.backBtn);
+    else this.backBtn.remove();
     this.ws = new Workspace(inSet ? this.shell.host : this.mainEl, this.session, this.settings, this.status);
     this.ws.onEdit(() => {
       this.status.set({ edits: this.session.editCount });

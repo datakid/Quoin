@@ -8,7 +8,7 @@ Started from `fable` at 56b3974. Tasks: F3-01, F3-03, F3-04, then F3-02 for the 
 
 ## Interface for trunk
 
-- `resolvePlan(recipe, indexes, {now})` is unchanged for callers. It now resolves `collect` and `transform`. every recipe kind now resolves; an unknown kind still throws `… recipes are not resolved yet`; `batch-resolve.test.js` still passes unedited.
+- `resolvePlan(recipe, indexes, {now})` is unchanged for callers. It now resolves all five recipe kinds (`collect`, `inject`, `replace`, `transform`, `align`); an unknown kind still throws `… recipes are not resolved yet`. `batch-resolve.test.js` needed one test changed, which is explained under the resolve side of replace and align.
 - New export `inspectNeeds(recipe, indexes)` in `src/batch/resolve/scope.js` (re-exported from `resolve.js`): ids of ready files whose sheets still have `nonEmpty: null` while the recipe filters on non-empty sheets. Trunk sends `inspect` with `need: ['nonEmpty']` for those, replaces their indexes, then calls `resolvePlan`.
 - `src/batch/resolve/tokens.js` holds the one token substitution used by resolve (output names) and by `execute/units.js` (query text): `substituteTokens(text, file, unit)`, `unknownQueryTokens(text)`, `templateFor(text)` with `fileContext(file)` (the same substitution, compiled once for many units), `baseName`, `folderOf`. Output naming (F3-05 onward) should import it, not rewrite it.
 

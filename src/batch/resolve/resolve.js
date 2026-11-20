@@ -1,11 +1,13 @@
 import { unknownTokens } from '../recipe/recipe.js';
 import { baseName, fileContext, templateFor, unknownQueryTokens } from './tokens.js';
+import { alignSourceFor } from './align-source.js';
 import { buildMatcher, matchPins, pinnedUnits, ruleUnits, unknownNonEmpty, worksheets } from './scope.js';
 
 export { inspectNeeds } from './scope.js';
+export { alignSourceFor } from './align-source.js';
 
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-const RESOLVED = ['collect', 'inject', 'transform'];
+const RESOLVED = ['collect', 'inject', 'replace', 'transform', 'align'];
 const TARGET_TYPE = { workbook: 'sheet', sheet: 'sheet', table: 'range' };
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -32,19 +34,36 @@ function injectNames(index, inject, matcher) {
   return (inject.target === 'module' ? index.modules : index.queries).filter((m) => matcher.test(m.name)).map((m) => m.name);
 }
 
+const memberAction = (unit, op, type, name) => ({ unit, op, target: { type, name }, compute: null, output: null, replaces: null });
+
+const notApplicable = (index, detail) => ({ fileId: index.id, source: 'rule', units: [], actions: [], skipped: { code: 'skip.notApplicable', detail } });
+
+function planMemberFile(index, members, detail) {
+  if (!members.length) return notApplicable(index, detail);
+  const unit = workbookUnit(index);
+  return { fileId: index.id, source: 'rule', units: [unit], actions: members.map(([op, type, name]) => memberAction(unit, op, type, name)), skipped: null };
+}
+
 function planInjectFile(index, ctx) {
   if (index.status === 'refused') return skippedFile(index);
   const { inject } = ctx.recipe;
-  const names = injectNames(index, inject, ctx.matcher);
-  if (!names.length) return { fileId: index.id, source: 'rule', units: [], actions: [], skipped: { code: 'skip.notApplicable', detail: inject.name } };
-  const unit = workbookUnit(index);
-  return {
-    fileId: index.id,
-    source: 'rule',
-    units: [unit],
-    actions: names.map((name) => ({ unit, op: inject.op, target: { type: inject.target, name }, compute: null, output: null, replaces: null })),
-    skipped: null
-  };
+  return planMemberFile(index, injectNames(index, inject, ctx.matcher).map((name) => [inject.op, inject.target, name]), inject.name);
+}
+
+function planReplaceFile(index, ctx) {
+  if (index.status === 'refused') return skippedFile(index);
+  const { replace } = ctx.recipe;
+  const members = [];
+  if (replace.in.includes('m')) for (const q of index.queries) members.push(['replaceText', 'query', q.name]);
+  if (replace.in.includes('vba')) for (const m of index.modules) members.push(['replaceText', 'module', m.name]);
+  return planMemberFile(index, members, replace.find);
+}
+
+function planAlignFile(index, ctx) {
+  if (index.status === 'refused') return skippedFile(index);
+  const { align } = ctx.recipe;
+  const has = (align.target === 'module' ? index.modules : index.queries).some((m) => m.name === align.name);
+  return planMemberFile(index, has ? [['align', align.target, align.name]] : [], align.name);
 }
 
 function transformActions(ctx, context, units) {
@@ -95,10 +114,11 @@ function summarise(files) {
   };
 }
 
-function recipeErrors(recipe) {
+function recipeErrors(recipe, indexes) {
   const errors = [];
   if (recipe.output && typeof recipe.output.name === 'string') for (const token of unknownTokens(recipe.output.name)) errors.push({ code: 'recipe.token', detail: token });
   if (recipe.recipe === 'inject' && recipe.inject.op === 'add' && recipe.inject.match === 'pattern') errors.push({ code: 'recipe.patternAdd', detail: recipe.inject.name });
+  if (recipe.recipe === 'align' && !alignSourceFor(recipe.align, indexes)) errors.push({ code: 'align.noSource', detail: recipe.align.hash });
   if (recipe.recipe === 'transform') {
     for (const token of unknownQueryTokens(recipe.query.m)) errors.push({ code: 'recipe.token', detail: token });
     if (recipe.scope.type === 'sheets' && recipe.scope.onlyWithHeader) errors.push({ code: 'scope.headerOnSheets', detail: 'onlyWithHeader' });
@@ -112,7 +132,7 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
   for (const ix of indexes) if (ix.status !== 'ready' && ix.status !== 'refused') throw new Error(`unexpected index status ${ix.status}`);
   const ordered = [...indexes].sort((a, b) => compare(a.relPath, b.relPath) || compare(a.id, b.id));
   const pins = matchPins(recipe.overrides || [], ordered);
-  const errors = recipeErrors(recipe);
+  const errors = recipeErrors(recipe, indexes);
   const orphans = [...pins.orphans];
   let files;
   if (recipe.recipe === 'transform') {
@@ -125,6 +145,8 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
     const matcher = buildMatcher({ match: recipe.inject.match, pattern: recipe.inject.name });
     if (matcher.error) errors.push(matcher.error);
     files = ordered.map((ix) => planInjectFile(ix, { recipe, matcher }));
-  } else files = ordered.map(planCollectFile);
+  } else if (recipe.recipe === 'replace') files = ordered.map((ix) => planReplaceFile(ix, { recipe }));
+  else if (recipe.recipe === 'align') files = ordered.map((ix) => planAlignFile(ix, { recipe }));
+  else files = ordered.map(planCollectFile);
   return { recipe: structuredClone(recipe), now, createdBy: 'resolve', summary: summarise(files), files, orphanPins: orphans, errors };
 }

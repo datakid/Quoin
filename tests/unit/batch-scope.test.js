@@ -322,11 +322,6 @@ test('collect plans do not change: workbook units, null output and pins that do 
   assert.deepEqual(plan.errors, []);
 });
 
-test('recipes other than collect and transform are still not resolved here', () => {
-  const align = parseRecipe(JSON.stringify({ recipe: 'align', v: 1, align: { target: 'query', name: 'Q', hash: 'a'.repeat(64) } })).recipe;
-  assert.throws(() => resolvePlan(align, [], { now: NOW }), /align/);
-});
-
 test('a transform plan is deterministic, ignores input order, leaves its inputs alone and survives structured clone', () => {
   const files = [withSheets('f2', 'b.xlsx', ['Data', 'Notes']), withSheets('f1', 'a.xlsx', ['Data']), { ...tabled, id: 'f3', relPath: 'c.xlsx', name: 'c.xlsx' }];
   const frozen = JSON.stringify(files);

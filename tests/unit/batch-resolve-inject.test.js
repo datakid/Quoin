@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolvePlan } from '../../src/batch/resolve/resolve.js';
+import { alignSourceFor } from '../../src/batch/resolve/align-source.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
@@ -109,9 +110,103 @@ test('an inject plan is deterministic, ignores input order, leaves its inputs al
   assert.deepEqual(structuredClone(a), a);
 });
 
-test('replace-in-code and align recipes are still not resolved here', () => {
-  const find = parseRecipe(JSON.stringify({ recipe: 'replace', v: 1, replace: { in: ['m'], find: 'a', with: 'b' } })).recipe;
-  assert.throws(() => resolvePlan(find, [], { now: NOW }), /replace/);
-  const align = parseRecipe(JSON.stringify({ recipe: 'align', v: 1, align: { target: 'query', name: 'Q', hash: 'a'.repeat(64) } })).recipe;
-  assert.throws(() => resolvePlan(align, [], { now: NOW }), /align/);
+const replaceRecipe = (replace, extra = {}) => {
+  const parsed = parseRecipe(JSON.stringify({ recipe: 'replace', v: 1, replace: { in: ['m', 'vba'], find: 'a', with: 'b', ...replace }, ...extra }));
+  assert.equal(parsed.ok, true, JSON.stringify(parsed));
+  return parsed.recipe;
+};
+
+const alignRecipe = (align) => {
+  const parsed = parseRecipe(JSON.stringify({ recipe: 'align', v: 1, align: { target: 'query', name: 'Sales', hash: 'a'.repeat(64), ...align } }));
+  assert.equal(parsed.ok, true, JSON.stringify(parsed));
+  return parsed.recipe;
+};
+
+test('a replace-in-code recipe gives one replaceText action per query and per module, queries first', () => {
+  const plan = resolvePlan(replaceRecipe({}), [book('f1', 'a.xlsm', { queries: ['Q1', 'Q2'], modules: ['Mod'] })], { now: NOW });
+  assert.deepEqual(actionsOf(plan), [['replaceText', 'query', 'Q1'], ['replaceText', 'query', 'Q2'], ['replaceText', 'module', 'Mod']]);
+  assert.deepEqual(plan.files[0].units, [{ fileId: 'f1', kind: 'workbook', name: 'a', index: 1 }]);
+  assert.deepEqual(plan.files[0].actions.map((a) => [a.compute, a.output, a.replaces]), [[null, null, null], [null, null, null], [null, null, null]]);
+});
+
+test('replace-in-code reaches only the kinds it was asked to', () => {
+  const file = book('f1', 'a.xlsm', { queries: ['Q1'], modules: ['Mod'] });
+  assert.deepEqual(actionsOf(resolvePlan(replaceRecipe({ in: ['m'] }), [file], { now: NOW })), [['replaceText', 'query', 'Q1']]);
+  assert.deepEqual(actionsOf(resolvePlan(replaceRecipe({ in: ['vba'] }), [file], { now: NOW })), [['replaceText', 'module', 'Mod']]);
+});
+
+test('a file with nothing for replace-in-code to search is skipped as not applicable and is not counted', () => {
+  const plan = resolvePlan(replaceRecipe({ in: ['vba'], find: 'server1' }), [book('f1', 'a.xlsx', { queries: ['Q1'] }), book('f2', 'b.xlsm', { modules: ['Mod'] })], { now: NOW });
+  const none = plan.files.find((f) => f.fileId === 'f1');
+  assert.deepEqual([none.units, none.actions, none.skipped], [[], [], { code: 'skip.notApplicable', detail: 'server1' }]);
+  assert.deepEqual(plan.summary, { files: 1, units: 1, groups: [{ unitsPerFile: 1, files: 1 }] });
+});
+
+test('a refused file has no replace-in-code actions', () => {
+  const refused = { ...book('f1', 'old.xls'), status: 'refused', refused: { code: 'file.unsupportedExtension' } };
+  const plan = resolvePlan(replaceRecipe({}), [refused], { now: NOW });
+  assert.deepEqual([plan.files[0].actions, plan.files[0].skipped], [[], { code: 'file.unsupportedExtension', detail: null }]);
+});
+
+test('an align recipe gives every file that has the target one align action, whether or not its hash already matches', () => {
+  const same = { ...book('f1', 'a.xlsx', { queries: ['Sales'] }) };
+  same.queries[0].hash = 'a'.repeat(64);
+  const differs = book('f2', 'b.xlsx', { queries: ['Sales'] });
+  const plan = resolvePlan(alignRecipe({}), [same, differs], { now: NOW });
+  assert.deepEqual(actionsOf(plan, 'f1'), [['align', 'query', 'Sales']]);
+  assert.deepEqual(actionsOf(plan, 'f2'), [['align', 'query', 'Sales']]);
+  assert.deepEqual(plan.summary, { files: 2, units: 2, groups: [{ unitsPerFile: 1, files: 2 }] });
+});
+
+test('an align recipe skips a file that has no target of that name', () => {
+  const plan = resolvePlan(alignRecipe({ target: 'module', name: 'Helpers' }), [book('f1', 'a.xlsm', { queries: ['Helpers'], modules: ['Helpers'] }), book('f2', 'b.xlsm', { modules: ['Other'] })], { now: NOW });
+  assert.deepEqual(actionsOf(plan, 'f1'), [['align', 'module', 'Helpers']]);
+  const none = plan.files.find((f) => f.fileId === 'f2');
+  assert.deepEqual([none.units, none.actions, none.skipped], [[], [], { code: 'skip.notApplicable', detail: 'Helpers' }]);
+});
+
+test('replace and align plans are deterministic, ignore input order and survive structured clone', () => {
+  const files = [book('f2', 'b.xlsm', { queries: ['Q'], modules: ['M'] }), book('f1', 'a.xlsm', { queries: ['Q'] })];
+  for (const recipe of [replaceRecipe({}), alignRecipe({ name: 'Q' })]) {
+    const a = resolvePlan(recipe, files, { now: NOW });
+    assert.deepEqual(a, resolvePlan(recipe, [...files].reverse(), { now: NOW }));
+    assert.deepEqual(structuredClone(a), a);
+  }
+});
+
+test('a recipe of a kind that does not exist is not resolved', () => {
+  assert.throws(() => resolvePlan({ recipe: 'bogus' }, [], { now: NOW }), /bogus/);
+});
+
+const withHash = (file, kind, name, hash) => {
+  file[kind].find((m) => m.name === name).hash = hash;
+  return file;
+};
+const HASH = 'c'.repeat(64);
+
+test('the chosen version of an align recipe is read from the first file in plan order that has that name and hash', () => {
+  const files = [
+    withHash(book('f3', 'z/c.xlsx', { queries: ['Sales'] }), 'queries', 'Sales', HASH),
+    book('f1', 'a/a.xlsx', { queries: ['Sales'] }),
+    withHash(book('f2', 'b/b.xlsx', { queries: ['Sales'] }), 'queries', 'Sales', HASH)
+  ];
+  assert.deepEqual(alignSourceFor(alignRecipe({ hash: HASH }).align, files), { fileId: 'f2', relPath: 'b/b.xlsx', name: 'Sales' });
+});
+
+test('a refused file and a file with the name but another hash are never the source', () => {
+  const refused = { ...withHash(book('f1', 'a.xlsx', { queries: ['Sales'] }), 'queries', 'Sales', HASH), status: 'refused', refused: { code: 'file.unsupportedExtension' } };
+  assert.equal(alignSourceFor(alignRecipe({ hash: HASH }).align, [refused, book('f2', 'b.xlsx', { queries: ['Sales'] })]), null);
+});
+
+test('a module align recipe looks in the modules of each file', () => {
+  const files = [withHash(book('f1', 'a.xlsm', { queries: ['Helpers'], modules: ['Helpers'] }), 'queries', 'Helpers', 'd'.repeat(64)), withHash(book('f2', 'b.xlsm', { modules: ['Helpers'] }), 'modules', 'Helpers', HASH)];
+  assert.deepEqual(alignSourceFor(alignRecipe({ target: 'module', name: 'Helpers', hash: HASH }).align, files), { fileId: 'f2', relPath: 'b.xlsm', name: 'Helpers' });
+});
+
+test('an align plan with no file holding the chosen version is a planning error and still lists the actions', () => {
+  const plan = resolvePlan(alignRecipe({ hash: HASH }), [book('f1', 'a.xlsx', { queries: ['Sales'] })], { now: NOW });
+  assert.deepEqual(plan.errors, [{ code: 'align.noSource', detail: HASH }]);
+  assert.deepEqual(actionsOf(plan), [['align', 'query', 'Sales']]);
+  const found = resolvePlan(alignRecipe({ hash: HASH }), [withHash(book('f1', 'a.xlsx', { queries: ['Sales'] }), 'queries', 'Sales', HASH)], { now: NOW });
+  assert.deepEqual(found.errors, []);
 });

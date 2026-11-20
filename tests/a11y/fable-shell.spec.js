@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { openApp } from '../e2e/helpers.js';
+import { openApp, dropTree, waitForSet, ext } from '../e2e/helpers.js';
 import { SET_STATES, setUpSetState } from '../e2e/states.js';
 
 const require = createRequire(import.meta.url);
@@ -24,4 +24,18 @@ for (const theme of ['light', 'dark']) {
       await audit(page, `${theme} ${state}`);
     });
   }
+}
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations in the set shell with a file open, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    const data = readFileSync(ext('pq_vba_complex.xlsm')).toString('base64');
+    await dropTree(page, [{ name: 'books', children: [{ name: 'pq_vba_complex.xlsm', data }, { name: 'pq_simple.xlsx', data: readFileSync(ext('pq_simple.xlsx')).toString('base64') }] }]);
+    await waitForSet(page);
+    await page.locator('.set-file', { hasText: 'pq_vba_complex.xlsm' }).getByRole('button').click();
+    await page.waitForSelector('.workspace');
+    await audit(page, `${theme} file open`);
+  });
 }

@@ -364,7 +364,10 @@ export class App {
     this.setRun = run;
     return run.promise.then((out) => {
       if (this.setRun === run) this.setRun = null;
-      if (out.ok) saveBytes(out.bytes, out.name, 'application/zip');
+      if (out.ok) {
+        saveBytes(out.bytes, out.name, 'application/zip');
+        if (this.shell) this.shell.showResult(out.rows, 'report');
+      }
       else if (out.code) this.status.set({ alertText: errorMessage(out.code) });
       return out;
     });

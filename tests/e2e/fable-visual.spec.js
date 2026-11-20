@@ -38,3 +38,20 @@ for (const view of VIEWS) {
     await ctx.close();
   });
 }
+
+for (const view of VIEWS.slice(0, 2)) {
+  test(`T-I-04-FABLE: set shell with a result table at ${view.size} in the ${view.theme} theme`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: view.theme, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await openApp(page);
+    await setUpSetState(page, 'doneWithFailures');
+    await page.evaluate(() => {
+      const verdicts = ['unchanged', 'changed', 'skipped', 'failed', 'refused', 'cancelled', 'not-released'];
+      const rows = verdicts.map((v, i) => ({ run_id: 'r', file: `book${i + 1}.xlsx`, folder: 'east/', unit: `book${i + 1}`, unit_index: 1, recipe: 'collect', action: 'collect', compute: '', verdict: v, reason_code: '', reason: v === 'skipped' || v === 'refused' ? 'Skipped. Quoin opens .xlsx, .xlsm, .xltx and .xltm files.' : '', old_hash: `${i}`.repeat(64), new_hash: `${i + 1}`.repeat(64), output: '', verified: true, signature_removed: false, duration_ms: 1 }));
+      window.__quoin.shell.showResult(rows, 'report');
+    });
+    await settle(page);
+    await expect(page).toHaveScreenshot(`fable-shell-matrix-${view.size}-${view.theme}.png`, { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' });
+    await ctx.close();
+  });
+}

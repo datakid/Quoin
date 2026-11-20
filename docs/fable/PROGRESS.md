@@ -280,3 +280,17 @@ Decisions made inside the plan's gaps (log, not yet confirmed by the user):
 - While a run is going, further drops are refused with the existing "Files can be added when nothing is running." message.
 Counts after this task: lint 0 findings; unit 1131 tests.
 
+### F1-05 Result matrix
+Layer: ui/set, ui (one optional argument to the grid)
+Files: src/ui/set/result-matrix.js, src/ui/set/shell.js, src/ui/grid.js, src/app/main.js, src/ui/strings.js, styles/set.css, tests/e2e/fable-matrix.spec.js, tests/a11y/fable-shell.spec.js, tests/e2e/fable-visual.spec.js, asset-manifest.json
+Do: one table for Preview and for the report, in the Result region. Columns: File (folder and name), Unit, Action, Compute, Changed (Would change in Preview), Reason, Old hash, New hash. The "Changed" column says Yes or No for changed and unchanged rows and the verdict word for the others (Skipped, Refused, Failed, Cancelled, Not released). Skipped, refused, cancelled and unchanged rows use the neutral status colour, changed rows the good one, failed and not-released rows the bad one; the word always carries the meaning, not the colour. It reuses the existing `Grid` (virtualised at any size, one tab stop, arrow keys, Home and End, Ctrl+Home and Ctrl+End, copy as TSV), to which one optional `cellClass` hook was added; nothing changes for existing callers. A run now shows its report rows here after the download, and a new run clears the table.
+Test that fails without it: `tests/e2e/fable-matrix.spec.js` (7 tests: columns and row count after a real run; neutral status and words for skipped and refused rows; every verdict word and class; the Preview wording; five thousand rows paint fewer than 80 DOM rows and the last row is reachable by keyboard; arrow keys and Tab; a new run clears it), `tests/a11y/fable-shell.spec.js` (2 axe audits with a table in two themes) and two baselines in `fable-visual.spec.js`.
+Result: Done locally; CI result is recorded when the run finishes.
+Fails without: yes
+Changed expectations: none
+Deviations: the plan says "roving tabindex"; the grid's own model is used, which is one tab stop on the grid with an active cell moved by the arrow keys. It is the same pattern used by the query result grid today.
+Decisions made inside the plan's gaps (log, not yet confirmed by the user):
+- Hashes are shown in full so that copying a cell gives the full value.
+- The table stays after the download until the next run or until the set is emptied.
+Counts after this task: lint 0 findings; unit 1131 tests.
+

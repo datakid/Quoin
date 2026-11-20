@@ -4,8 +4,10 @@ import { checkSection } from '../../core/m/engine.js';
 import { sha256Bytes } from '../index/hash.js';
 import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
+import { executeTransform } from './transform.js';
 
 export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText }) {
+  if (recipe.recipe === 'transform') return executeTransform(wb, filePlan, recipe, { now, meta, runId });
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
   const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));

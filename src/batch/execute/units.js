@@ -71,11 +71,15 @@ function snapshotCell(raw, culture) {
   }
 }
 
-function outputSource(name, table, cultureName) {
+export function tableCells(table, cultureName) {
   const culture = getCulture(cultureName);
   const rows = [];
   for (let r = 0; r < table.rowCount; r++) rows.push(table.cols.map((col) => snapshotCell(col[r], culture)));
-  return { name, kind: 'output', columns: [...table.columns], rows, queryLoaded: false };
+  return rows;
+}
+
+function outputSource(name, table, cultureName) {
+  return { name, kind: 'output', columns: [...table.columns], rows: tableCells(table, cultureName), queryLoaded: false };
 }
 
 function plannedOutputName(filePlan, unit) {

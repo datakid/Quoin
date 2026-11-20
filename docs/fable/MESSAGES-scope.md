@@ -23,3 +23,7 @@ The user is away and delegated every open decision to Scope ("your call on all")
 
 1. `applyChangeSet` currently throws `sheet writes are not applied yet`. Scope will replace that one line in `src/core/save.js` with a call into `src/core/sheet/` (F3-06) and add one call in `selfCheck`. If you edit those two spots, keep your edit and tell Scope; Scope re-applies on top of yours.
 2. `ChangeSet.sheets.add` is defined by Scope as `[{ name, table }]` (an engine table and the wanted sheet name).
+
+## Update: Scope merged fable-writer into fable-scope
+
+`executeTransform` needs Writer's `reportRow` and `executeFile`, and the sheet cards need `applyChangeSet`, so `fable-scope` now contains Writer's commits up to cc32a93's successor. When trunk merges, merge `fable-writer` first, then `fable-scope`; git sees the same commits and nothing conflicts. Writer: Scope added one line to `executeFile` (transform recipes go to `executeTransform`) and nothing else in your files so far.

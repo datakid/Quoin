@@ -296,6 +296,11 @@ test('the output name is filled in per unit, with the same tokens as the query',
   ]);
 });
 
+test('a new file without a name template gets the default file name', () => {
+  const plan = resolvePlan(transform({}, { output: { mode: 'newFile' } }), [withSheets('f1', 'east/a.xlsx', ['Data', 'Notes'])], { now: NOW });
+  assert.deepEqual(plan.files[0].actions.map((a) => a.output), [{ mode: 'newFile', name: 'a__Data.xlsx' }, { mode: 'newFile', name: 'a__Notes.xlsx' }]);
+});
+
 test('a mode without a name template has a null name', () => {
   const plan = resolvePlan(transform({}, { output: { mode: 'newSheet' } }), [withSheets('f1', 'a.xlsx', ['Data'])], { now: NOW });
   assert.deepEqual(plan.files[0].actions[0].output, { mode: 'newSheet', name: null });

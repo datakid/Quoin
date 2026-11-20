@@ -151,6 +151,24 @@ Decisions made inside gaps in the plan:
 
 New strings for trunk: planning error `align.noSource` ("No file in the set has this version of the query or module.").
 
+## F3-05 Output: new file per unit
+
+Layer: execute and core export
+Files: src/core/sheet/names.js (new), src/batch/execute/transform.js (new), src/batch/execute/units.js (exports `tableCells`), src/batch/resolve/resolve.js (default name), tests/unit/batch-naming.test.js, tests/unit/batch-transform.test.js (new). Edits to files owned by others, each small: `src/core/export/xlsx.js` (trunk: exports `MAX_ROWS` and `MAX_COLS`, takes `{now}` for a frozen zip clock, and writes a carriage return as `&#13;`); `src/batch/execute/index.js` (Writer: `executeFile` hands a transform recipe to `executeTransform`, one line plus the import).
+Do: `executeTransform(wb, filePlan, recipe, {now, meta, runId})` runs the units, writes each result as a values-only `.xlsx` with one sheet `Result`, reads the bytes back through the workbook reader and compares every cell before it releases the file, and returns `{fileId, outputs, rows, failures, warnings}`. `outputs` is `[{unit, name, bytes, sha256}]` and `name` is the plan's filled-in template, not yet unique across files; trunk applies `NameBook.file` over the whole run when it builds the zip, because workers cannot see each other. One report row per unit: `changed` with the output name, hash and `verified: true`; `failed` with the unit's error code and its text; `refused.tooLarge` for more than 16384 columns or 1048575 rows; `refused.cellTooLong` for a cell over 32767 characters; `not-released / verify.readBack` if the file does not read back equal. `failures` carries each failed unit's substituted query for the UI. A recipe without a name template gets `{file.name}__{unit.name}.xlsx`.
+Test that fails without it: `batch-transform.test.js` (14 tests) and `batch-naming.test.js` (11) fail on a missing module; with the change all pass. A bug found by writing the tests: a carriage return in a cell was written raw, so a conforming XML reader turns it into a line feed and our own reader did not, which hid it from the read-back; it is now written as `&#13;`.
+Checked outside Quoin: a typed result (date, date-time, time, duration, logical, number, text with `&` and `<`, null, error, CR LF, leading and trailing spaces) opens in openpyxl and in LibreOffice headless with the right values, types and formats.
+Result: Done locally; the real-Excel pack item is pending (open `new file per unit` output in Excel, no repair prompt, values and formats as expected).
+Fails without: yes
+Changed expectations: none
+Deviations: merged `fable-writer` into `fable-scope` (see MESSAGES-scope.md): `executeTransform` needs Writer's `reportRow` and `executeFile`, and later cards need `applyChangeSet`.
+
+Decisions made inside gaps in the plan:
+
+- The sheet in a new file is called `Result` (the name `tableToXlsx` already uses), whatever the unit is called.
+- Names of new files are not made unique inside a worker. Worker outputs carry the plan's names and the main thread runs them through one `NameBook` for the whole zip.
+- Output is refused, never cut, when it would not fit a sheet.
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.

@@ -6,8 +6,8 @@ import { indexToCol } from '../cells.js';
 import { escapeText } from '../xml.js';
 import { getCulture } from '../m/culture.js';
 
-const MAX_ROWS = 1048576;
-const MAX_COLS = 16384;
+export const MAX_ROWS = 1048576;
+export const MAX_COLS = 16384;
 
 const CONTENT_TYPES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
 const ROOT_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
@@ -20,10 +20,10 @@ const STYLE_BY_KIND = { date: 1, datetime: 2, datetimezone: 2, time: 3, duration
 function textCell(ref, text, style) {
   const s = style ? ` s="${style}"` : '';
   const space = /^\s|\s$|\n/.test(text) ? ' xml:space="preserve"' : '';
-  return `<c r="${ref}" t="inlineStr"${s}><is><t${space}>${escapeText(text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''))}</t></is></c>`;
+  return `<c r="${ref}" t="inlineStr"${s}><is><t${space}>${escapeText(text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')).replace(/\r/g, '&#13;')}</t></is></c>`;
 }
 
-export async function tableToXlsx(table, culture = 'en-US') {
+export async function tableToXlsx(table, culture = 'en-US', { now } = {}) {
   const c = getCulture(culture);
   const cols = Math.min(table.columns.length, MAX_COLS);
   const rows = Math.min(table.rowCount, MAX_ROWS - 1);
@@ -61,10 +61,10 @@ export async function tableToXlsx(table, culture = 'en-US') {
     enc('xl/_rels/workbook.xml.rels', WORKBOOK_RELS),
     enc('xl/styles.xml', STYLES),
     enc('xl/worksheets/sheet1.xml', sheet)
-  ]);
+  ], now ? { now } : undefined);
 }
 
-export async function tablesToXlsx(tables, culture = 'en-US') {
+export async function tablesToXlsx(tables, culture = 'en-US', options = {}) {
   if (tables.length !== 1) throw new RangeError('tablesToXlsx writes one table for now');
-  return tableToXlsx(tables[0], culture);
+  return tableToXlsx(tables[0], culture, options);
 }

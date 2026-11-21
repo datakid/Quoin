@@ -47,11 +47,12 @@ const entry = async (zipBytes, name) => new Package(readZip(zipBytes)).bytes(nam
 const text = (u8) => new TextDecoder().decode(u8);
 const csvLines = (u8) => text(u8.slice(3)).split('\r\n').filter(Boolean);
 
-test('tablesToXlsx with one table is byte-compatible with tableToXlsx', async () => {
+test('tablesToXlsx with one table is byte-compatible with tableToXlsx, and with more it gives one sheet each', async () => {
   const r = runOnce({ ...baseOptions, sectionText: 'section Section1;\r\n\r\nshared Q = #table({"Name","Qty"}, {{"x", 2.5}, {"<&>", -1}});', queryName: 'Q' });
   const t = r.value;
   assert.deepEqual(await tablesToXlsx([t], 'en-US'), await tableToXlsx(t, 'en-US'));
-  await assert.rejects(() => tablesToXlsx([t, t]), /one table/);
+  const many = await openWorkbook(await tablesToXlsx([t, t]), 'many.xlsx');
+  assert.deepEqual(many.sheets.map((x) => x.name), ['Result', 'Result-2']);
 });
 
 test('each ready file gets a folder named after its path without the extension, with the same entries as its own zip', async () => {
@@ -133,6 +134,19 @@ test('the same inputs and time give the same zip bytes', async () => {
   const a = await buildCollectOutput({ ...s, now: NOW, runId: 'r1' });
   const b = await buildCollectOutput({ ...s, now: NOW, runId: 'r1' });
   assert.deepEqual(a.bytes, b.bytes);
+});
+
+test('index.xlsx carries the frozen time in its own package, so Preview and Run give the same bytes', async () => {
+  const s = await scenario([[WB, 'mixed.xlsm', 'a/mixed.xlsm']]);
+  const frozen = '2020-02-02T02:02:02.000Z';
+  const out = await buildCollectOutput({ ...s, now: frozen, runId: 'r1' });
+  const outer = readZip(out.bytes);
+  const index = outer.entries.find((e) => e.name === 'index.xlsx');
+  const inner = readZip(await new Package(outer).bytes('index.xlsx'));
+  const expected = ((2020 - 1980) << 9) | (2 << 5) | 2;
+  assert.equal(index.modDate, expected);
+  assert.ok(inner.entries.length > 0);
+  for (const e of inner.entries) assert.equal(e.modDate, expected, e.name);
 });
 
 test('outputs above the zip ceiling are refused with output.zipTooLarge', async () => {

@@ -25,3 +25,17 @@ export async function buildBindingWorkbook(wb) {
   }
   return { items, date1904: wb.date1904 };
 }
+
+const unitError = (code, detail) => ({ snapshot: null, error: { code, detail } });
+
+export async function buildUnitSnapshot(wb, unit, { base } = {}) {
+  const snapshot = base || (await buildSnapshot(wb));
+  if (unit.kind === 'workbook') return { snapshot, error: null };
+  if (unit.kind === 'table') return snapshot.sources.some((s) => s.kind === 'table' && s.name === unit.name) ? { snapshot, error: null } : unitError('unit.missing', unit.name);
+  if (!wb.sheets.some((s) => s.type === 'worksheet' && s.part && s.name === unit.name)) return unitError('unit.missing', unit.name);
+  if (snapshot.sources.some((s) => s.name === unit.name)) return unitError('unit.nameCollision', unit.name);
+  const grid = await readUsedGrid(wb, unit.name);
+  const width = grid.length ? grid[0].length : 0;
+  const source = { name: unit.name, kind: 'sheet', columns: Array.from({ length: width }, (_, i) => `Column${i + 1}`), rows: grid, queryLoaded: false };
+  return { snapshot: { ...snapshot, sources: [...snapshot.sources, source] }, error: null };
+}

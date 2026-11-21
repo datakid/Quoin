@@ -6,6 +6,7 @@ import { writeVbaProject } from './vba/writeback.js';
 import { openWorkbook } from './workbook.js';
 import { equalBytes } from './bytes.js';
 import { suggestedFileName } from './filename.js';
+import { addSheetsToPackage, verifyAddedSheets } from './sheet/add-sheets.js';
 
 export { suggestedFileName };
 
@@ -42,7 +43,7 @@ function completeChangeSet(changeSet) {
 }
 
 function refuseUnapplied(cs) {
-  if (cs.sheets.add.length || cs.sheets.write.length) throw new TypeError('sheet writes are not applied yet');
+  if (cs.sheets.write.length) throw new TypeError('sheet writes are not applied yet');
 }
 
 export async function buildWorkbook(wb, { queryEdits = new Map(), vbaEdits = new Map(), refreshOnLoad = true, checkSection = null, acknowledgeSignature = false, faultInject = false } = {}) {
@@ -63,6 +64,12 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
     const written = await writeQueryChanges(wb, pkg, q, { now, refreshOnLoad, refreshNames: cs.refreshOnLoad, checkSection });
     for (const part of written.touched) touched.add(part);
   }
+  const addedParts = new Set();
+  if (cs.sheets.add.length) {
+    const written = await addSheetsToPackage(wb, pkg, cs.sheets.add);
+    for (const part of written.touched) touched.add(part);
+    for (const part of written.addedParts) addedParts.add(part);
+  }
   let signatureRemoved = false;
   if (cs.modules.replace.size || cs.modules.add.size || cs.modules.remove.size) {
     if (!wb.vba || !wb.vba.project) throw new QuoinError('vba.unreadable', 'no readable VBA project');
@@ -77,7 +84,7 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
   }
   const bytes = await pkg.write({ now });
   if (faultInject) throw new QuoinError('write.selfcheck', 'injected fault');
-  await selfCheck(wb, bytes, { changes: cs, touched, addedParts: new Set(), removedParts: new Set(), signatureRemoved });
+  await selfCheck(wb, bytes, { changes: cs, touched, addedParts, removedParts: new Set(), signatureRemoved });
   return {
     bytes,
     name: suggestedFileName(wb),
@@ -134,6 +141,7 @@ export async function selfCheck(wb, bytes, { changes, touched, addedParts, remov
       const knownAnomalies = new Set(wb.vba.project.anomalies);
       for (const code of back.vba.project.anomalies) if (!knownAnomalies.has(code)) throw new QuoinError('check.vba', `new anomaly ${code}`, code);
     }
+    if (changes.sheets.add.length) await verifyAddedSheets(back, wb, changes.sheets.add);
     for (const entry of back.pkg.zip.entries) await entry.read();
     const original = new Set(wb.pkg.zip.entries.map((e) => e.name));
     const present = new Set(back.pkg.zip.entries.map((e) => e.name));

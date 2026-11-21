@@ -319,3 +319,13 @@ Fails without: not applicable
 Changed expectations: none
 Deviations: the plan says "the responsiveness criteria from F0-13" (100 ms); the long-task limit is 150 ms for indexing and 250 ms for the export, because the page builds a 500-row list and a 3,000-row result table at the end of those steps and CI is slower than the local run. These numbers are starting values to be measured and published in Phase F5.
 
+
+## Merges
+
+### 2026-11-21 fable-writer and fable-scope into fable
+Merged: `fable-writer` at 30afdd8 (F2-01 to F2-09), then `fable-scope` at 964f8a9 (F3-01 to F3-07, the resolve side of every recipe kind, `inspectNeeds`, tokens).
+Conflict: one line in `src/batch/execute/index.js`, the signature of `executeFile`; both sides kept (Writer's `shouldStop`, Scope's transform dispatch). No other file conflicted.
+After the merge: `npm run build` gives a 154-file manifest; lint 0 findings; unit 1526 tests, 1521 pass, 0 fail, 5 skipped. Browser tests are read from CI.
+Also fixed on trunk: `index.xlsx` now takes the frozen time, so Preview and Run give the same bytes. Test: `tests/unit/outputs.test.js`, "index.xlsx carries the frozen time in its own package"; it fails without the change (inner entries carried the real clock) and passes with it.
+Not wired yet: nothing from the Writer or Scope branches is called by the worker, the pool or the shell. That is F2-10 and F3-05 onward.
+Notes for the agents: `docs/fable/MANAGER.md`.

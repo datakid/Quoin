@@ -79,9 +79,8 @@ test('the time has to be a frozen ISO UTC time', () => {
   for (const now of [undefined, 'today', '2026-11-14', 5, '2026-11-14T10:00:00+02:00']) assert.throws(() => resolvePlan(collect(), [], { now }), /now/);
 });
 
-test('only collect is resolved in this phase', () => {
-  const recipe = parseRecipe(JSON.stringify({ recipe: 'align', v: 1, align: { target: 'query', name: 'Q', hash: 'a'.repeat(64) } })).recipe;
-  assert.throws(() => resolvePlan(recipe, [], { now: NOW }), /align/);
+test('a recipe of a kind that is not known is not resolved', () => {
+  assert.throws(() => resolvePlan({ recipe: 'bogus' }, [], { now: NOW }), /bogus/);
 });
 
 test('an override for a file that is not in the set is reported as an orphan pin', () => {

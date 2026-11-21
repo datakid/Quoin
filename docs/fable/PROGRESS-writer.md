@@ -71,6 +71,7 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 |---|---|---|
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
 | `align.sourceChanged` | an align whose text does not match the chosen hash (the source file changed after the recipe was made) | "Not changed. The chosen version is no longer the one in its file." |
+| `refresh.notApplied` (a warning code in `ApplyResult.warnings` as `{ code, part: queryName }`, not a row code) | the recipe asked for refresh on open (`refreshOnLoad: true`) for an added query, or for a replaced query that has no connection; nothing can be flagged (Q5) | "{name} will not refresh when the file opens: it has no connection." |
 | `refused.duplicate` | a second action in one plan for the same target (same kind and exact name) | "Not changed. This target appears more than once in the plan." |
 | `refused.unsupported` | a rename of a module (the plan builds add and remove only) | "Not changed. This change is not available yet." |
 | `refused.noMacros` | a module add to a file with no macro project | "Not added. This file has no macros, and Quoin does not create a macro project." |
@@ -273,6 +274,12 @@ Files: tests/unit/batch-writer-corpus.test.js (new)
 Done: every writer path run over every fixture the test finds in `tests/fixtures/external` and `tests/fixtures/workbooks`, so a fixture added later is covered without editing the test. Query workbooks (eight files, including the Excel-made ones): add two queries, replace one, rename an added one, remove the added ones and get back the original section and metadata exactly, and refuse to remove or rename every loaded or connected query. Macro workbooks (six, including the five Excel-made `xw_macro` and `xw_button` files and `pq_vba_complex.xlsm`) and the five raw Excel-made `vbaProject.bin` files: add two modules, check names, texts, name map and anomalies, remove them and get back the same PROJECT stream, name map and record ids, then remove each removable module in turn. 32 tests, none skipped; no bug found in the writers.
 Fails without, by mutation (each reverted): name map not rebuilt, 13 fail; removed record group one record short, 13; metadata item kept on remove, 9; added metadata item not inserted, 18.
 Counts: lint 0 findings; unit 1402 tests, 1397 pass, 5 skipped.
+
+### Refresh request that cannot be applied
+Files: src/batch/execute/changes.js, src/batch/execute/index.js, tests/unit/batch-execute.test.js
+Done: Q5 means an added query has no connection, so `refreshOnLoad: true` has nothing to flag, and the same holds for a replaced query that has no connection. That request was dropped without a word. It now comes back in `ApplyResult.warnings` as `{ code: 'refresh.notApplied', part: queryName }`, after the file's own warnings, only when the change was actually written. No warning when the recipe says false or leaves it out, when the change is refused or fails, or when a connection exists and was flagged.
+Fails without, by mutation (each reverted): warning dropped for an add, 2 fail; warning when not asked, 1; warning although a connection exists, 4; no warning without a connection, 1; the file's own warnings dropped, 1; warning kept on a failed write, 1.
+Counts: lint 0 findings; unit 1406 tests, 1401 pass, 5 skipped.
 
 ## Open points for the user
 

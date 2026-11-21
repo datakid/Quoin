@@ -76,7 +76,8 @@ async function addQuery(wb, action, recipe, changeSet) {
     return refused('refused.exists', existing ? await sha256Text(normalizeQueryText(existing.original)) : '', newHash);
   }
   changeSet.queries.add.set(name, text);
-  return { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: { op: 'add', target: { type: 'query', name }, oldHash: null, newHash } };
+  const outcome = { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: { op: 'add', target: { type: 'query', name }, oldHash: null, newHash } };
+  return recipe.inject.refreshOnLoad === true ? { ...outcome, warning: { code: 'refresh.notApplied', part: name } } : outcome;
 }
 
 async function stageQuery(query, text, changeSet) {
@@ -92,7 +93,10 @@ async function replaceQuery(wb, action, recipe, changeSet) {
   const query = wb.queries.find((x) => x.name === name);
   if (!query) return skipped('skip.notApplicable');
   const outcome = await stageQuery(query, toViewText(normalizeQueryText(recipe.inject.text)), changeSet);
-  if (outcome.change && recipe.inject.refreshOnLoad === true) changeSet.refreshOnLoad.add(name);
+  if (outcome.change && recipe.inject.refreshOnLoad === true) {
+    if (query.connection) changeSet.refreshOnLoad.add(name);
+    else return { ...outcome, warning: { code: 'refresh.notApplied', part: name } };
+  }
   return outcome;
 }
 

@@ -156,7 +156,6 @@ export class SetShell {
     if (!buttons.length) return;
     const wanted = buttons.find((b) => b.dataset.id === (focusedId || this.rovingId)) || buttons.find((b) => b.dataset.id === this.openId) || buttons[0];
     wanted.tabIndex = 0;
-    this.rovingId = wanted.dataset.id;
     if (focusedId && wanted.dataset.id === focusedId) wanted.focus();
   }
 

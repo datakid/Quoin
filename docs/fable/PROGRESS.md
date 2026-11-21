@@ -329,3 +329,13 @@ After the merge: `npm run build` gives a 154-file manifest; lint 0 findings; uni
 Also fixed on trunk: `index.xlsx` now takes the frozen time, so Preview and Run give the same bytes. Test: `tests/unit/outputs.test.js`, "index.xlsx carries the frozen time in its own package"; it fails without the change (inner entries carried the real clock) and passes with it.
 Not wired yet: nothing from the Writer or Scope branches is called by the worker, the pool or the shell. That is F2-10 and F3-05 onward.
 Notes for the agents: `docs/fable/MANAGER.md`.
+
+## F2-10 Preview (integrator)
+
+### F2-10a the worker runs inject and replace (done)
+`apply` options now carry `recipe`, `acknowledgeSignature` and `alignText`, validated in `src/batch/protocol.js`. The worker calls the new `runFilePlan` (`src/batch/execute/run-file.js`): collect goes to `executeFilePlan` unchanged; inject, replace and align open the workbook and call Writer's `executeFile`; a file that cannot be opened, or an error inside a unit, is one failed row for that recipe with the error code; transform is refused loudly until F3 is wired. The deadline comes from `limits.timeoutMs`.
+Tests: `tests/unit/batch-run-file.test.js` (11), the new protocol case in `tests/unit/batch-protocol.test.js`, and `tests/e2e/fable-apply-worker.spec.js` (5, same bytes, hash and rows as Node, twice in a row on one worker; fails without the worker change). Breaking the dispatcher three ways (always collect, deadline ignored, signature always or never confirmed) fails the unit tests each time.
+Align still needs `alignText` supplied by the caller; that is F2-10b.
+
+### Next
+F2-10b: plan controller on the main thread (resolve, inspect needs, dispatch through the pool, keep each file's sha256 and rows; Preview drops the bytes). F2-10c: Load recipe, Preview button and the Preview matrix with diffs. Then plan-equals-run: Run reuses the previewed plan's frozen `now` and must reproduce every sha256.

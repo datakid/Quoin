@@ -6,7 +6,8 @@ import { tableToJson, valueToJson } from '../core/export/json.js';
 import { tableToXlsx } from '../core/export/xlsx.js';
 import { indexWorkbook } from '../batch/index/file-index.js';
 import { inspectWorkbook } from '../batch/index/inspect.js';
-import { executeFilePlan, failedResult } from '../batch/execute/collect.js';
+import { failedResult } from '../batch/execute/collect.js';
+import { runFilePlan } from '../batch/execute/run-file.js';
 import { validateMessage, openedMessage, refusedMessage, inspectedMessage, appliedMessage, transferListFor } from '../batch/protocol.js';
 
 const store = new ResultStore();
@@ -224,10 +225,10 @@ async function applyFile(m) {
     return;
   }
   const meta = metaOf(m.fileRef);
-  const options = { now: m.options.now, runId: typeof m.options.runId === 'string' ? m.options.runId : '' };
+  const options = { now: m.options.now, runId: typeof m.options.runId === 'string' ? m.options.runId : '', recipe: m.options.recipe, limits: m.options.limits, acknowledgeSignature: m.options.acknowledgeSignature, alignText: m.options.alignText };
   let result;
   try {
-    result = await executeFilePlan(await bytesOf(m.fileRef), meta, m.filePlan, options);
+    result = await runFilePlan(await bytesOf(m.fileRef), meta, m.filePlan, options);
   } catch (e) {
     console.error(e);
     result = failedResult(meta, m.filePlan, e, options);

@@ -76,6 +76,23 @@ test('inspect accepts only known needs and refuses an empty list', () => {
   assert.equal(validateMessage(inspectMessage(fileRef(), ['everything'])).ok, false);
 });
 
+test('apply may carry the recipe, the set-wide signature confirmation and the text of an aligned version', () => {
+  const m = (o) => validateMessage(applyMessage(fileRef(), filePlan(), options(o)));
+  const recipe = { recipe: 'inject', v: 1, inject: { target: 'query', op: 'replace', name: 'A' } };
+  assert.equal(m({ recipe }).ok, true);
+  assert.equal(m({ recipe, acknowledgeSignature: true }).ok, true);
+  assert.equal(m({ recipe, alignText: 'let x = 1 in x' }).ok, true);
+  assert.equal(m({}).ok, true);
+  assert.equal(m({ recipe: 'inject' }).ok, false);
+  assert.equal(m({ recipe: [recipe] }).ok, false);
+  assert.equal(m({ recipe: null }).ok, false);
+  assert.equal(m({ recipe, acknowledgeSignature: 'yes' }).ok, false);
+  assert.equal(m({ recipe, alignText: 5 }).ok, false);
+  assert.match(m({ recipe: 'inject' }).reason, /recipe/);
+  assert.match(m({ recipe, acknowledgeSignature: 1 }).reason, /acknowledgeSignature/);
+  assert.match(m({ recipe, alignText: 5 }).reason, /alignText/);
+});
+
 test('apply needs a frozen ISO time, a boolean dryRun, limits and a culture', () => {
   const m = (o) => applyMessage(fileRef(), filePlan(), options(o));
   assert.equal(validateMessage(m({})).ok, true);

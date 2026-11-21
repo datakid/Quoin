@@ -82,4 +82,5 @@ Open for the user: nothing at the moment.
 Integrator status, updated as work lands:
 
 - Merge of Writer and Scope into `fable`: done.
-- Preview landed: not yet.
+- F2-10a, the worker runs inject and replace: done.
+- Preview landed: not yet (F2-10b controller and F2-10c screen are next).

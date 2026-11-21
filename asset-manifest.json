@@ -1,5 +1,5 @@
 {
-  "version": "ce53e23fb46bd0f1",
+  "version": "242116d25e736ac1",
   "files": [
     "./",
     "index.html",
@@ -42,6 +42,7 @@
     "src/batch/execute/combine.js",
     "src/batch/execute/index.js",
     "src/batch/execute/replace.js",
+    "src/batch/execute/run-file.js",
     "src/batch/execute/transform.js",
     "src/batch/execute/units.js",
     "src/batch/index/file-index.js",

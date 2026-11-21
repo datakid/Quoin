@@ -42,6 +42,9 @@ function optionsProblem(o) {
   if (typeof o.dryRun !== 'boolean') return 'options.dryRun must be a boolean';
   if (!isObject(o.limits)) return 'options.limits must be an object';
   if (!isText(o.culture)) return 'options.culture must be a string';
+  if (o.recipe !== undefined && !isObject(o.recipe)) return 'options.recipe must be an object';
+  if (o.acknowledgeSignature !== undefined && typeof o.acknowledgeSignature !== 'boolean') return 'options.acknowledgeSignature must be a boolean';
+  if (o.alignText !== undefined && typeof o.alignText !== 'string') return 'options.alignText must be a string';
   return null;
 }
 

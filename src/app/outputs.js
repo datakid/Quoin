@@ -85,7 +85,7 @@ export async function buildCollectOutput({ plan, indexes, results, now, runId, c
     compressed += result.bytes.length;
     for (const e of await entriesOf(result.bytes)) files.push({ name: `${folders.get(ix.id)}/${e.name}`, data: e.data });
   }
-  const indexBytes = await tablesToXlsx([indexTable(indexes)]);
+  const indexBytes = await tablesToXlsx([indexTable(indexes)], 'en-US', { now: zipClock(now) });
   const reportBytes = tableToDelimited(table(REPORT_COLUMNS, rows.map((r) => REPORT_COLUMNS.map((k) => r[k]))), { bom: true, guard: true });
   if (compressed + indexBytes.length + reportBytes.length > ceilingBytes || files.length + 2 > maxEntries) return { ok: false, code: 'output.zipTooLarge', rows };
   const bytes = await zipFiles([{ name: 'index.xlsx', data: indexBytes }, { name: 'report.csv', data: reportBytes }, ...files], { now: zipClock(now) });

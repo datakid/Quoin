@@ -52,6 +52,7 @@ ChangeSet = {
 - `acknowledgeSignature` (default false) is a further addition: the caller passes true once the user has confirmed, for the whole set, that signed projects lose their signature (Q3). Without it a module replace in a signed project is refused as `vba.signature`, the same in Preview and in Run.
 - `failedResult(filePlan, code, { recipe, meta, runId })` is exported from the same file. It returns an `ApplyResult` with a `failed` row for every action and no bytes. The pool is the one that stops a job at its time limit, so it should call this with `m.timeout`; `meta` is required there because there is no workbook.
 - `alignText` is a further addition, for align recipes: the text of the chosen version, read by the caller from a file that has the chosen hash. For a query it is the query's text; for a module it is the module's full text exactly as the index hashed it (`wb.vba.project.modules[i].text`, attribute lines included). `executeFile` checks it against `recipe.align.hash` and fails every row with `align.sourceChanged` if it does not match; a missing `alignText` throws.
+- `shouldStop` (default `() => false`) is a deadline the caller injects, as trunk's notes ask. It is checked before every target, before a search and between matches. When it returns true the whole file fails: every row is `failed` with `m.timeout`, no bytes are made and no change is kept. Pass something like `() => performance.now() > startedAt + limit`; tests pass a counter so no clock is involved.
 - Any other option, including `dryRun`, is never read. A test pins that.
 - `bytes` and `sha256` are `null` when nothing is written: every action unchanged or skipped, or the file failed.
 - `changes` is a list of `Change = { op, target: { type, name }, oldHash, newHash }`, with `newName` added for a rename, and `matchCount` and `matches` added for `replaceText`. `matches` is a list of `{ line, col, before, after }` (one-based, in the old text, each side cut to 200 characters), capped at 100 entries; `matchCount` is the full count. Preview can draw its match rows from it. `oldHash` is `null` for an add and `newHash` is `null` for a remove. For a rename both hashes are the hash of the unchanged text. The card did not give the shape.
@@ -70,6 +71,7 @@ New reason codes (plain data in report rows, not `QuoinError` codes):
 |---|---|---|
 | `skip.notApplicable` | a replace action whose query is not in the file | listed in Appendix B with no text yet |
 | `align.sourceChanged` | an align whose text does not match the chosen hash (the source file changed after the recipe was made) | "Not changed. The chosen version is no longer the one in its file." |
+| `refused.duplicate` | a second action in one plan for the same target (same kind and exact name) | "Not changed. This target appears more than once in the plan." |
 | `refused.unsupported` | a rename of a module (the plan builds add and remove only) | "Not changed. This change is not available yet." |
 | `refused.noMacros` | a module add to a file with no macro project | "Not added. This file has no macros, and Quoin does not create a macro project." |
 | `refused.moduleKind` | a module remove for a sheet or workbook module or a form; `reason` is the kind (`document`, `form`) | "Not removed. This module belongs to {kind}." |
@@ -207,7 +209,7 @@ Fails without, by mutation (each reverted): case flag ignored, 2 fail; case flag
 Result: Done
 Changed expectations: none
 Deviations:
-- The time limit is not in this layer. A regex cannot be interrupted from inside the thread that runs it, so the limit and the stop are the pool's, as the plan has it. This task adds `failedResult` so the pool can write the `m.timeout` rows in the same shape as every other row, and the worker test shows the job can be stopped without side effects. Wiring `executeFile` into the worker and the pool is the integration task.
+- Trunk's notes ask for a deadline checked between matches and between modules, and I first left the time limit to the pool alone. Both are now in: `executeFile` takes `shouldStop` and fails the file with `m.timeout` at the first check after it returns true (tests stop at every possible check and assert nothing is written). A single regex match that backtracks without end cannot be interrupted from inside its own thread, so the pool must still stop the worker. `failedResult` builds the rows for that case, and the worker test shows the job is stopped without side effects. The worker test no longer uses a timer: the worker announces the start from its first deadline check and the test waits on messages and events only. Wiring `executeFile` into the worker and the pool is the integration task.
 Decisions inside gaps (log, not yet confirmed by the user):
 - Regex flags are `g`, plus `i` when the recipe does not ask for case to match. No `m`, `s` or `u`: the recipe check compiles the pattern with no flags and `^` and `$` therefore mean the start and end of the whole text.
 - A match with no characters is never replaced, so `x*` cannot insert text between every character.
@@ -253,6 +255,12 @@ Decisions inside gaps (log, not yet confirmed by the user). The records and stre
 - A workbook with no macro project is refused (`refused.noMacros`); creating a project from nothing is not attempted.
 Counts after this task: lint 0 findings; unit 1314 tests, 1309 pass, 5 skipped.
 Real-Excel pack item (for F2-15; the plan's list for the pack does not include module add and remove, so please add it): add a module to a macro workbook made by Excel and open it in Excel; check that the module is listed in the VBA editor with its code, that the project compiles, that no repair message appears and that the macros still run. Then remove a standard module from another workbook and check the same. Do both once with a project that is signed and once with a protected project (the add should be refused or the project stay protected).
+
+### Hardening after trunk's notes
+Files: src/batch/execute/replace.js, changes.js, index.js, tests/unit/batch-writer-contract.test.js (new), tests/unit/batch-replace.test.js, tests/unit/redos-worker.mjs
+Done: the injected deadline (see F2-08); a second action on the same target is refused (`refused.duplicate`); 32 contract tests for every write path (replace, add, module replace, module add, module remove, replace text): inputs and the ChangeSet are not changed, results survive `structuredClone`, outputs reopen with no new warning and save again, the bytes are the same in four time zones, reversed action order gives the same bytes, an empty plan writes nothing, a file that opens with a warning passes it on and fails a write built on it, an added query never creates a connection, table, sheet or part (Q5), a loaded query is never removed (Q5), forty added queries then some removed and replaced.
+Fails without, by mutation (each reverted): deadline check before the search, between matches, between targets, not passed to the matcher for a query or a module, not passed on from `executeFile`, timeout thrown instead of rows, wrong code; duplicate check off, claim ignoring the kind, claim folding case; ChangeSet mutated, clock depending on the time zone, result holding a function, recipe mutated.
+Counts: lint 0 findings; unit counts are in the status line.
 
 ## Open points for the user
 

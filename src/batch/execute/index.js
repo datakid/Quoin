@@ -5,11 +5,19 @@ import { sha256Bytes } from '../index/hash.js';
 import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
 
-export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText }) {
+export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, shouldStop = () => false }) {
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
   const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));
-  const { changeSet, outcomes } = await planChanges(wb, filePlan, recipe, { acknowledgeSignature, alignText });
+  let planned;
+  try {
+    planned = await planChanges(wb, filePlan, recipe, { acknowledgeSignature, alignText, shouldStop });
+  } catch (e) {
+    if (!(e instanceof QuoinError)) throw e;
+    const rows = filePlan.actions.map((action) => reportRow(file, action, recipe, { run_id: runId, verdict: 'failed', reason_code: e.code, verified: false, duration_ms: Math.round(performance.now() - started) }));
+    return { fileId: filePlan.fileId, bytes: null, sha256: null, changes: [], warnings, rows };
+  }
+  const { changeSet, outcomes } = planned;
   const rowsFor = (settle) =>
     filePlan.actions.map((action, i) => {
       const o = outcomes[i];

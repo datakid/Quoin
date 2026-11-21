@@ -78,12 +78,12 @@ test('a unit that fails registers no output, the later units still run and say w
   assert.deepEqual(runs.map((r) => [r.status, r.error && r.error.code, r.outputName]), [['error', 'unit.error', null], ['error', 'unit.error', null]]);
 });
 
-test('an output name that is already a table or name in the workbook is a row error on the next unit, not a silent choice', async () => {
+test('an output named like a table of the workbook is not offered to later units and is flagged, and the units are not affected', async () => {
   const recipe = recipeOf(CURRENT, { mode: 'newSheet', name: 'StudentResults' });
   const { wb, file, filePlan } = await setup('pq_simple.xlsx', recipe);
   const { runs } = await runFileUnits(wb, file, filePlan, recipe, { now: NOW });
-  assert.deepEqual([runs[0].status, runs[0].outputName], ['ok', 'StudentResults']);
-  assert.deepEqual([runs[1].status, runs[1].table, runs[1].error], ['error', null, { code: 'unit.nameCollision', detail: 'StudentResults' }]);
+  assert.deepEqual(runs.map((r) => [r.status, r.outputName, r.flags]), [['ok', 'StudentResults', ['output.nameTaken']], ['ok', 'StudentResults', ['output.nameTaken']]]);
+  assert.deepEqual(shown(runs[1]).columns, ['Name', 'Age', 'DateTimeGenerated']);
 });
 
 test('an output keeps its values and types when a later unit reads it', async () => {
@@ -96,7 +96,7 @@ test('an output keeps its values and types when a later unit reads it', async ()
 });
 
 test('a recipe with no output name has nothing to chain and registers nothing', async () => {
-  const recipe = recipeOf(`try ${TABLE('Combined')} otherwise ${CURRENT}`, { mode: 'combined' });
+  const recipe = recipeOf(`try ${TABLE('Combined')} otherwise ${CURRENT}`, { mode: 'inPlace' });
   const { wb, file, filePlan } = await setup('pq_simple.xlsx', recipe);
   const { runs } = await runFileUnits(wb, file, filePlan, recipe, { now: NOW });
   assert.deepEqual(runs.map((r) => r.outputName), [null, null]);

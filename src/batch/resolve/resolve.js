@@ -10,6 +10,7 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const RESOLVED = ['collect', 'inject', 'replace', 'transform', 'align'];
 const DEFAULT_FILE_NAME = '{file.name}__{unit.name}.xlsx';
 const DEFAULT_SHEET_NAME = 'Result';
+const DEFAULT_COMBINED_NAME = '{file.name}__{unit.name}';
 const TARGET_TYPE = { workbook: 'sheet', sheet: 'sheet', table: 'range' };
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -140,7 +141,7 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
   if (recipe.recipe === 'transform') {
     const matcher = buildMatcher(recipe.scope);
     if (matcher.error) errors.push(matcher.error);
-    const template = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : recipe.output && recipe.output.mode === 'newFile' ? DEFAULT_FILE_NAME : recipe.output && recipe.output.mode === 'newSheet' ? DEFAULT_SHEET_NAME : null;
+    const template = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : recipe.output && recipe.output.mode === 'newFile' ? DEFAULT_FILE_NAME : recipe.output && recipe.output.mode === 'newSheet' ? DEFAULT_SHEET_NAME : recipe.output && recipe.output.mode === 'combined' ? DEFAULT_COMBINED_NAME : null;
     const ctx = { recipe, scope: recipe.scope, matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
     files = ordered.map((ix) => planTransformFile(ix, ctx));
   } else if (recipe.recipe === 'inject') {

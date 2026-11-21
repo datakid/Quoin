@@ -188,6 +188,26 @@ Decisions made inside gaps in the plan:
 - A styles part that cannot take new entries (no `fonts` or `cellXfs`, or prefixed names) fails the file as `check.part`; none of the 9 fixtures does.
 - Names are made valid and unique by the caller; `addSheetsToPackage` throws a `TypeError` for a bad or repeated name, because that is a bug and not a user condition.
 
+## F3-07 Output: combined
+
+Layer: core export, execute
+Files: src/core/export/xlsx.js (trunk's: `workbookFromSheets`, `tablesToXlsx` takes `[{name, table}]`, one-sheet bytes unchanged, checked by hash), src/core/sheet/grid.js (`normalisedRows`, a stricter `sameGrid`), src/batch/execute/combine.js (new), src/batch/execute/transform.js, src/batch/execute/units.js (chain fix below), src/batch/resolve/resolve.js (default name `{file.name}__{unit.name}`), tests/unit/batch-combined.test.js (new, 11 tests), tests/unit/outputs.test.js (trunk's: its "rejects many tables" assertion is now "one sheet each", named in the test title), tests/unit/batch-chain.test.js.
+Do: combined is one output workbook for the whole run, one sheet per unit. Workers cannot see each other, so `executeFile` for a combined recipe returns no workbook: it returns `sheetParts: [{unit, name, xml, digest, rowIndex, columns, rows}]` (plain data, structured-cloneable) after checking each part alone in a one-sheet workbook, and rows with verdict `changed`, `verified: true` and an empty `output`. Once every file is done the main thread calls `combineOutputs(results, {now, name})` with the results in plan order. It makes the sheet names unique across the run with `NameBook`, writes `Combined.xlsx`, re-opens it and compares each sheet's cells with the digest the worker made, and returns `{bytes, sha256, name, sheetNames, results}` where `results` carry rows patched with `output: "Combined.xlsx [Sheet]"`, the file hash and `verified`. A part that does not read back, or any other failure, makes every part's row `not-released / verify.readBack` and gives no workbook. No usable part gives `bytes: null`. `tablesToXlsx` takes many tables with the same naming rules.
+Test that fails without it: `batch-combined.test.js` fails on a missing module; with the change all 11 pass.
+Checked outside Quoin: a combined workbook of four sheets from three files opens in openpyxl with the right dimensions and headers and converts in LibreOffice.
+Result: Done locally; the real-Excel pack item is pending (open `Combined.xlsx`: no repair prompt, sheet order and names, dates right).
+Fails without: yes
+Changed expectations: `outputs.test.js` (trunk's) as above; `batch-scope.test.js` and `batch-chain.test.js` are mine.
+Deviations: none.
+
+A bug in my own F3-04 found by these tests and fixed here: an output named like a table in the workbook, which is what the template `{unit.name}` always gives for table units, made the next unit fail with `unit.nameCollision`. The output is now not offered to later units and the run carries the flag `output.nameTaken`; a unit that actually has to read by that name gets the workbook's own table, so a recipe that chains should choose a name the workbook does not use. The collision error stays for a sheet unit whose name equals an earlier output.
+
+Decisions made inside gaps in the plan:
+
+- The sheet-name default for combined is `{file.name}__{unit.name}`, cut to 31 code points, so a long file name can swallow the unit name; the author can set a template.
+- The combined workbook is called `Combined.xlsx`. Its rows are patched after the run, so a progress display should treat `output` as empty until `combineOutputs` has run.
+- `sameGrid` now ignores trailing empty rows and cells and fails on extra cells, so a table whose last row is all empty reads back equal and an extra cell no longer slips through.
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.

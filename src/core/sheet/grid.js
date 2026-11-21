@@ -45,15 +45,30 @@ export function expectedGrid(table, cultureName) {
   return [header, ...tableCells(table, cultureName)].map((row) => row.map(clean));
 }
 
+const isEmpty = (cell) => cell === null || cell === undefined;
+
+export function normalisedRows(grid) {
+  const rows = grid.map((row) => {
+    let end = row.length;
+    while (end > 0 && isEmpty(row[end - 1])) end--;
+    return row.slice(0, end).map((cell) => (isEmpty(cell) ? null : cell));
+  });
+  while (rows.length && rows[rows.length - 1].length === 0) rows.pop();
+  return rows;
+}
+
 function sameCell(a, b) {
-  if (a === null || a === undefined || b === null || b === undefined) return (a === null || a === undefined) && (b === null || b === undefined);
+  if (isEmpty(a) || isEmpty(b)) return isEmpty(a) && isEmpty(b);
   return a.t === b.t && Object.is(a.v, b.v);
 }
 
 export function sameGrid(want, got) {
-  if (want.length !== got.length) return false;
-  for (let r = 0; r < want.length; r++) {
-    for (let c = 0; c < want[r].length; c++) if (!sameCell(want[r][c], got[r] ? got[r][c] : undefined)) return false;
+  const a = normalisedRows(want);
+  const b = normalisedRows(got);
+  if (a.length !== b.length) return false;
+  for (let r = 0; r < a.length; r++) {
+    if (a[r].length !== b[r].length) return false;
+    for (let c = 0; c < a[r].length; c++) if (!sameCell(a[r][c], b[r][c])) return false;
   }
   return true;
 }

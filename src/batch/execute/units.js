@@ -61,17 +61,13 @@ export async function runFileUnits(wb, file, filePlan, recipe, { now, localOffse
   const runs = [];
   for (const unit of units) {
     if (isCancelled && isCancelled()) return { runs, cancelled: true };
-    const clash = [...outputs.keys()].find((name) => base.sources.some((s) => s.name === name));
-    let run;
-    if (clash !== undefined) run = failed(unit, prepareQuery(recipe.query.m, file, unit).text, { code: 'unit.nameCollision', detail: clash });
-    else {
-      const withOutputs = outputs.size ? { ...base, sources: [...base.sources, ...outputs.values()] } : base;
-      run = await runUnit(wb, file, unit, recipe, { now, base: withOutputs, localOffsetMin });
-    }
+    const withOutputs = outputs.size ? { ...base, sources: [...base.sources, ...outputs.values()] } : base;
+    const run = await runUnit(wb, file, unit, recipe, { now, base: withOutputs, localOffsetMin });
     const name = plannedOutputName(filePlan, unit);
     if (run.status === 'ok' && name !== null) {
       run.outputName = name;
-      if (runs.length + 1 < units.length) outputs.set(name, outputSource(name, run.table, recipe.more.culture));
+      if (base.sources.some((s) => s.name === name)) run.flags = [...run.flags, 'output.nameTaken'];
+      else if (runs.length + 1 < units.length) outputs.set(name, outputSource(name, run.table, recipe.more.culture));
     }
     runs.push(run);
     if (onUnit) onUnit(run, runs.length, units.length);

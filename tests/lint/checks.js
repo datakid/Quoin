@@ -449,9 +449,38 @@ export function runAll() {
   }
   if (queryParamUses.some((p) => p !== 'src/app/main.js')) add('T-LINT-10', join(root, 'src/app/main.js'), 0, 'query string read outside main.js');
 
+  for (const f of srcJs) {
+    if (!parsed.has(f)) continue;
+    for (const x of oneExecuteEntryFindings(rel(f), read(f))) add('T-LINT-21', f, x.line, x.msg);
+  }
+
   return findings;
 }
 
 export function printFindings(findings) {
   for (const f of findings) console.log(`${f.rule} ${f.file}:${f.line} ${f.msg}`);
+}
+
+const EXECUTE_ENTRY_FILES = new Set(['src/batch/execute/index.js', 'src/core/save.js']);
+const SAVE_PART = 'src/core/save.js';
+
+export function oneExecuteEntryFindings(relPath, text) {
+  if (!relPath.startsWith('src/') || EXECUTE_ENTRY_FILES.has(relPath)) return [];
+  const out = [];
+  const resolvesToSave = (spec) => typeof spec === 'string' && spec.startsWith('.') && posix.normalize(posix.join(posix.dirname(relPath), spec)) === SAVE_PART;
+  visit(parseSource(text).ast, (n) => {
+    const line = n.loc ? n.loc.start.line : 0;
+    if (n.type === 'ImportDeclaration' && resolvesToSave(n.source.value)) {
+      for (const sp of n.specifiers) {
+        if (sp.type === 'ImportNamespaceSpecifier') out.push({ line, msg: 'namespace import of src/core/save.js' });
+        else if (sp.type === 'ImportSpecifier' && (sp.imported.name || sp.imported.value) === 'applyChangeSet') out.push({ line, msg: 'applyChangeSet' });
+      }
+    }
+    if (n.type === 'ExportNamedDeclaration' && n.source && resolvesToSave(n.source.value)) {
+      for (const sp of n.specifiers) if ((sp.local.name || sp.local.value) === 'applyChangeSet') out.push({ line, msg: 'applyChangeSet' });
+    }
+    if (n.type === 'ExportAllDeclaration' && resolvesToSave(n.source.value)) out.push({ line, msg: 'namespace import of src/core/save.js' });
+    if (n.type === 'ImportExpression' && n.source.type === 'Literal' && resolvesToSave(n.source.value)) out.push({ line, msg: 'dynamic import of src/core/save.js' });
+  });
+  return out;
 }

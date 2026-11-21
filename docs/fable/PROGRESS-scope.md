@@ -245,9 +245,19 @@ Decisions made inside gaps in the plan:
 - A query that loads only to the data model counts as a load target, because Excel refreshes it on open the same way.
 - If every unit is refused or fails there is no copy.
 
+## F3-10 Worked example (engine level only)
+
+Layer: test
+Files: tests/unit/batch-worked-example.test.js (new, 3 tests)
+Do: Fable §9 on twelve generated workbooks, none from a fixture file: seven with `Data` and `Notes`, three with `Data` and `Extra`, two `.xls` that cannot be opened. The recipe is transform, all sheets, new sheet `Clean`, Quoin computes, with seven pins to `Data`. Asserted: twelve rows in the plan, two skipped with `file.unsupportedExtension`, the summary is 10 files, 13 units, groups 7 files with 1 unit and 3 files with 2, no planning errors and no orphan pins; running the ten files gives ten workbooks and thirteen rows all `changed`, `verified` and `quoin`, the original bytes unchanged (compared by hash), the added sheets `Clean` (and `Clean-2` for the three-sheet files) with the expected cells.
+Result: Partly done, and I am saying so plainly. The browser spec `fable-worked-example.spec.js` is not written: it needs the Preview, Get and report screens (trunk's F2-10 onward), and no browser can run here. Two numbers of §9 cannot be asserted at all, because no card builds the feature behind them: step 4 says two rows warn that the query names a column the sheet does not have, are excluded, and their files fall back to inject only (so 11 changed and 2 skipped in the report). Today such a unit runs, fails inside the query as `failed / unit.error`, and the other units still land. Whoever owns Preview has to decide whether that is a static check (the index has no column names for sheets or tables, so it would need a read of each file) or a run-time outcome, and what "fall back to inject only" means.
+Fails without: n/a (it checks what the earlier cards built)
+Changed expectations: none.
+Deviations: this is not the test the card asks for.
+
 ## For trunk when merging
 
-- `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.
+- `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on a merge of `fable-writer` and `fable-scope` into `fable` adds these runtime modules to the manifest: `src/batch/execute/{changes,combine,excel-compute,index,replace,transform,units}.js`, `src/batch/resolve/{align-source,scope,tokens}.js`, `src/core/export/limits.js`, `src/core/pq/members.js` and `src/core/sheet/{add-sheets,grid,names,sheet-xml,styles,write-ranges}.js`.
 - Files this branch changes: `src/batch/resolve/{resolve,scope,tokens}.js`, `src/batch/execute/units.js`, `src/core/snapshot.js`, three new test files, this progress file. It touches no file outside the Scope list. The merge of `fable` at e86d5e4 was clean.
 - Nothing in `src/app`, `src/workers` or `collect.js` calls the new code yet. Wiring is yours: call `inspectNeeds` then `resolvePlan`; in the worker call `runFileUnits` with the file's `{name, relPath}`, the file plan and the recipe, and hand each `run.table` to the output writer there.
 - Decisions to confirm with the user, because they change what people see: `{unit.index}` is the ordinal among resolved units; a name resolves to the latest earlier output, so a constant output name accumulates (chain); a sheet named like a table is `unit.nameCollision`; `{file.folder}` keeps its trailing slash.

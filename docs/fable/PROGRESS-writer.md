@@ -268,6 +268,12 @@ Done: three tests with a seeded generator. Twelve seeds of up to eighteen steps 
 No bug in the writers turned up. The tests found two wrong assumptions in the tests themselves, and one rule that is by design: an add of a name that a remove or rename in the same change frees is refused.
 Fails without, by mutation (each reverted): removal range too long or starting at the member, metadata item kept, rename quoting dropped, separator lost on append, trailing space dropped, module count off by one, removed record group one short, added group in the wrong place, PROJECT line kept, name map not rebuilt, removed stream kept.
 
+### Corpus
+Files: tests/unit/batch-writer-corpus.test.js (new)
+Done: every writer path run over every fixture the test finds in `tests/fixtures/external` and `tests/fixtures/workbooks`, so a fixture added later is covered without editing the test. Query workbooks (eight files, including the Excel-made ones): add two queries, replace one, rename an added one, remove the added ones and get back the original section and metadata exactly, and refuse to remove or rename every loaded or connected query. Macro workbooks (six, including the five Excel-made `xw_macro` and `xw_button` files and `pq_vba_complex.xlsm`) and the five raw Excel-made `vbaProject.bin` files: add two modules, check names, texts, name map and anomalies, remove them and get back the same PROJECT stream, name map and record ids, then remove each removable module in turn. 32 tests, none skipped; no bug found in the writers.
+Fails without, by mutation (each reverted): name map not rebuilt, 13 fail; removed record group one record short, 13; metadata item kept on remove, 9; added metadata item not inserted, 18.
+Counts: lint 0 findings; unit 1402 tests, 1397 pass, 5 skipped.
+
 ## Open points for the user
 
 1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.

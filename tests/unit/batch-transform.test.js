@@ -131,9 +131,10 @@ test('a sheet scope gives one output per sheet unit with raw cells', async () =>
   assert.deepEqual([grid[0][0].v, grid[1][0].v], ['Column1', 'Name']);
 });
 
-test('the compute mode Excel and the other output modes are not written by this function yet', async () => {
-  const s = await setup('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newFile' }, { compute: 'excel' }));
-  await assert.rejects(() => executeTransform(s.wb, s.filePlan, recipeOf(CURRENT, { mode: 'newFile' }, { compute: 'excel' }), { now: NOW, meta: s.index }), /excel/);
+test('a new sheet, in place or Excel compute needs the change writer and says so when it is missing', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newSheet' });
+  const s = await setup('pq_simple.xlsx', recipe);
+  await assert.rejects(() => executeTransform(s.wb, s.filePlan, recipe, { now: NOW, meta: s.index }), /change writer/);
 });
 
 test('executeFile hands a transform recipe to the transform step and returns its outputs', async () => {

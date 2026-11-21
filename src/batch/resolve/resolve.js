@@ -133,7 +133,10 @@ function recipeErrors(recipe, indexes) {
   if (recipe.recipe === 'align' && !alignSourceFor(recipe.align, indexes)) errors.push({ code: 'align.noSource', detail: recipe.align.hash });
   if (recipe.recipe === 'transform') {
     for (const token of unknownQueryTokens(recipe.query.m)) errors.push({ code: 'recipe.token', detail: token });
-    if (recipe.output && recipe.output.mode === 'inPlace') {
+    if (recipe.compute === 'excel') {
+      if (!recipe.output || typeof recipe.output.name !== 'string' || !recipe.output.name.length) errors.push({ code: 'output.nameRequired', detail: null });
+      if (recipe.output && recipe.output.mode !== 'inPlace') errors.push({ code: 'output.excelMode', detail: recipe.output.mode });
+    } else if (recipe.output && recipe.output.mode === 'inPlace') {
       const range = recipe.output.range;
       if (range === undefined || range === null || range === '') errors.push({ code: 'output.rangeRequired', detail: null });
       else if (!RANGE_TEXT.test(range)) errors.push({ code: 'output.range', detail: range });
@@ -157,7 +160,7 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
     const matcher = buildMatcher(recipe.scope);
     if (matcher.error) errors.push(matcher.error);
     const template = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : recipe.output && recipe.output.mode === 'newFile' ? DEFAULT_FILE_NAME : recipe.output && recipe.output.mode === 'newSheet' ? DEFAULT_SHEET_NAME : recipe.output && recipe.output.mode === 'combined' ? DEFAULT_COMBINED_NAME : null;
-    const ctx = { recipe, scope: recipe.scope, inPlace: Boolean(recipe.output && recipe.output.mode === 'inPlace'), matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
+    const ctx = { recipe, scope: recipe.scope, inPlace: Boolean(recipe.output && recipe.output.mode === 'inPlace' && recipe.compute !== 'excel'), matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
     files = ordered.map((ix) => planTransformFile(ix, ctx));
   } else if (recipe.recipe === 'inject') {
     const matcher = buildMatcher({ match: recipe.inject.match, pattern: recipe.inject.name });

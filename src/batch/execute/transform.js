@@ -12,6 +12,7 @@ import { reportRow } from './changes.js';
 import { zipClock } from './collect.js';
 import { gridDigest } from './combine.js';
 import { runFileUnits } from './units.js';
+import { executeOnOpen } from './excel-compute.js';
 
 const SHEET = 'Result';
 
@@ -132,7 +133,7 @@ async function writeNewSheets(wb, items, culture, apply) {
 }
 
 export async function executeTransform(wb, filePlan, recipe, { now, meta, runId = '', apply } = {}) {
-  if (recipe.compute === 'excel') throw new Error('excel compute is not supported yet');
+  if (recipe.compute === 'excel') return executeOnOpen(wb, filePlan, recipe, { meta, runId, apply });
   if (!recipe.output) throw new TypeError('a transform recipe needs an output');
   const mode = recipe.output.mode;
   if (mode !== 'newFile' && mode !== 'newSheet' && mode !== 'combined' && mode !== 'inPlace') throw new Error(`${mode} output is not supported yet`);

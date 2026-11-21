@@ -227,6 +227,24 @@ Decisions made inside gaps in the plan:
 - Data validation, conditional formatting, hyperlinks and comments that sit on cells of the range are left as they are; the pack should look at one sheet that has them.
 - The copy's own sheet-level parts (drawings, pivot caches, `tableParts`) are never touched.
 
+## F3-09 Compute: Excel runs it on open
+
+Layer: execute, resolve
+Files: src/batch/execute/excel-compute.js (new), src/batch/execute/transform.js (routes `compute: 'excel'`), src/batch/resolve/resolve.js, tests/unit/batch-excel-compute.test.js (new, 12), tests/unit/batch-transform.test.js (one test replaced).
+Do: Q5 taken as "reuse an existing load target only". For a transform recipe with `compute: 'excel'`, `output.name` is the name of a query that already loads to a table or the data model; `output.mode` must be `inPlace` and `range` is not used. For each unit Quoin substitutes tokens in the recipe's M, checks that it parses, replaces that query's text in a copy of the workbook through Writer's `applyChangeSet` and sets `refreshOnLoad` on its connection, so Excel computes on open. Quoin does not evaluate the query, so a query that fails when it runs is still handed to Excel. Rows carry `compute: excel`, `output` is `<copy> [query Name]`, and `old_hash` and `new_hash` are the old and new query text hashes (other modes put the file hash in `new_hash`). Refusals, each with the same wording to offer "Quoin runs it now" in the UI: `refused.sheetUnit` (Excel reads tables and names only), `refused.noName`, `refused.noQuery`, `refused.noLoadTarget` (a connection-only query), `refused.overlap` (a second unit wants the same query). A query that does not parse is `failed / unit.parse` with line and column, an unknown token is `failed / recipe.token`. Resolve adds planning errors `output.nameRequired` and `output.excelMode` (any mode but `inPlace`), and the range checks of in-place output apply to Quoin compute only.
+Test that fails without it: all 12 fail with `excel compute is not supported yet` before the change and pass with it.
+Checked outside Quoin: the copies for `pq_simple.xlsx` and `pq_vba_complex.xlsm` open in openpyxl and convert in LibreOffice, and `connections.xml` has `refreshOnLoad="1"`. Neither can run Power Query, so whether Excel refreshes and gets the intended table is for the real-Excel pack.
+Result: Done locally; the real-Excel pack item is pending and matters most here: open the copy in Excel, let it refresh, and compare the table with the Quoin-computed result of the same recipe.
+Fails without: yes
+Changed expectations: my own earlier "compute excel is not written" test in `batch-transform.test.js` is now a guard test for a missing change writer.
+Deviations: none.
+
+Decisions made inside gaps in the plan:
+
+- Output mode `inPlace` is the only mode allowed for Excel compute, and `output.name` is the query to reuse; any other mode is the planning error `output.excelMode`. The plan says nothing about modes under Excel compute.
+- A query that loads only to the data model counts as a load target, because Excel refreshes it on open the same way.
+- If every unit is refused or fails there is no copy.
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.

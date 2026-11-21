@@ -15,6 +15,11 @@ export function buildRegistry(app) {
   r.register({ id: 'export', keys: ['Mod+Shift+E'], surfaces: ['T3'], enabled: needsFile, run: (a) => a.ws && a.openExport() });
   r.register({ id: 'prevItem', keys: ['Alt+ArrowUp'], surfaces: ['T2'], enabled: needsFile, run: (a) => a.ws && a.ws.step(-1) });
   r.register({ id: 'nextItem', keys: ['Alt+ArrowDown'], surfaces: ['T2'], enabled: needsFile, run: (a) => a.ws && a.ws.step(1) });
+  r.register({ id: 'closeTab', keys: ['Alt+W'], surfaces: ['T2'], enabled: (a) => (a.ws ? a.ws.canCloseTab() : 'Open a workbook first.'), run: (a) => (a.ws ? a.ws.closeTab() : false) });
+  r.register({ id: 'prevTab', keys: ['Alt+['], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.cycleTab(-1) : false) });
+  r.register({ id: 'nextTab', keys: ['Alt+]'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.cycleTab(1) : false) });
+  r.register({ id: 'goTab', keys: Array.from({ length: 9 }, (_, i) => `Alt+${i + 1}`), shortcutLabel: 'Alt+1 to Alt+9', surfaces: ['T2'], enabled: needsFile, run: (a, ev) => (a.ws && ev ? a.ws.goTab(Number(ev.code.slice(5))) : false) });
+  r.register({ id: 'splitEditor', keys: ['Mod+\\'], surfaces: ['T2'], enabled: (a) => (a.ws ? a.ws.canSplit() : 'Open a workbook first.'), run: (a) => (a.ws ? a.ws.toggleSplit() : false) });
   r.register({ id: 'print', keys: ['Mod+P'], surfaces: ['T1'], enabled: needsFile, run: (a) => a.ws && a.openPrint() });
   r.register({ id: 'toggleInspector', keys: ['Mod+Alt+B'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.toggleInspector() : false) });
   r.register({ id: 'problems', keys: [], surfaces: ['T1'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openProblems() : false) });

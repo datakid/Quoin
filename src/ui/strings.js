@@ -505,7 +505,27 @@ export const S = {
     print: 'Print preview',
     shortcuts: 'Show the shortcut sheet',
     settings: 'Open settings',
-    palette: 'Search everything and run commands'
+    palette: 'Search everything and run commands',
+    closeTab: 'Close the current tab',
+    prevTab: 'Previous tab',
+    nextTab: 'Next tab',
+    goTab: 'Go to the nth tab',
+    splitEditor: 'Split the editor, or join the two groups'
+  },
+  tabs: {
+    group: (n) => `Open items, group ${n}`,
+    close: (name) => `Close ${name}`,
+    previewState: 'preview',
+    editedState: 'edited',
+    only: 'This is the only open tab.',
+    closeTab: 'Close tab',
+    keepOpen: 'Keep this tab open',
+    moveOther: 'Move to the other group',
+    splitRight: 'Open in a split to the right',
+    join: 'Join the groups',
+    dropSplit: 'Drop here to open in a split',
+    fewerThanTwo: 'Open a second item first.',
+    narrow: 'The window is too narrow to split the editor.'
   },
   palette: {
     label: 'Search and commands',

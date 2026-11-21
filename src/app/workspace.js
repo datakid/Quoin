@@ -2,7 +2,7 @@ import { h, clear, svgImg } from '../ui/dom.js';
 import { S, fmt, errorMessage } from '../ui/strings.js';
 import { Editor } from '../ui/editor.js';
 import { Grid, cellDisplay } from '../ui/grid.js';
-import { popover, bindingDialog, differencesDialog, confirmDialog } from '../ui/dialogs.js';
+import { popover, menu, bindingDialog, differencesDialog, confirmDialog } from '../ui/dialogs.js';
 import { StepsPanel } from '../ui/wb/steps-panel.js';
 import { OutlinePanel } from '../ui/wb/outline-panel.js';
 import { DepsPanel } from '../ui/wb/deps-panel.js';
@@ -19,6 +19,8 @@ import { sourcesOfSection } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
+import { TabStrip } from '../ui/wb/tabs.js';
+import { TabModel, keyOf } from '../core/wb/tabs-model.js';
 import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, duplicateStep } from '../core/wb/let-edit.js';
 import { parseExpressionText, MParseError } from '../core/m/parser.js';
 import { readTable } from '../core/cells.js';
@@ -39,6 +41,9 @@ export class Workspace {
     this.status = status;
     this.runner = new Runner();
     this.item = null;
+    this.tabs = new TabModel();
+    this.groups = [];
+    this.dragKey = null;
     this.rail = h('nav', { class: 'rail', id: 'rail', 'aria-label': S.itemsAria });
     this.railOpen = false;
     this.main = h('section', { class: 'main', 'data-pane': 'code' });
@@ -97,8 +102,6 @@ export class Workspace {
     this.runToken = 0;
     this.onEditCallbacks = [];
     this.resizer();
-    this.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
-    this.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());
   }
 
   onEdit(fn) {
@@ -143,9 +146,21 @@ export class Workspace {
     this.railToggle = h('button', { class: 'btn btn-quiet rail-toggle', type: 'button', 'aria-controls': 'rail', 'aria-expanded': false, onclick: () => this.setRailOpen(!this.railOpen, false) }, S.items);
     this.head = h('div', { class: 'item-head' }, h('div', { class: 'item-title-row' }, this.railToggle, this.title), h('div', { class: 'item-actions' }, this.meta, this.revertBtn, this.inspectorToggle));
     this.info = h('div', { class: 'info-strip', hidden: true });
-    this.editorHost = h('div', { class: 'editor-host' });
-    this.editorHost.style.display = 'contents';
-    this.editor = new Editor(this.editorHost, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
+    this.groupsEl = h('div', { class: 'editor-groups' });
+    this.editorHost = this.groupsEl;
+    this.dropSplit = h('div', { class: 'drop-split', hidden: true }, S.tabs.dropSplit);
+    for (const t of ['dragenter', 'dragover']) {
+      this.dropSplit.addEventListener(t, (ev) => {
+        if (this.dragKey) ev.preventDefault();
+      });
+    }
+    this.dropSplit.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      this.dropOn(1);
+    });
+    this.groupsEl.append(this.dropSplit);
+    this.addGroup();
+    this.editor = this.groups[0].editor;
     this.runBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.run() }, S.run, h('span', { class: 'item-meta' }, '⌘↵'));
     this.cancelBtn = h('button', { class: 'btn', type: 'button', hidden: true, onclick: () => this.cancel() }, S.cancel);
     this.steps = h('div', { class: 'steps', role: 'group', 'aria-label': S.stepsLabel });
@@ -168,7 +183,7 @@ export class Workspace {
     this.segmented = h('div', { class: 'segmented', role: 'group', 'aria-label': S.pane },
       h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setPane('code') }, S.code),
       h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setPane('result') }, S.result));
-    this.main.append(this.head, this.segmented, this.info, this.editorHost, this.runbar, this.resultPanel);
+    this.main.append(this.head, this.segmented, this.info, this.groupsEl, this.runbar, this.resultPanel);
     this.grid = new Grid(this.resultBody, { onDrill: (v, label) => this.drill(v, label), onError: (v, anchor) => this.showErrorCell(v, anchor) });
     this.grid.onNotice = (t) => this.status.set({ note: t });
     this.grid.el.hidden = true;
@@ -275,6 +290,8 @@ export class Workspace {
   paintStatuses() {
     if (this.depsPanel) this.refreshDeps();
     if (this.nav) this.nav.schedule();
+    this.syncInactive();
+    this.paintTabs();
   }
 
   async runBatch(mode) {
@@ -640,6 +657,7 @@ export class Workspace {
 
   renderRail() {
     if (!this.nav) this.nav = new Navigator(this.rail, this.navSource(), this.navActions());
+    this.nav.onRefresh = () => this.paintTabs();
     this.nav.refresh();
     this.nav.setOpen(this.item);
     this.scheduleProblems(0);
@@ -686,7 +704,7 @@ export class Workspace {
 
   navActions() {
     return {
-      open: (item, needle) => this.openAt(item, needle),
+      open: (item, needle, permanent) => this.openAt(item, needle, permanent),
       run: (names, downstream) => this.runSelection(names, downstream),
       revert: (items) => this.revertItems(items),
       graph: (name) => this.openGraph(name),
@@ -699,8 +717,8 @@ export class Workspace {
     return new Set(refreshedBy(this.allPqLinks(), this.linkContext()).keys());
   }
 
-  openAt(item, needle) {
-    this.select(item);
+  openAt(item, needle, permanent) {
+    this.select(item, { preview: !permanent && !needle });
     if (!needle) return;
     const text = this.editor.getText();
     const at = text.toLowerCase().indexOf(needle.toLowerCase());
@@ -756,6 +774,7 @@ export class Workspace {
 
   markEdited(item) {
     if (this.nav) this.nav.markEdited(item, this.session.isEdited(item));
+    this.paintTabs();
   }
 
   isFunction(q) {
@@ -775,12 +794,12 @@ export class Workspace {
     const all = this.items();
     if (!all.length) return;
     const i = this.item ? all.findIndex((x) => x.type === this.item.type && x.name === this.item.name) : -1;
-    this.select(all[(i + dir + all.length) % all.length]);
+    this.select(all[(i + dir + all.length) % all.length], { preview: true });
   }
 
   selectFirst() {
     const all = this.items();
-    if (all.length) this.select(all[0]);
+    if (all.length) this.select(all[0], { preview: true });
     else this.showNothing();
   }
 
@@ -791,7 +810,13 @@ export class Workspace {
     this.main.hidden = false;
   }
 
-  select(item) {
+  select(item, { preview = false, force = true } = {}) {
+    this.saveMemory();
+    this.tabs.open(item, { preview });
+    this.applyTabState({ force, restore: keyOf(item) });
+  }
+
+  present(item, grp) {
     if (!this.orchestrator.running) this.cancel();
     this.item = item;
     this.drillStack = [];
@@ -809,14 +834,10 @@ export class Workspace {
     this.resultPanel.hidden = !isQuery;
     this.segmented.hidden = !isQuery;
     this.title.textContent = item.name;
-    this.editor.setLanguage(isQuery ? 'm' : 'vba');
-    this.editor.setLabel(S.editorAriaFor(isQuery ? S.editorAria : S.moduleAria, item.name));
-    this.editor.setText(s.textOf(item));
+    this.loadInto(grp, item);
     this.refreshSteps();
     this.refreshOutline();
-    this.editor.setError(null);
     const ed = isQuery ? s.queryEditable() : s.moduleEditable(item.name);
-    this.editor.setReadOnly(!ed.editable);
     this.info.hidden = false;
     this.info.classList.remove('problem');
     clear(this.info);
@@ -838,11 +859,260 @@ export class Workspace {
     if (isQuery && this.showStored(item.name)) this.setPane('result');
   }
 
+  loadInto(group, item) {
+    const s = this.session;
+    const isQuery = item.type === 'query';
+    const key = keyOf(item);
+    const ed = group.editor;
+    ed.setLanguage(isQuery ? 'm' : 'vba');
+    ed.setLabel(S.editorAriaFor(isQuery ? S.editorAria : S.moduleAria, item.name));
+    const text = s.textOf(item);
+    let loaded = false;
+    if (group.shownKey !== key || ed.getText() !== text) {
+      ed.setText(text);
+      loaded = true;
+    }
+    ed.setError(null);
+    const e = isQuery ? s.queryEditable() : s.moduleEditable(item.name);
+    ed.setReadOnly(!e.editable);
+    group.shownKey = key;
+    return loaded;
+  }
+
+  addGroup() {
+    const group = { shownKey: null };
+    group.strip = new TabStrip(S.tabs.group(this.groups.length + 1), this.stripActions(group));
+    const host = h('div', { class: 'editor-host' });
+    group.el = h('div', { class: 'editor-group', 'data-group': String(this.groups.length) }, group.strip.el, host);
+    group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
+    group.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
+    group.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());
+    group.el.addEventListener('focusin', () => this.focusGroup(this.groups.indexOf(group)));
+    for (const t of ['dragenter', 'dragover']) {
+      group.el.addEventListener(t, (ev) => {
+        if (this.dragKey && this.tabs.groupOf(this.dragKey) !== this.groups.indexOf(group)) {
+          ev.preventDefault();
+          group.el.dataset.drop = 'true';
+        }
+      });
+    }
+    group.el.addEventListener('dragleave', (ev) => {
+      if (!group.el.contains(ev.relatedTarget)) delete group.el.dataset.drop;
+    });
+    group.el.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      this.dropOn(this.groups.indexOf(group));
+    });
+    this.groups.push(group);
+    this.groupsEl.append(group.el);
+    return group;
+  }
+
+  stripActions(group) {
+    return {
+      activate: (key) => this.activateTab(key),
+      close: (key) => this.closeTab(key),
+      permanent: (key) => {
+        if (this.tabs.makePermanent(key)) this.paintTabs();
+      },
+      menu: (key, anchor) => this.tabMenu(key, anchor),
+      dragStart: (key) => this.beginDrag(key),
+      dragEnd: () => this.endDrag()
+    };
+  }
+
+  wide() {
+    return window.matchMedia('(min-width: 900px)').matches;
+  }
+
+  syncGroups(removed) {
+    if (this.groups.length > this.tabs.groups.length) {
+      const at = removed === null || removed === undefined ? this.groups.length - 1 : removed;
+      const [gone] = this.groups.splice(at, 1);
+      gone.el.remove();
+    }
+    while (this.groups.length < this.tabs.groups.length) this.addGroup();
+    this.groups.forEach((g, i) => {
+      g.el.dataset.group = String(i);
+      g.strip.setLabel(S.tabs.group(i + 1));
+    });
+  }
+
+  applyTabState({ force = true, restore = null } = {}) {
+    const gi = this.tabs.activeGroup;
+    const grp = this.groups[gi];
+    const item = this.tabs.activeItem();
+    this.editor = grp.editor;
+    this.groups.forEach((g, i) => {
+      if (i === gi) return;
+      const key = this.tabs.groups[i].active;
+      const hit = key ? this.tabs.find(key) : null;
+      if (hit && g.shownKey !== key) this.loadInto(g, hit.tab.item);
+    });
+    if (item) {
+      const key = keyOf(item);
+      const same = this.item && keyOf(this.item) === key && grp.shownKey === key;
+      if (force || !same) {
+        this.present(item, grp);
+        if (restore) this.restoreMemory(restore);
+      }
+    }
+    this.paintTabs();
+  }
+
+  saveMemory() {
+    if (!this.item || !this.editor) return;
+    const ta = this.editor.textarea;
+    this.tabs.remember(keyOf(this.item), { scrollTop: ta.scrollTop, scrollLeft: ta.scrollLeft, start: ta.selectionStart, end: ta.selectionEnd });
+  }
+
+  restoreMemory(key) {
+    const m = this.tabs.recall(key);
+    if (!m) return;
+    const ta = this.editor.textarea;
+    ta.setSelectionRange(m.start, m.end);
+    ta.scrollTop = m.scrollTop;
+    ta.scrollLeft = m.scrollLeft;
+  }
+
+  paintTabs() {
+    const map = this.nav && this.nav.statusMap ? this.nav.statusMap : new Map();
+    const only = this.tabs.groups.length === 1 && this.tabs.groups[0].tabs.length === 1;
+    this.tabs.groups.forEach((g, i) => {
+      const grp = this.groups[i];
+      if (!grp) return;
+      grp.el.dataset.active = String(i === this.tabs.activeGroup);
+      grp.strip.set(g.tabs, g.active, (t) => ({ status: t.item.type === 'query' ? map.get(t.item.name) || 'never' : null, edited: this.session.isEdited(t.item) }), only);
+    });
+  }
+
+  syncInactive() {
+    this.groups.forEach((g, i) => {
+      if (i === this.tabs.activeGroup || !g.shownKey) return;
+      const hit = this.tabs.find(g.shownKey);
+      if (!hit) return;
+      const text = this.session.textOf(hit.tab.item);
+      if (g.editor.getText() !== text) g.editor.setText(text);
+    });
+  }
+
+  focusGroup(i) {
+    if (i < 0 || i === this.tabs.activeGroup) return;
+    this.saveMemory();
+    this.tabs.focusGroup(i);
+    this.applyTabState({ force: true });
+  }
+
+  activateTab(key) {
+    this.saveMemory();
+    if (!this.tabs.activate(key)) return;
+    this.applyTabState({ force: true, restore: key });
+    this.editor.focus();
+  }
+
+  canCloseTab() {
+    const only = this.tabs.groups.length === 1 && this.tabs.groups[0].tabs.length === 1;
+    return only ? S.tabs.only : true;
+  }
+
+  closeTab(key = this.tabs.active) {
+    if (!key || this.canCloseTab() !== true) return false;
+    this.saveMemory();
+    this.tabs.close(key);
+    this.syncGroups(this.tabs.lastRemoved);
+    this.applyTabState({ force: false, restore: this.tabs.active });
+    return true;
+  }
+
+  cycleTab(dir) {
+    this.saveMemory();
+    const key = this.tabs.cycle(dir);
+    if (!key) return false;
+    this.applyTabState({ force: true, restore: key });
+    return true;
+  }
+
+  goTab(n) {
+    this.saveMemory();
+    const key = this.tabs.goTo(n);
+    if (!key) return false;
+    this.applyTabState({ force: true, restore: key });
+    return true;
+  }
+
+  canSplit() {
+    if (this.tabs.groups.length > 1) return true;
+    if (!this.wide()) return S.tabs.narrow;
+    return this.tabs.canSplit() === true ? true : S.tabs.fewerThanTwo;
+  }
+
+  toggleSplit() {
+    const why = this.canSplit();
+    if (why !== true) {
+      this.status.set({ note: why });
+      return false;
+    }
+    this.saveMemory();
+    this.tabs.toggleSplit();
+    this.syncGroups(this.tabs.lastRemoved);
+    this.applyTabState({ force: true, restore: this.tabs.active });
+    return true;
+  }
+
+  moveTab(key, g) {
+    if (g >= this.tabs.groups.length && !this.wide()) {
+      this.status.set({ note: S.tabs.narrow });
+      return false;
+    }
+    this.saveMemory();
+    if (!this.tabs.move(key, g)) return false;
+    this.syncGroups(this.tabs.lastRemoved);
+    this.applyTabState({ force: true, restore: key });
+    return true;
+  }
+
+  beginDrag(key) {
+    this.dragKey = key;
+    if (this.tabs.groups.length === 1 && this.tabs.groups[0].tabs.length >= 2 && this.wide()) {
+      setTimeout(() => {
+        if (this.dragKey) this.dropSplit.hidden = false;
+      }, 0);
+    }
+  }
+
+  endDrag() {
+    this.dragKey = null;
+    this.dropSplit.hidden = true;
+    for (const g of this.groups) delete g.el.dataset.drop;
+  }
+
+  dropOn(g) {
+    const key = this.dragKey;
+    this.endDrag();
+    if (key) this.moveTab(key, g);
+  }
+
+  tabMenu(key, anchor) {
+    const hit = this.tabs.find(key);
+    if (!hit) return;
+    const two = this.tabs.groups.length > 1;
+    const entries = [
+      { label: S.tabs.closeTab, disabled: this.canCloseTab() !== true, run: () => this.closeTab(key) },
+      { label: S.tabs.keepOpen, disabled: !hit.tab.preview, run: () => this.tabs.makePermanent(key) && this.paintTabs() },
+      two
+        ? { label: S.tabs.moveOther, run: () => this.moveTab(key, hit.g === 0 ? 1 : 0) }
+        : { label: S.tabs.splitRight, disabled: this.tabs.groups[0].tabs.length < 2 || !this.wide(), run: () => this.moveTab(key, 1) },
+      { label: S.tabs.join, disabled: !two, run: () => this.toggleSplit() }
+    ];
+    menu(anchor, entries);
+  }
+
   onEditorChange(text) {
     if (!this.item) return;
     const s = this.session;
     s.setText(this.item, text);
     this.revertBtn.hidden = !s.isEdited(this.item);
+    this.tabs.makePermanent(keyOf(this.item));
     this.markEdited(this.item);
     this.stepResults = new Map();
     clearTimeout(this.stepsTimer);

@@ -332,3 +332,25 @@
 - The segmented Queries and VBA lists (see Deviations).
 - Observed, not mine: at 390 px the Search button in the top bar overlaps the file name. It belongs to WB-10.
 
+### WB-12: tabs and split
+- `src/core/wb/tabs-model.js` (pure, 12 unit tests in `tests/unit/wb-tabs.test.js`): groups of tabs, an active tab per group, preview tabs (one per group, replaced by the next preview, made permanent by a permanent open or an edit), open after the active tab, close activates the neighbour, split (needs two tabs, moves the active tab to a second group), join, move between groups, cycle, go to the nth tab, and caret and scroll memory per tab. An item lives in one group at most.
+- `src/ui/wb/tabs.js` is the tab strip: a `tablist` of `tab` buttons (status bead, name in italics when it is a preview, an ochre dot and a screen reader word when edited) with a close button each. Arrow keys, Home and End move focus, Enter or Space activates, Delete closes, middle click closes, double click keeps a preview open, right click opens a menu (Close tab, Keep this tab open, Open in a split to the right or Move to the other group, Join the groups) so every drag has a menu equivalent.
+- `Workspace`: `select(item, { preview, force })` opens or activates a tab, saves the caret and scroll of the tab it leaves, loads the item into the active group's editor (each group owns an `Editor`; `this.editor` always points at the active group's), and restores the remembered caret and scroll. Focusing a group makes it active. Editing, double click, Enter, the palette, the graph and `code:` Enter open permanent tabs; a single click and the arrow keys in the navigator open previews. Closing a tab never discards its edit (it stays in the session and returns when the item is opened again). The last open tab cannot be closed. Splitting needs a window of at least 900 px.
+- Commands: Alt+W close tab, Alt+[ and Alt+] previous and next, Alt+1 to Alt+9 the nth tab, Ctrl/Cmd+\ split or join. Commands now receive the keyboard event as their second argument (needed for the digit).
+- Tests: `tests/e2e/tabs.spec.js` (T-WB-12, 8 tests): preview versus permanent, open six, split, edit in both groups, close an edited tab and reopen it with the edit intact, shortcuts, caret memory, drag to the split zone and between groups, menu and keyboard equivalents, join and the narrow window, tablist semantics.
+
+#### Changed expectations
+- `main.js`: the page-wide drag handlers only act on drags that carry files (or that carry no data at all, for the synthetic events in T-B-16). Before, every drag was forced to `dropEffect = 'copy'`, which turned any non-file drag into a refused drop. T-B-16 is unchanged and passes.
+- `tests/unit/wb-commands.test.js`: the stub workspace in the availability test gained `canCloseTab` and `canSplit`, and the test now also checks that Close tab reports its reason.
+- 24 visual baselines regenerated (the tab strip sits above the editor on every workspace screen). Looked at the query-selected state at 1280×800 light.
+
+#### Deviations
+- Splitting an item into the other group moves it; the same item is never open in two groups, so there is no text to keep in sync between two editors. The text of the item shown in the inactive group is refreshed from the session whenever statuses repaint.
+- Reopening a closed tab is done by opening the item again; there is no reopen shortcut.
+- The shortcut sheet shows `Alt+1 to Alt+9` as one line (`shortcutLabel` on the command).
+- On mobile the strip is shown but cannot be split; the split command and the menu entries say the window is too narrow.
+
+#### Not done
+- Reordering tabs by dragging inside a strip.
+- A visible resize handle between the two groups (they share the width equally).
+

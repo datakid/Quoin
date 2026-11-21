@@ -66,9 +66,12 @@ test('T-WB-13: commands report why they are unavailable instead of hiding', () =
   assert.equal(none.find((c) => c.id === 'run').enabled, false);
   assert.match(none.find((c) => c.id === 'run').reason, /Open a workbook/);
   assert.equal(none.find((c) => c.id === 'openFile').enabled, true);
-  const some = reg.list({ ws: { runner: { running: false } } });
+  const some = reg.list({ ws: { runner: { running: false }, canCloseTab: () => 'This is the only open tab.', canSplit: () => true } });
   assert.equal(some.find((c) => c.id === 'run').enabled, true);
   assert.equal(some.find((c) => c.id === 'cancel').enabled, false);
+  assert.equal(some.find((c) => c.id === 'closeTab').enabled, false);
+  assert.equal(some.find((c) => c.id === 'closeTab').reason, 'This is the only open tab.');
+  assert.equal(some.find((c) => c.id === 'splitEditor').enabled, true);
 });
 
 const source = {

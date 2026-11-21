@@ -212,21 +212,26 @@ export class App {
     const setOver = (on) => {
       if (this.zone) this.zone.classList.toggle('is-over', on);
     };
+    const hasFiles = (ev) => !ev.dataTransfer || Array.from(ev.dataTransfer.types || []).includes('Files');
     window.addEventListener('dragenter', (ev) => {
+      if (!hasFiles(ev)) return;
       ev.preventDefault();
       this.dragDepth++;
       setOver(true);
     });
     window.addEventListener('dragover', (ev) => {
+      if (!hasFiles(ev)) return;
       ev.preventDefault();
       if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
       setOver(true);
     });
-    window.addEventListener('dragleave', () => {
+    window.addEventListener('dragleave', (ev) => {
+      if (!hasFiles(ev)) return;
       this.dragDepth = Math.max(0, this.dragDepth - 1);
       if (this.dragDepth === 0) setOver(false);
     });
     window.addEventListener('drop', (ev) => {
+      if (!hasFiles(ev)) return;
       ev.preventDefault();
       this.dragDepth = 0;
       setOver(false);
@@ -297,7 +302,7 @@ export class App {
     if (ev.key !== 'Escape' && document.querySelector('dialog[open]')) return;
     const cmd = this.registry.dispatch(ev, this);
     if (!cmd) return;
-    const r = cmd.run(this);
+    const r = cmd.run(this, ev);
     if (cmd.id !== 'shortcuts' && r !== false) ev.preventDefault();
   }
 

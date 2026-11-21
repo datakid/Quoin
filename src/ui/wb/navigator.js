@@ -131,6 +131,7 @@ export class Navigator {
   composeQueries() {
     const src = this.src;
     const statuses = src.statuses();
+    this.statusMap = statuses;
     const linked = src.linked();
     return src.queries().map((q, index) => {
       const rec = src.record(q.name);
@@ -233,6 +234,7 @@ export class Navigator {
     this.paintControls();
     this.render();
     this.paintSelbar();
+    if (this.onRefresh) this.onRefresh();
   }
 
   schedule() {
@@ -379,6 +381,10 @@ export class Navigator {
     el._parts = { bead, name, meta, tree, edot: null, elabel: null, sig: null, metaText: null };
     el.addEventListener('click', (ev) => this.onClick(ev, el));
     el.addEventListener('contextmenu', (ev) => this.onContext(ev, el));
+    el.addEventListener('dblclick', () => {
+      const row = this.rowOf(el);
+      if (row && row.kind === 'item') this.actions.open(row.item, null, true);
+    });
     el.addEventListener('focus', () => this.setStop(el._navKey));
     return el;
   }
@@ -663,7 +669,7 @@ export class Navigator {
       ev.preventDefault();
       const parsed = parseSearch(this.search);
       this.sel.click(this.itemKeys, row.key);
-      this.actions.open(row.item, parsed.mode === 'code' ? parsed.query : null);
+      this.actions.open(row.item, parsed.mode === 'code' ? parsed.query : null, true);
     }
   }
 
@@ -726,7 +732,7 @@ export class Navigator {
       if (row.kind === 'group') this.toggleGroup(row.key);
       else {
         this.sel.click(this.itemKeys, row.key);
-        this.actions.open(row.item);
+        this.actions.open(row.item, null, true);
       }
     } else if (k === ' ') {
       if (row.kind === 'group') this.toggleGroup(row.key);

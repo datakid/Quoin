@@ -76,6 +76,6 @@ export class CommandRegistry {
   }
 
   sheet() {
-    return this.all().filter((c) => c.keys.length).map((c) => [c.keys.map(labelOf).join(' / '), this.name(c.id)]);
+    return this.all().filter((c) => c.keys.length).map((c) => [c.shortcutLabel || c.keys.map(labelOf).join(' / '), this.name(c.id)]);
   }
 }

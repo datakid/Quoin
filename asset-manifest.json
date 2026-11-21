@@ -1,5 +1,5 @@
 {
-  "version": "930a08307a727603",
+  "version": "ba6d31db2dab7f05",
   "files": [
     "./",
     "index.html",
@@ -112,6 +112,7 @@
     "src/core/wb/step-diff.js",
     "src/core/wb/step-kinds.js",
     "src/core/wb/steps.js",
+    "src/core/wb/tabs-model.js",
     "src/core/workbook.js",
     "src/core/xml.js",
     "src/core/zip-read.js",
@@ -134,6 +135,7 @@
     "src/ui/wb/palette.js",
     "src/ui/wb/problems-dialog.js",
     "src/ui/wb/steps-panel.js",
+    "src/ui/wb/tabs.js",
     "src/workers/m-worker.js",
     "styles/app.css",
     "styles/editor.css",

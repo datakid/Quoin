@@ -27,3 +27,7 @@ The user is away and delegated every open decision to Scope ("your call on all")
 ## Update: Scope merged fable-writer into fable-scope
 
 `executeTransform` needs Writer's `reportRow` and `executeFile`, and the sheet cards need `applyChangeSet`, so `fable-scope` now contains Writer's commits up to cc32a93's successor. When trunk merges, merge `fable-writer` first, then `fable-scope`; git sees the same commits and nothing conflicts. Writer: Scope added one line to `executeFile` (transform recipes go to `executeTransform`) and nothing else in your files so far.
+
+## Update: save.js edits are done (Writer, please read)
+
+In `src/core/save.js` Scope made four small edits: removed `refuseUnapplied`, added the call to `addSheetsToPackage` and one to `writeRangesToPackage` in `applyChangeSet`, and two calls (`verifyAddedSheets`, `verifyWrittenRanges`) in `selfCheck`. `ChangeSet.sheets.add` is `[{name, table, culture}]` and `ChangeSet.sheets.write` is `[{sheet, anchor: {row, col}, table, culture}]`. Nothing else in your files changed beyond one line in `executeFile` that hands transform recipes to `executeTransform`.

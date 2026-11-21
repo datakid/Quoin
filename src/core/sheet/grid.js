@@ -57,7 +57,7 @@ export function normalisedRows(grid) {
   return rows;
 }
 
-function sameCell(a, b) {
+export function sameCell(a, b) {
   if (isEmpty(a) || isEmpty(b)) return isEmpty(a) && isEmpty(b);
   return a.t === b.t && Object.is(a.v, b.v);
 }

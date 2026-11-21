@@ -381,3 +381,29 @@ test('§3.3 an exclude is part of the rule, so a pin on the same name still wins
   const plan = resolvePlan(transform({ exclude: ['Data'] }, { overrides: [{ file: 'a.xlsx', path: 'a.xlsx', units: ['Data'] }] }), [withSheets('f1', 'a.xlsx', ['Data', 'Notes'])], { now: NOW });
   assert.deepEqual(namesOf(plan), ['Data']);
 });
+
+const inPlace = (range, scope = {}, extra = {}) => transform(scope, { output: { mode: 'inPlace', ...(range === undefined ? {} : { range }) }, ...extra });
+
+test('an in-place recipe needs a range that is a cell or a rectangle, and a sheet or table scope', () => {
+  const file = [withSheets('f1', 'a.xlsx', ['Data'])];
+  assert.deepEqual(resolvePlan(inPlace(undefined), file, { now: NOW }).errors, [{ code: 'output.rangeRequired', detail: null }]);
+  assert.deepEqual(resolvePlan(inPlace('not a range'), file, { now: NOW }).errors, [{ code: 'output.range', detail: 'not a range' }]);
+  assert.deepEqual(resolvePlan(inPlace('E1'), file, { now: NOW }).errors, []);
+  assert.deepEqual(resolvePlan(inPlace('$E$1:$H$20'), file, { now: NOW }).errors, []);
+  const whole = resolvePlan(recipeOf('transform', { scope: { type: 'workbook' }, output: { mode: 'inPlace', range: 'E1' } }), file, { now: NOW });
+  assert.deepEqual(whole.errors, [{ code: 'output.inPlaceScope', detail: null }]);
+});
+
+test('two units that would write the same range on one sheet are a planning error caught in Preview', () => {
+  const file = book('f1', 'a.xlsx', { sheets: [sheet('Data', 0), sheet('Other', 1)], tables: [table('T1', 'Data', 'A1:B3'), table('T2', 'Data', 'D1:E3'), table('T3', 'Other', 'A1:B3')] });
+  const plan = resolvePlan(inPlace('H1', { type: 'tables', match: 'all' }), [file], { now: NOW });
+  assert.deepEqual(plan.errors, [{ code: 'output.overlap', fileId: 'f1', detail: 'Data' }]);
+  assert.equal(plan.files[0].units.length, 3);
+  const clear = resolvePlan(inPlace('H1', { type: 'tables', match: 'pattern', pattern: 'T?' , exclude: ['T2'] }), [file], { now: NOW });
+  assert.deepEqual(clear.errors, []);
+});
+
+test('sheet units each write on their own sheet, so one range for all of them does not overlap', () => {
+  const plan = resolvePlan(inPlace('E1'), [withSheets('f1', 'a.xlsx', ['A', 'B', 'C'])], { now: NOW });
+  assert.deepEqual(plan.errors, []);
+});

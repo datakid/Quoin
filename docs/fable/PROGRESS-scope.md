@@ -208,6 +208,25 @@ Decisions made inside gaps in the plan:
 - The combined workbook is called `Combined.xlsx`. Its rows are patched after the run, so a progress display should treat `output` as empty until `combineOutputs` has run.
 - `sameGrid` now ignores trailing empty rows and cells and fails on extra cells, so a table whose last row is all empty reads back equal and an extra cell no longer slips through.
 
+## F3-08 Output: in place
+
+Layer: core sheet, save, execute, resolve
+Files: src/core/sheet/write-ranges.js, styles.js (new; `appendStyles` moved out of add-sheets.js), src/core/sheet/sheet-xml.js (`tableCellRows`, bytes of the one-sheet file unchanged, checked by hash), src/batch/execute/transform.js, src/batch/resolve/resolve.js, tests/unit/sheet-write.test.js (new, 16), tests/unit/batch-transform.test.js (+9), tests/unit/batch-scope.test.js (+3). Edits to others' files: `src/core/save.js` (Writer's: `refuseUnapplied` is gone because both sheet operations are now applied; `applyChangeSet` calls `writeRangesToPackage`; `selfCheck` calls `verifyWrittenRanges`).
+Do: opt-in (the recipe has to say `inPlace` and give `range`). `ChangeSet.sheets.write` is `[{sheet, anchor: {row, col}, table, culture}]`. `writeRangesToPackage` splices the header row and the table into the sheet's own XML: existing rows keep their attributes except `spans` (dropped on rows it touches), existing cells outside the range are copied through as the exact original text, new rows are inserted in order, `<sheetData/>` is expanded if empty, and `<dimension>` grows to cover the range. The cells use inline strings and the five styles appended to the workbook's styles. After the write `verifyWrittenRanges` re-opens the copy and checks every cell of each range against the table and every cell outside the ranges against the original. `refuseReason` refuses before anything is written, per unit: `refused.noSheet`, `refused.empty`, `refused.outOfSheet`, `refused.overlapsTable` (any table on the sheet), `refused.overlapsMerge` (a merged range), `refused.overlapsFormula` (a cell with a formula in the range), `refused.unsupportedSheet` (a row or cell without its position, or a prefixed `sheetData`). In `executeTransform` a unit's sheet is its own sheet (sheet unit) or the sheet of its table (table unit); `output.range` is a cell, or a rectangle that is a limit (`refused.rangeTooSmall` if the result does not fit, nothing written outside it); two units that would overlap on one sheet give `refused.overlap` for the later one; the copy is named like New sheet, `output` is `<copy> [Sheet!E1:F4]`. Resolve adds planning errors for Preview: `output.rangeRequired`, `output.range`, `output.inPlaceScope` and `output.overlap` (two units on one sheet with the same range).
+Test that fails without it: `sheet-write.test.js` fails on a missing module and the nine in-place tests in `batch-transform.test.js` fail with `inPlace output is not supported yet`; with the formula check, the spans removal, the row ordering or the outside-the-range check removed one test each fails; with the change all pass.
+Checked outside Quoin: a typed range written into the first sheet of each of the 9 fixture workbooks, at two anchors (18 files): openpyxl reads all of them, every original cell of the sheet is unchanged, the new cells are typed (date, date-time, duration) and LibreOffice converts all 18.
+Result: Done locally; the real-Excel pack item is pending (open the copy in Excel: no repair prompt, the old cells and formulas on the sheet unchanged, the new range right, pivot tables and charts on the sheet still fine).
+Fails without: yes
+Changed expectations: `sheet-add.test.js` (mine) lost its "sheet writes are still not applied" test.
+Deviations: none beyond the edits listed.
+
+Decisions made inside gaps in the plan:
+
+- `range` is required; there is no default. It is relative to each unit's own sheet, so a sheet scope with `E1` writes `E1` on every sheet.
+- Values already in the range are replaced without a warning, because the recipe is explicit and the mode is labelled. Formulas, tables and merged ranges are never replaced.
+- Data validation, conditional formatting, hyperlinks and comments that sit on cells of the range are left as they are; the pack should look at one sheet that has them.
+- The copy's own sheet-level parts (drawings, pivot caches, `tableParts`) are never touched.
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.

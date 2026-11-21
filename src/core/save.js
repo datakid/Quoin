@@ -7,6 +7,7 @@ import { openWorkbook } from './workbook.js';
 import { equalBytes } from './bytes.js';
 import { suggestedFileName } from './filename.js';
 import { addSheetsToPackage, verifyAddedSheets } from './sheet/add-sheets.js';
+import { writeRangesToPackage, verifyWrittenRanges } from './sheet/write-ranges.js';
 
 export { suggestedFileName };
 
@@ -42,10 +43,6 @@ function completeChangeSet(changeSet) {
   };
 }
 
-function refuseUnapplied(cs) {
-  if (cs.sheets.write.length) throw new TypeError('sheet writes are not applied yet');
-}
-
 export async function buildWorkbook(wb, { queryEdits = new Map(), vbaEdits = new Map(), refreshOnLoad = true, checkSection = null, acknowledgeSignature = false, faultInject = false } = {}) {
   const cs = emptyChangeSet();
   for (const [name, text] of changedQueryEdits(wb, queryEdits)) cs.queries.replace.set(name, text);
@@ -56,7 +53,6 @@ export async function buildWorkbook(wb, { queryEdits = new Map(), vbaEdits = new
 
 export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true, checkSection = null, faultInject = false } = {}) {
   const cs = completeChangeSet(changeSet);
-  refuseUnapplied(cs);
   const pkg = wb.pkg.clone();
   const touched = new Set();
   const q = cs.queries;
@@ -69,6 +65,10 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
     const written = await addSheetsToPackage(wb, pkg, cs.sheets.add);
     for (const part of written.touched) touched.add(part);
     for (const part of written.addedParts) addedParts.add(part);
+  }
+  if (cs.sheets.write.length) {
+    const written = await writeRangesToPackage(wb, pkg, cs.sheets.write);
+    for (const part of written.touched) touched.add(part);
   }
   let signatureRemoved = false;
   if (cs.modules.replace.size || cs.modules.add.size || cs.modules.remove.size) {
@@ -142,6 +142,7 @@ export async function selfCheck(wb, bytes, { changes, touched, addedParts, remov
       for (const code of back.vba.project.anomalies) if (!knownAnomalies.has(code)) throw new QuoinError('check.vba', `new anomaly ${code}`, code);
     }
     if (changes.sheets.add.length) await verifyAddedSheets(back, wb, changes.sheets.add);
+    if (changes.sheets.write.length) await verifyWrittenRanges(back, wb, changes.sheets.write);
     for (const entry of back.pkg.zip.entries) await entry.read();
     const original = new Set(wb.pkg.zip.entries.map((e) => e.name));
     const present = new Set(back.pkg.zip.entries.map((e) => e.name));

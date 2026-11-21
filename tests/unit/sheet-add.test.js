@@ -115,13 +115,6 @@ test('a name that Excel would not take, or that is already used, is a programmin
   await assert.rejects(() => addSheetsToPackage(wb, wb.pkg.clone(), [entry('Same'), entry('same')]), TypeError);
 });
 
-test('sheet writes into existing sheets are still not applied', async () => {
-  const cs = emptyChangeSet();
-  cs.sheets.write.push({ sheet: 'Input', range: 'A1', table: tableOf(SMALL) });
-  const wb = await open('pq_simple.xlsx');
-  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), /not applied/);
-});
-
 test('adding a sheet to a copy that already got one reuses the number formats instead of repeating them', async () => {
   const first = await saved('pq_simple.xlsx', withSheets(entry('A', TYPED)));
   const wb2 = await openWorkbook(first.out.bytes, 'again.xlsx');

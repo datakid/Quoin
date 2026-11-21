@@ -11,6 +11,7 @@ const RESOLVED = ['collect', 'inject', 'replace', 'transform', 'align'];
 const DEFAULT_FILE_NAME = '{file.name}__{unit.name}.xlsx';
 const DEFAULT_SHEET_NAME = 'Result';
 const DEFAULT_COMBINED_NAME = '{file.name}__{unit.name}';
+const RANGE_TEXT = /^\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?$/;
 const TARGET_TYPE = { workbook: 'sheet', sheet: 'sheet', table: 'range' };
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -97,6 +98,14 @@ function planTransformFile(index, ctx) {
     units = ruleUnits(index, scope, ctx.matcher, sheets);
     if (unknownNonEmpty(index, scope, sheets)) ctx.errors.push({ code: 'scope.needsInspect', fileId: index.id, detail: 'nonEmpty' });
   }
+  if (ctx.inPlace && scope.type !== 'workbook') {
+    const seen = new Set();
+    for (const unit of units) {
+      const target = unit.kind === 'sheet' ? unit.name : (index.tables.find((t) => t.name === unit.name) || {}).sheet;
+      if (seen.has(target) && !ctx.errors.some((e) => e.code === 'output.overlap' && e.fileId === index.id && e.detail === target)) ctx.errors.push({ code: 'output.overlap', fileId: index.id, detail: target });
+      seen.add(target);
+    }
+  }
   return {
     fileId: index.id,
     source,
@@ -124,6 +133,12 @@ function recipeErrors(recipe, indexes) {
   if (recipe.recipe === 'align' && !alignSourceFor(recipe.align, indexes)) errors.push({ code: 'align.noSource', detail: recipe.align.hash });
   if (recipe.recipe === 'transform') {
     for (const token of unknownQueryTokens(recipe.query.m)) errors.push({ code: 'recipe.token', detail: token });
+    if (recipe.output && recipe.output.mode === 'inPlace') {
+      const range = recipe.output.range;
+      if (range === undefined || range === null || range === '') errors.push({ code: 'output.rangeRequired', detail: null });
+      else if (!RANGE_TEXT.test(range)) errors.push({ code: 'output.range', detail: range });
+      if (recipe.scope.type === 'workbook') errors.push({ code: 'output.inPlaceScope', detail: null });
+    }
     if (recipe.scope.type === 'sheets' && recipe.scope.onlyWithHeader) errors.push({ code: 'scope.headerOnSheets', detail: 'onlyWithHeader' });
   }
   return errors;
@@ -142,7 +157,7 @@ export function resolvePlan(recipe, indexes, { now } = {}) {
     const matcher = buildMatcher(recipe.scope);
     if (matcher.error) errors.push(matcher.error);
     const template = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : recipe.output && recipe.output.mode === 'newFile' ? DEFAULT_FILE_NAME : recipe.output && recipe.output.mode === 'newSheet' ? DEFAULT_SHEET_NAME : recipe.output && recipe.output.mode === 'combined' ? DEFAULT_COMBINED_NAME : null;
-    const ctx = { recipe, scope: recipe.scope, matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
+    const ctx = { recipe, scope: recipe.scope, inPlace: Boolean(recipe.output && recipe.output.mode === 'inPlace'), matcher, pins: pins.matched, errors, orphans, fill: template === null ? null : templateFor(template) };
     files = ordered.map((ix) => planTransformFile(ix, ctx));
   } else if (recipe.recipe === 'inject') {
     const matcher = buildMatcher({ match: recipe.inject.match, pattern: recipe.inject.name });

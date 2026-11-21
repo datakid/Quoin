@@ -2013,3 +2013,232 @@ dialog.graph {
 .graph-selected {
   color: var(--ink-2);
 }
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.nav-searchbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: var(--s-2) var(--s-2) var(--s-1);
+  background: var(--surface);
+}
+
+.nav-controls {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2) var(--s-2);
+}
+
+.nav-search,
+.nav-select {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--h-ctl);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.nav-search::placeholder {
+  color: var(--ink-3);
+}
+
+.nav-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-2);
+}
+
+.nav-field {
+  display: grid;
+  gap: var(--s-0);
+  min-width: 0;
+}
+
+.nav-field-label {
+  font-size: var(--t-2xs);
+  line-height: var(--t-2xs-lh);
+  color: var(--ink-3);
+}
+
+.nav-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+
+.nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: var(--h-ctl-sm);
+  padding: 0 var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--t-xs);
+  line-height: var(--t-xs-lh);
+  cursor: pointer;
+}
+
+.nav-chip:hover {
+  background: var(--hover);
+}
+
+.nav-chip[aria-pressed="true"] {
+  border-color: var(--slate);
+  background: var(--slate-soft);
+  color: var(--slate-ink);
+}
+
+.nav-chip-n {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-chip[aria-pressed="true"] .nav-chip-n {
+  color: inherit;
+}
+
+.nav-more {
+  display: grid;
+  gap: var(--s-1);
+  min-width: 220px;
+  padding: var(--s-2);
+}
+
+.nav-more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--h-ctl);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-2);
+  cursor: pointer;
+}
+
+.nav-more-row:hover {
+  background: var(--hover);
+}
+
+.nav-more-row > span:first-of-type {
+  flex: 1;
+}
+
+.nav-list {
+  position: relative;
+  flex: none;
+  padding: 0;
+  margin-bottom: var(--s-4);
+}
+
+.nav-list:focus {
+  outline: none;
+}
+
+.nav-list > li {
+  position: absolute;
+  left: var(--s-2);
+  right: var(--s-2);
+  height: var(--h-row);
+}
+
+.nav-list > .rail-label {
+  left: 0;
+  right: 0;
+  margin: 0;
+  min-height: 0;
+  height: var(--h-row);
+  position: absolute;
+}
+
+.nav-list > .rail-label.item-meta {
+  padding: 0 var(--s-4);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nav-list [aria-level="2"] > .tree-item {
+  padding-left: var(--s-5);
+}
+
+.nav-list .tree-folder > .tree-item {
+  padding-left: var(--s-3);
+}
+
+.nav-list [data-pinned="true"] > .tree-item {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.nav-list [aria-selected="true"]:not([data-open="true"]) > .tree-item::before {
+  display: none;
+}
+
+.tree-chevron {
+  flex: none;
+  width: var(--s-2);
+  height: var(--s-2);
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: rotate(45deg);
+  transition: transform var(--dur-1) var(--ease);
+}
+
+[aria-expanded="false"] > .tree-item > .tree-chevron {
+  transform: rotate(-45deg);
+}
+
+.tree-meta {
+  flex: none;
+  font-size: var(--t-2xs);
+  line-height: var(--t-2xs-lh);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.hit {
+  border-radius: var(--r-1);
+  background: var(--slate-soft);
+  color: inherit;
+}
+
+.nav-selbar {
+  position: sticky;
+  bottom: var(--s-2);
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1);
+  margin: auto var(--s-2) var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-3);
+  background: var(--raised);
+  box-shadow: var(--shadow-overlay);
+}
+
+.nav-selcount {
+  flex: 1 0 auto;
+  font-size: var(--t-sm);
+  line-height: var(--t-sm-lh);
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .nav-chip {
+    min-height: var(--h-ctl);
+  }
+}

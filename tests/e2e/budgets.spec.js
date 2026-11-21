@@ -25,6 +25,11 @@ async function fixBroken(page) {
   await expect.poll(() => page.locator('.status-problems').textContent()).toBe('Problems 3');
 }
 
+async function openByName(page, name) {
+  await page.getByRole('searchbox', { name: 'Search queries' }).fill(name);
+  await page.locator(`[role=treeitem][data-name="${name}"]`).click();
+}
+
 async function openMany(page) {
   await page.setViewportSize({ width: 1400, height: 900 });
   await observe(page);
@@ -39,7 +44,9 @@ async function openMany(page) {
 test('T-WB-27: open a 320-query workbook, the problems scan, and selecting a query', async ({ page }) => {
   const { t0, interactive } = await openMany(page);
   record.push(['open', Math.round(interactive)]);
-  expect(await page.locator('[role=treeitem][data-type=query]').count()).toBe(320);
+  expect(await page.locator('[role=treeitem][data-type=query]').count()).toBeGreaterThan(10);
+  expect(await page.locator('[role=treeitem][data-type=query]').count()).toBeLessThan(80);
+  await expect(page.locator('[role=treeitem][data-type=query]').first()).toHaveAttribute('aria-setsize', '320');
   expect(interactive).toBeLessThanOrEqual(1500 * FACTOR);
 
   await expect.poll(() => page.locator('.status-problems').textContent(), { timeout: 6000 }).toBe('Problems 4');
@@ -76,7 +83,7 @@ test('T-WB-27: open a 320-query workbook, the problems scan, and selecting a que
 test('T-WB-27: evaluating the steps of a 12-step query costs no more than 1.3 times a plain run', async ({ page }) => {
   await openMany(page);
   await fixBroken(page);
-  await page.locator('[role=treeitem][data-name="Wide_Steps"]').click();
+  await openByName(page, 'Wide_Steps');
   await expect(page.locator('.step-row')).toHaveCount(12);
   const time = async (action, done) => {
     const t = await page.evaluate(() => performance.now());
@@ -102,7 +109,7 @@ test('T-WB-27: evaluating the steps of a 12-step query costs no more than 1.3 ti
 test('T-WB-27: a step click with stored results shows the step quickly and the graph of 320 nodes opens', async ({ page }) => {
   await openMany(page);
   await fixBroken(page);
-  await page.locator('[role=treeitem][data-name="Wide_Steps"]').click();
+  await openByName(page, 'Wide_Steps');
   await page.getByRole('button', { name: 'Evaluate steps' }).click();
   await expect(page.locator('.bead-ok')).toHaveCount(12);
   const ms = await page.evaluate(async () => {

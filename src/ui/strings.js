@@ -298,11 +298,11 @@ export const S = {
   },
   nav: {
     searchLabel: 'Search queries',
-    searchPlaceholder: 'Search, or code: and step: to look inside',
+    searchPlaceholder: 'Search, code: or step:',
     group: 'Group by',
     sort: 'Sort by',
     groups: { none: 'No grouping', folder: 'Folder', load: 'Load target', status: 'Status', layer: 'Layer' },
-    sorts: { section: 'Workbook order', name: 'Name', lastRun: 'Last run', duration: 'Duration', rows: 'Rows' },
+    sorts: { section: 'File order', name: 'Name', lastRun: 'Last run', duration: 'Duration', rows: 'Rows' },
     chips: { edited: 'Edited', errors: 'Errors', stale: 'Stale', never: 'Never run', loaded: 'Loaded', connection: 'Connection only', functions: 'Functions', macro: 'Linked to a macro' },
     more: 'More',
     chipsLabel: 'Filters',
@@ -329,7 +329,14 @@ export const S = {
     clearSelection: 'Clear selection',
     asEdited: 'Edited',
     rowsOf: (n) => (n === 1 ? '1 row' : `${n} rows`),
-    position: (i, n) => `${i} of ${n}`
+    position: (i, n) => `${i} of ${n}`,
+    moreChip: '+ More',
+    moreLabel: 'More filters',
+    selectionLabel: 'Selection',
+    runAria: 'Selection: run',
+    runDownstreamAria: 'Selection: run with downstream',
+    copyFailed: 'The names could not be copied.',
+    groupAria: (label, counts) => `${label}, ${counts}`
   },
   deps: {
     dependsOn: 'Depends on',

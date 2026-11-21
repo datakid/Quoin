@@ -18,6 +18,7 @@ import { problemsForQuery, problemsForModule, sortProblems, countProblems } from
 import { sourcesOfSection } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
 import { stepsOf } from '../core/wb/steps.js';
+import { Navigator } from '../ui/wb/navigator.js';
 import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, duplicateStep } from '../core/wb/let-edit.js';
 import { parseExpressionText, MParseError } from '../core/m/parser.js';
 import { readTable } from '../core/cells.js';
@@ -272,15 +273,8 @@ export class Workspace {
   }
 
   paintStatuses() {
-    const statuses = this.orchestrator.statuses();
     if (this.depsPanel) this.refreshDeps();
-    for (const li of this.rail.querySelectorAll('[role="treeitem"][data-type="query"]')) {
-      const dot = li.querySelector('.dot-loaded, .dot-conn');
-      if (!dot) continue;
-      const st = statuses.get(li.dataset.name) || 'never';
-      dot.dataset.status = st;
-      dot.title = S.batch.state[st] || '';
-    }
+    if (this.nav) this.nav.schedule();
   }
 
   async runBatch(mode) {
@@ -394,9 +388,17 @@ export class Workspace {
 
   allPqLinks() {
     const per = new Map();
+    if (!this.linkCache) this.linkCache = new Map();
     for (const m of this.session.modules) {
       const text = this.item && this.item.type === 'module' && this.item.name === m.name ? this.editor.getText() : this.session.textOf({ type: 'module', name: m.name });
-      const links = pqLinksOfModule(text, this.moduleKindOf({ name: m.name }));
+      const kind = this.moduleKindOf({ name: m.name });
+      const hit = this.linkCache.get(m.name);
+      let links;
+      if (hit && hit.text === text && hit.kind === kind) links = hit.links;
+      else {
+        links = pqLinksOfModule(text, kind);
+        this.linkCache.set(m.name, { text, kind, links });
+      }
       if (links.size) per.set(m.name, links);
     }
     return per;
@@ -637,62 +639,105 @@ export class Workspace {
   }
 
   renderRail() {
-    const keep = this.rail.querySelector('.rail-resizer');
-    clear(this.rail);
-    const s = this.session;
-    const tree = h('ul', { class: 'tree', role: 'tree', 'aria-label': S.queries });
-    const mk = (item, extra) => {
-      const edited = s.isEdited(item);
-      const q = item.type === 'query' ? s.query(item.name) : null;
-      const isFn = q ? this.isFunction(q) : false;
-      const li = h('li', { role: 'treeitem', 'aria-selected': String(!!this.item && this.item.type === item.type && this.item.name === item.name), 'data-type': item.type, 'data-name': item.name, tabindex: '-1' },
-        h('span', { class: 'tree-item' },
-          item.type === 'module' ? h('span', { class: 'dot-module', 'aria-hidden': 'true' }) : null,
-          q ? (q.load.kind === 'connection' ? h('span', { class: 'dot-conn', title: S.connectionOnly }) : h('span', { class: 'dot-loaded', title: loadLabel(q.load) })) : null,
-          h('span', { class: 'name' }, item.name),
-          isFn ? h('span', { class: 'badge-fn', 'aria-hidden': 'true' }, S.functionBadge) : null,
-          isFn ? h('span', { class: 'sr-only' }, S.asFunction) : null,
-          edited ? h('span', { class: 'dot-edited', 'aria-hidden': 'true' }) : null,
-          edited ? h('span', { class: 'tree-edited' }, S.editedMark) : null));
-      li.addEventListener('click', () => this.select(item));
-      li.addEventListener('keydown', (ev) => this.railKey(ev, li));
-      if (extra) extra(li);
-      return li;
-    };
-    tree.append(h('li', { role: 'presentation', class: 'rail-label' }, h('span', null, S.queries), h('span', null, String(s.queries.length))));
-    const groups = new Map();
-    for (const q of s.queries) {
-      const g = q.group ? q.group.name : '';
-      if (!groups.has(g)) groups.set(g, []);
-      groups.get(g).push(q);
-    }
-    for (const [g, qs] of groups) {
-      if (!g) {
-        for (const q of qs) tree.append(mk({ type: 'query', name: q.name }));
-      } else {
-        const sub = h('ul', { role: 'group' });
-        const folder = h('li', { role: 'treeitem', 'aria-expanded': 'true', class: 'tree-folder', tabindex: '-1', 'aria-label': S.folderAria(g) },
-          h('span', { class: 'tree-item' }, h('span', { class: 'name' }, g)), sub);
-        folder.addEventListener('keydown', (ev) => {
-          if (ev.target === folder) this.railKey(ev, folder);
-        });
-        folder.firstChild.addEventListener('click', () => {
-          const open = folder.getAttribute('aria-expanded') !== 'true';
-          folder.setAttribute('aria-expanded', String(open));
-          sub.hidden = !open;
-        });
-        for (const q of qs) sub.append(mk({ type: 'query', name: q.name }));
-        tree.append(folder);
-      }
-    }
-    if (!s.queries.length) tree.append(h('li', { role: 'presentation', class: 'item-meta rail-label' }, S.noQueries));
-    tree.append(h('li', { role: 'presentation', class: 'rail-label' }, h('span', null, S.macros), h('span', null, String(s.modules.length))));
-    for (const m of s.modules) tree.append(mk({ type: 'module', name: m.name }));
-    if (!s.modules.length) tree.append(h('li', { role: 'presentation', class: 'item-meta rail-label' }, S.noMacros));
-    this.rail.append(tree, keep);
-    this.syncRailSelection();
-    this.paintStatuses();
+    if (!this.nav) this.nav = new Navigator(this.rail, this.navSource(), this.navActions());
+    this.nav.refresh();
+    this.nav.setOpen(this.item);
     this.scheduleProblems(0);
+  }
+
+  navSource() {
+    const s = this.session;
+    const stepCache = new Map();
+    return {
+      queries: () => {
+        const index = this.orchestrator.refresh();
+        return s.queries.map((q) => ({
+          name: q.name,
+          load: q.load,
+          loadTitle: loadLabel(q.load),
+          folder: q.group ? q.group.name : '',
+          isFunction: this.isFunction(q),
+          edited: s.isEdited({ type: 'query', name: q.name }),
+          refs: index && index.refs.has(q.name) ? index.refs.get(q.name).size : undefined,
+          usedBy: index && index.usedBy.has(q.name) ? index.usedBy.get(q.name).size : undefined
+        }));
+      },
+      modules: () => s.modules.map((m) => ({ name: m.name, edited: s.isEdited({ type: 'module', name: m.name }) })),
+      statuses: () => this.orchestrator.statuses(),
+      record: (name) => this.orchestrator.book.record(name),
+      textOf: (item) => s.textOf(item),
+      stepNames: (name) => {
+        const text = s.textOf({ type: 'query', name });
+        const hit = stepCache.get(name);
+        if (hit && hit.text === text) return hit.names;
+        let names = [];
+        try {
+          const model = stepsOf(text, 0, { members: new Set(s.queries.map((q) => q.name)) });
+          names = model && model.steps ? model.steps.map((x) => x.name) : [];
+        } catch {
+          names = [];
+        }
+        stepCache.set(name, { text, names });
+        return names;
+      },
+      linked: () => this.linkedQueries()
+    };
+  }
+
+  navActions() {
+    return {
+      open: (item, needle) => this.openAt(item, needle),
+      run: (names, downstream) => this.runSelection(names, downstream),
+      revert: (items) => this.revertItems(items),
+      graph: (name) => this.openGraph(name),
+      notify: (note) => this.status.set({ note })
+    };
+  }
+
+  linkedQueries() {
+    if (!this.session.modules.length) return new Set();
+    return new Set(refreshedBy(this.allPqLinks(), this.linkContext()).keys());
+  }
+
+  openAt(item, needle) {
+    this.select(item);
+    if (!needle) return;
+    const text = this.editor.getText();
+    const at = text.toLowerCase().indexOf(needle.toLowerCase());
+    if (at < 0) return;
+    const before = text.slice(0, at);
+    const line = before.split(/\r\n|\r|\n/).length;
+    const col = at - Math.max(before.lastIndexOf('\n'), before.lastIndexOf('\r'));
+    this.editor.goto(line, col);
+  }
+
+  async runSelection(names, downstream) {
+    if (this.runner.running || this.orchestrator.running) {
+      this.status.set({ note: S.batch.busy });
+      return;
+    }
+    const index = this.orchestrator.refresh();
+    const selection = downstream ? [...new Set([...names, ...downstreamOf(index, names)])] : names;
+    const item = this.item && this.item.type === 'query' ? this.item.name : null;
+    this.setRunning(true);
+    const r = await this.orchestrator.run('run-selected', { selection });
+    this.setRunning(false);
+    this.paintStatuses();
+    if (r.status === 'nothing') this.status.set({ note: S.batch.nothing });
+    else this.status.set({ note: S.batch.summary(this.orchestrator.counts()) });
+    if (item) this.showStored(item);
+  }
+
+  revertItems(items) {
+    for (const it of items) this.session.revert(it);
+    for (const it of items) this.markEdited(it);
+    if (this.item && items.some((it) => it.type === this.item.type && it.name === this.item.name)) {
+      this.editor.setText(this.session.textOf(this.item));
+      this.revertBtn.hidden = true;
+      if (this.item.type === 'query') this.checkLive(this.editor.getText());
+    }
+    for (const fn of this.onEditCallbacks) fn();
+    this.nav.schedule();
   }
 
   railItems() {
@@ -706,29 +751,11 @@ export class Workspace {
   }
 
   syncRailSelection() {
-    const all = this.railItems();
-    let stop = null;
-    for (const li of all) {
-      if (!li.dataset.name) continue;
-      const on = !!this.item && li.dataset.type === this.item.type && li.dataset.name === this.item.name;
-      li.setAttribute('aria-selected', String(on));
-      if (on) stop = li;
-    }
-    if (!stop) stop = all[0] || null;
-    for (const li of all) li.tabIndex = li === stop ? 0 : -1;
+    if (this.nav) this.nav.setOpen(this.item);
   }
 
   markEdited(item) {
-    const li = this.rail.querySelector(`[data-type="${item.type}"][data-name="${CSS.escape(item.name)}"] .tree-item`);
-    if (!li) return;
-    const edited = this.session.isEdited(item);
-    const dot = li.querySelector('.dot-edited');
-    if (edited && !dot) li.append(h('span', { class: 'dot-edited', 'aria-hidden': 'true' }), h('span', { class: 'tree-edited' }, S.editedMark));
-    else if (!edited && dot) {
-      dot.remove();
-      const label = li.querySelector('.tree-edited');
-      if (label) label.remove();
-    }
+    if (this.nav) this.nav.markEdited(item, this.session.isEdited(item));
   }
 
   isFunction(q) {
@@ -742,38 +769,6 @@ export class Workspace {
       }
     }
     return q.isFn;
-  }
-
-  railKey(ev, li) {
-    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    const all = this.railItems().filter((x) => x.offsetParent !== null);
-    const i = all.indexOf(li);
-    const go = (j) => {
-      const target = all[Math.max(0, Math.min(all.length - 1, j))];
-      if (!target) return;
-      target.focus();
-      if (target.dataset.name) target.click();
-    };
-    if (ev.key === 'ArrowDown') go(i + 1);
-    else if (ev.key === 'ArrowUp') go(i - 1);
-    else if (ev.key === 'Home') go(0);
-    else if (ev.key === 'End') go(all.length - 1);
-    else if (ev.key === 'Enter' || ev.key === ' ') (li.dataset.name ? li : li.firstChild).click();
-    else if (ev.key.length === 1 && /\S/.test(ev.key)) {
-      const key = ev.key.toLowerCase();
-      const names = all.map((x) => (x.dataset.name || x.textContent || '').trim().toLowerCase());
-      let found = -1;
-      for (let k = 1; k <= all.length; k++) {
-        const j = (i + k) % all.length;
-        if (names[j].startsWith(key)) {
-          found = j;
-          break;
-        }
-      }
-      if (found < 0) return;
-      go(found);
-    } else return;
-    ev.preventDefault();
   }
 
   step(dir) {

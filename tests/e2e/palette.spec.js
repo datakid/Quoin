@@ -59,11 +59,10 @@ test('T-WB-13: @ jumps into a module at the procedure and : goes to a line', asy
   await page.keyboard.press('Control+k');
   await page.keyboard.type(':9');
   await page.keyboard.press('Enter');
-  const line2 = await page.evaluate(() => {
+  await expect.poll(() => page.evaluate(() => {
     const ta = document.querySelector('.editor-wrap textarea');
     return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
-  });
-  expect(line2).toBe(9);
+  })).toBe(9);
 });
 
 test('T-WB-13: # lists the steps of the current query and jumps to the one chosen', async ({ page }) => {

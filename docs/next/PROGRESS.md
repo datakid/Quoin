@@ -302,3 +302,33 @@
 - `tests/e2e/budgets.spec.js` measures and asserts, with a `QUOIN_PERF_FACTOR` (default 2): open to interactive, problems scan, long tasks, selecting a query, evaluate steps against a plain run, a step click, the graph opening, and Run all's first result. Three consecutive runs on the build machine: open 780–980 ms (budget 1500), problems scan 920–1060 ms (3000), no long task during the scan (50), selecting a query 14–33 ms (100), evaluate steps 114–152 ms against a plain run of 119–159 ms (ratio about 1; budget 1.3), step click 7–11 ms (50), graph of 320 nodes 16–22 ms (200), Run all first result 560–650 ms (500 at 1×), Run all total about 2.1 s. The long task while the workbook itself is parsed and the rail is built is 370–510 ms and is not covered by a budget in the plan.
 - Not measured: `vba-big.xlsm` (60 modules, 40 000 lines; no generator can write a VBA project of that size), the navigator search keystroke (there is no navigator search), `F10` step stepping (not built), and the editor and grid frame budgets (covered by the existing T-PERF tests only).
 - Note: the engine refuses to run any query while one query in the section does not parse, so Run all on this workbook needs the parse error fixed first, exactly as the acceptance story does in its step 2.
+
+### WB-11: the navigator UI
+- `src/ui/wb/navigator.js` replaces the old rail tree. The `.rail` element stays the scroller; inside it a sticky search box, then scrolling controls (Group by, Sort by, filter chips), then a virtualised `role="tree"` list of absolutely positioned rows (a window of rows plus 8 of overscan, the open or focused row always kept, the owning group header pinned while its items scroll). Rows are keyed and reused, so selecting never rebuilds a node (T-B-10 still passes unchanged).
+- Search: fuzzy on names with highlighted ranges; `code:` shows the match count on each row and Enter opens the first match at its line; `step:` searches step names. Group by Folder, Load target, Status, Layer, None, with sticky headers, counts per status and collapse (Enter, Space, click, Left and Right). Sort by file order, name, last run, duration, rows. Chips Edited, Errors, Stale, Never run always visible, the other four behind `+ More` and shown as soon as they are on; counts live.
+- Multi-select: click, Shift+click, Ctrl/Cmd+click, Space, Shift+Arrow, Ctrl/Cmd+A, Escape clears. From two items a selection bar offers Run, Run with downstream, Revert, Show in graph and Copy names (also in the row context menu). Run goes through `orchestrator.run('run-selected')`; "with downstream" adds `downstreamOf` of the selection first.
+- `Workspace` now builds the navigator lazily in `renderRail` and gives it a source (queries, modules, statuses, records, text, step names, macro links) and actions (open, run, revert, graph, notify). `allPqLinks` is memoised per module text so the Linked to a macro chip is cheap. `railKey` is gone.
+- Tests: `tests/e2e/navigator.spec.js` (T-WB-11, 13 tests on `many-queries.xlsx`): `sclean` finds `Sales_Clean` first, `code:Table.Group` gives the two queries with "1 match", `step:`, group by Layer (three groups, positions, collapse, ArrowRight expands), chips and More, Edited chip follows an edit, five selected queries run and exactly five get results, Run with downstream, virtualisation (under 80 rows, `aria-posinset` 1 and 320 of 320, last row reachable), keyboard selection, Copy names on the clipboard, row menu Revert, sort and its disabled state while searching.
+
+#### Changed expectations
+- `budgets.spec.js` T-WB-27: the 320 rows are no longer all in the DOM. The assertion is now a window (more than 10 and fewer than 80 rows) plus `aria-setsize` 320 on the first row; the two tests that clicked `Wide_Steps` (index near 300) open it through the search box (`openByName`).
+- `palette.spec.js` T-WB-13 `@`/`:` test: the final line is read with `expect.poll`. The palette runs its handler in a 0 ms timer after the dialog closes and the old test read the caret once, immediately; with the navigator on the page that read lost the race about one run in three (the unchanged baseline passed 8 of 8, so this is a timing change, not a behaviour change).
+- 18 visual baselines regenerated with `--update-snapshots=all` (the rail has a search box, controls and a different row structure); the 390 px states with the rail closed did not change. Looked at: the Macros state at 1280×800 light, and by hand the 320-query list in light, dark and at 390×844.
+- Strings: the search placeholder is now "Search, code: or step:" and the default sort is "File order" so both fit in the 272 px rail.
+
+#### Deviations
+- One list, not two. Queries and Macros are two sections of the same tree (as before) instead of a segmented control with `Ctrl/Cmd+Shift+1/2`; every existing rail test, the macro outline and the palette depend on modules being in the same tree. The filters that only make sense for queries hide the Macros section; Edited applies to both; `code:` searches both.
+- The list is always `role="tree"` with `treeitem` rows (`aria-level` 1 or 2, `aria-posinset`, `aria-setsize`, `aria-multiselectable`), not a `listbox` when ungrouped: T-B-10 and the accessibility test require `treeitem`.
+- The selection bar has no Print entry (printing a selection is not built). Its buttons read "Run" and "Run with downstream" but their accessible names are "Selection: run" and "Selection: run with downstream", because the existing tests find the Run button by `/^Run/`.
+- Only the search box is sticky; Group by, Sort by and the chips scroll with the list. A fully sticky header was 168 px high and covered the whole rail in the 260 px high T-B-10 test.
+- `Ctrl/Cmd+Arrow` moves focus without opening or selecting, so a non-contiguous selection can be built from the keyboard (Space toggles). Plain Arrow still moves, selects and opens, as before.
+- Sorting by last run uses the time at which the navigator first saw a settled status for the query in this session; the status book has no timestamps and `src/core` was left alone.
+- With no folders in the workbook, Group by Folder shows a plain list instead of one "No folder" header.
+
+#### Not done
+- Palette commands for the five selection actions (the bar and the context menu have them).
+- The bypassed-steps count on a row (it needs the step model of every query on every refresh).
+- Preview versus permanent tab on click and double-click (WB-12).
+- The segmented Queries and VBA lists (see Deviations).
+- Observed, not mine: at 390 px the Search button in the top bar overlaps the file name. It belongs to WB-10.
+

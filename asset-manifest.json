@@ -1,5 +1,5 @@
 {
-  "version": "242116d25e736ac1",
+  "version": "128d74d9c634f3cb",
   "files": [
     "./",
     "index.html",
@@ -30,9 +30,11 @@
     "src/app/main.js",
     "src/app/orchestrator.js",
     "src/app/outputs.js",
+    "src/app/plan-run.js",
     "src/app/pool.js",
     "src/app/runner.js",
     "src/app/session.js",
+    "src/app/set-indexes.js",
     "src/app/set-session.js",
     "src/app/theme-init.js",
     "src/app/variant-text.js",

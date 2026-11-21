@@ -53,7 +53,7 @@ function indexTable(indexes) {
 
 const reasonOf = (code) => (code ? errorMessage(code) : '');
 
-function reportRows(plan, indexes, results, runId) {
+export function reportRows(plan, indexes, results, runId) {
   const byId = new Map(indexes.map((ix) => [ix.id, ix]));
   const rows = [];
   for (const fp of plan.files) {

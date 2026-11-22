@@ -43,6 +43,14 @@ export default {
 - The navigator list is virtualised: only about 30 rows of 320 are in the DOM. A test that wants a row far down must search for it (`getByRole('searchbox')`) or scroll `.rail` first; `[role=treeitem][data-name]` counts are a window, not the total (read `aria-setsize`).
 - Each editor group owns an `Editor`; `ws.editor` is the active group's. Tests that fill a textarea while two groups are open must scope it (`.editor-group` nth). Page-wide drag handlers only act on file drags.
 - The selection bar buttons have accessible names starting with "Selection:" so that `/^Run/` still finds exactly one Run button.
+- Two perf unit tests (`T-WB-01` 300 ms index, `T-WB-05` 30 ms ranking) fail when a browser run is using the machine. Rerun them alone before believing a unit failure.
+- `pkill -f "tests/e2e/server.js"` matches your own shell and kills it; use `pkill -f "[t]ests/e2e/server.js"`. A stale dev server from an earlier run is reused (`reuseExistingServer`) and can make a comparison against another checkout meaningless; kill it first.
+- The editor tabs (`.tabstrip`) and the dock tabs (`.dock-tabs`) are both `role="tab"`. Scope tab locators to one of them.
+- Native drag and drop in Chromium: cancel `dragenter` as well as `dragover` on a drop target, never change the layout during `dragover` (the pointer lands on the thing you inserted and the drag flickers), and the app's page-wide drag handlers must ignore non-file drags (they once forced `dropEffect = copy`, which silently blocked every other drop). Playwright's `dragTo` works for visible targets; for a target that only appears during the drag use `page.mouse` with steps.
+- `F10` and `Shift+F10` only act when focus is in the editor or the steps panel: `Shift+F10` is the context menu key and several menus here rely on it.
+- At 390 px the Items button in the bottom bar carries the class `rail-toggle` (tests and `states.js` use it); the head's old button is `rail-toggle-wide`, shown only from 640 to 1023 px.
+- Commands receive the keyboard event as a second argument (`cmd.run(ctx, ev)`); the command stubs in `tests/unit/wb-commands.test.js` list the workspace methods the registry calls and need a new line whenever a command calls a new one.
+- `npm install` rewrites `package-lock.json`; `git checkout package-lock.json` before committing.
 - Do not persist anything in `localStorage` except the theme (T-LINT-8, G-3). Density is in memory.
 - Style rules: `border-radius` and control heights must come from tokens (T-LINT-17); colours only in `tokens.css`; user-visible text only in `src/ui/strings.js` (T-LINT-9).
 - When editing CSS with a script, match whole rules; a regexp on the first line of a multi-selector rule corrupts the next rule (happened twice).
@@ -60,9 +68,9 @@ Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md
 - WB-12 tabs and split: `src/core/wb/tabs-model.js` (unit tests), `src/ui/wb/tabs.js`, tab and group handling in `Workspace` (`select`, `present`, `applyTabState`, `addGroup`), the five tab commands, `tests/e2e/tabs.spec.js`.
 - WB-11 the navigator: `src/core/wb/nav-model.js` (unit tests) and `src/ui/wb/navigator.js` (virtualised tree, search with `code:` and `step:`, Group by, Sort by, chips, multi-select, selection bar, row menu), wired from `Workspace.renderRail`, with `tests/e2e/navigator.spec.js`. Deviations and changed expectations are in `PROGRESS.md`.
 
-Uncommitted at the time of this handover: the `S.nav` strings in `src/ui/strings.js` (prepared for the navigator) and the `UNSAFE` skip of `many-queries.xlsx` in `tests/unit/save-safety.test.js`. They are committed together with this file.
+Commits on `beta` from this series (newest first): `94e52b1` WB-14/15 part, `d6bace6` WB-16 first slice, `8d96afd` WB-10 part, `1772374` WB-12, `424b9de` WB-11. Nothing is uncommitted.
 
-Last verified: lint 0 findings; unit 1047 pass; browser suite 188 pass, 0 fail (excluding `T-P-14b`, `T-E-12`, `T-I-04`); 40 visual baselines regenerated. Not run: `T-E-12`, `T-P-14b`, the manual browser matrix in `05_TEST_PLAN.md` §4.
+Last verified: lint 0 findings; unit 1063 pass (5 skipped by design); browser suite 237 pass, 0 fail (excluding `T-P-14b`, `T-E-12`, `T-I-04`); visual baselines regenerated after each UI change and looked at. Not run: `T-E-12`, `T-P-14b`, the manual browser matrix in `05_TEST_PLAN.md` §4.
 
 ## What is left, in the order to do it
 
@@ -75,6 +83,16 @@ Last verified: lint 0 findings; unit 1047 pass; browser suite 188 pass, 0 fail (
 7. **WB-28 acceptance story** from `06_WORKBENCH.md`: write the e2e that follows it step by step on `many-queries.xlsx`, regenerate the visual baselines for Phase 6 (32 extra), complete `PROGRESS.md`, and fill the manual matrix in `docs/observations.md` with *not run* where it was not run.
 
 Definition of done: every item above built, `npm test` green (excluding what cannot run here, stated plainly), baselines reviewed by eye, `PROGRESS.md` complete. Only then tell the owner it is finished and that they may revoke the token.
+
+## How to start in a fresh chat (about ten minutes)
+
+1. Clone `beta` only: `git -c http.extraHeader=... clone --single-branch --branch beta https://github.com/datakid/power-query-manager.git quoin`, set the local identity, `npm install`, `git checkout package-lock.json`.
+2. Write `/home/claude/pw.local.config.js` (above). `npm run test:lint`, `npm run test:unit`, then one detached browser run to see the baseline: 237 pass.
+3. Read `PROGRESS.md` from the bottom up (newest sections first) to learn what each module is called and where the tests are, then `06_WORKBENCH.md` for the item you take.
+4. Suggested order, because each step unblocks the next: the WB-16 column header menu and `view` and `profile` worker messages first (it unlocks Add as a step, Insert from the grid header and the viewOnly chip from WB-14 and WB-15), then the rest of WB-16, WB-14 and WB-15, WB-10 remainder, WB-19, WB-20, WB-27, WB-28.
+5. Each item: build, unit tests for the pure part, an e2e spec, lint, build the manifest, regenerate baselines if the UI changed, full browser run, document in `PROGRESS.md` (changed expectations, deviations, not done), commit with explicit paths, push `beta`, one line to the owner.
+
+Observed and not fixed: at 390 px the top bar still gives the file name almost no room (the overflow menu of 02B §4.1 is not built).
 
 ## Plan files (read in this order)
 

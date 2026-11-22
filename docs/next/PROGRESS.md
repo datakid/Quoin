@@ -354,3 +354,24 @@
 - Reordering tabs by dragging inside a strip.
 - A visible resize handle between the two groups (they share the width equally).
 
+### WB-10: layout, collapse, F6, the mobile bottom bar (partly done)
+- `src/ui/wb/panes.js`: `paneRail` (the 32 px collapsed rail with its expand button), `bindResizer` (keyboard and pointer, one implementation for the navigator and the inspector) and `Regions` (F6 cycling that lands on the last focused element of each region, on the expand button of a collapsed pane, and skips regions that are not shown).
+- Collapse and restore by key and by pointer: navigator `Ctrl/Cmd+B` (a collapse button sits next to the search box), inspector `Ctrl/Cmd+Alt+B` (the Steps or Outline button, plus the rail), result dock `Ctrl/Cmd+J` (a button at the end of the run bar, plus the rail). A collapsed pane is a 32 px rail in the sunk tone; focus moves to the expand button when the pane that held it collapses. Below 1024 px `Ctrl/Cmd+B` opens and closes the Items sheet instead.
+- The inspector now has a separator (260 to 480 px, default 312 px) with the same arrow keys and drag as the navigator's. The rail and inspector handles sit above the list rows (the Macros label row used to cover the rail handle, so dragging it did nothing).
+- `F6` and `Shift+F6` cycle navigator, editor, inspector, dock and readout.
+- At 390 px the segmented control became the floating bottom bar: Items, Code, Steps, Result and the Problems counter (the counter in the readout is hidden there so it is not read twice). Steps shows the inspector as a full-height sheet. The Items button inside the bar keeps the class `rail-toggle`; the old head button is now `rail-toggle-wide` and only shows between 640 and 1023 px.
+- A "More ways to run" menu button follows Run in the run bar: run the selected queries, run this query and what depends on it, run the stale queries, run every query. New command `runSelected` (palette).
+- Top bar at 390 px: the `Ctrl K` hint is hidden and the file name is clipped inside its button, so the name no longer prints over the Search button.
+- Tests: `tests/e2e/layout.spec.js` (T-WB-10, 8 tests): collapse and restore for the three panes by key and pointer, resize of all three separators by keyboard and pointer, F6 and Shift+F6 order, F6 onto a collapsed rail, the run menu, and the 390×844 bottom bar (each region reachable, nothing wider than the screen, the bar's buttons present).
+
+#### Changed expectations
+- `.segmented` is now the bottom bar and lives in `.workspace`, not in `.main`; the grid row it used in `.main` is empty. `T-E2E-17` and `states.js` still find Items, Code and Result by name and by `.rail-toggle`, unchanged.
+- The inspector no longer disappears when closed on screens of 1100 px and wider; it leaves a 32 px rail. `steps-panel.spec.js` T-WB-14 now checks `data-inspector` closed or open, the hidden Steps content and the expand button instead of `.inspector` hidden.
+- 28 visual baselines regenerated; looked at the 390×844 query-selected state and by hand the Steps sheet.
+
+#### Deviations and not done
+- Run stays in the run bar under the editor instead of moving to the top bar, and the Changes split button is not built (WB-16 owns Changes). The menu next to Run has no "run to here"; that action stays in the steps panel.
+- `workbench.js` does not replace `workspace.js` and there is no `Layout presets` menu yet.
+- Between 640 and 1099 px there is still no inspector (Steps is only reachable at 390 px and at 1100 px and wider).
+- The top bar at 390 px still leaves the file name almost no room; the overflow menu of 02B §4.1 is not built.
+

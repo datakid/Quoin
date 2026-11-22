@@ -375,6 +375,7 @@ export class App {
       this.syncDownload();
       this.syncLeaveGuard();
     });
+    this.ws.readoutEl = this.barEl;
     this.ws.onProblems = (counts) => {
       const n = counts.error + counts.warning + counts.info;
       this.problemsBtn.textContent = S.problems.count(n);

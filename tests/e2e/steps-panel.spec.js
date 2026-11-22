@@ -124,9 +124,12 @@ test('T-WB-14: the panel swaps for the outline on a macro and the toggle shortcu
   await page.locator('[role=treeitem][data-type=query]').nth(1).click();
   await expect(page.locator('.inspector')).toBeVisible();
   await page.keyboard.press('Control+Alt+b');
-  await expect(page.locator('.inspector')).toBeHidden();
+  await expect(page.locator('.workspace')).toHaveAttribute('data-inspector', 'closed');
+  await expect(page.locator('.steps-host')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Expand the inspector' })).toBeVisible();
   await page.keyboard.press('Control+Alt+b');
-  await expect(page.locator('.inspector')).toBeVisible();
+  await expect(page.locator('.workspace')).toHaveAttribute('data-inspector', 'open');
+  await expect(page.locator('.steps-host')).toBeVisible();
   await page.locator('[role=treeitem][data-type=module]').first().click();
   await expect(page.locator('.inspector')).toBeVisible();
   await expect(page.locator('.steps-host')).toBeHidden();

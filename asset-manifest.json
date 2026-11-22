@@ -1,5 +1,5 @@
 {
-  "version": "ba6d31db2dab7f05",
+  "version": "c45f91d24751f8c8",
   "files": [
     "./",
     "index.html",
@@ -133,6 +133,7 @@
     "src/ui/wb/navigator.js",
     "src/ui/wb/outline-panel.js",
     "src/ui/wb/palette.js",
+    "src/ui/wb/panes.js",
     "src/ui/wb/problems-dialog.js",
     "src/ui/wb/steps-panel.js",
     "src/ui/wb/tabs.js",

@@ -510,7 +510,28 @@ export const S = {
     prevTab: 'Previous tab',
     nextTab: 'Next tab',
     goTab: 'Go to the nth tab',
-    splitEditor: 'Split the editor, or join the two groups'
+    splitEditor: 'Split the editor, or join the two groups',
+    toggleNavigator: 'Show or hide the navigator',
+    toggleDock: 'Show or hide the result dock',
+    focusNext: 'Go to the next region',
+    focusPrev: 'Go to the previous region',
+    runSelected: 'Run the selected queries'
+  },
+  panes: {
+    collapseNavigator: 'Collapse the navigator',
+    expandNavigator: 'Expand the navigator',
+    collapseInspector: 'Collapse the inspector',
+    expandInspector: 'Expand the inspector',
+    collapseDock: 'Collapse the result dock',
+    expandDock: 'Expand the result dock',
+    resizeInspector: 'Resize the inspector',
+    moreRun: 'More ways to run',
+    runSelectedItems: 'Run the selected queries',
+    runDownstreamItems: 'Run this query and what depends on it',
+    runStaleItems: 'Run the queries that are out of date',
+    runAllItems: 'Run every query',
+    selectFirst: 'Select queries in the list first.',
+    regions: { navigator: 'Navigator', editor: 'Editor', inspector: 'Inspector', dock: 'Result dock', readout: 'Status' }
   },
   tabs: {
     group: (n) => `Open items, group ${n}`,

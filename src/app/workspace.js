@@ -20,6 +20,7 @@ import { supportedNames } from '../core/wb/lib-names.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
+import { paneRail, bindResizer, Regions } from '../ui/wb/panes.js';
 import { TabModel, keyOf } from '../core/wb/tabs-model.js';
 import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, duplicateStep } from '../core/wb/let-edit.js';
 import { parseExpressionText, MParseError } from '../core/m/parser.js';
@@ -109,33 +110,29 @@ export class Workspace {
   }
 
   resizer() {
-    const handle = h('div', { class: 'rail-resizer', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': S.resizeRail, 'aria-valuemin': '220', 'aria-valuemax': '420', 'aria-valuenow': '272', tabindex: '0' });
-    this.rail.append(handle);
-    let startX = 0;
-    let startW = 272;
-    const move = (ev) => {
-      const w = Math.max(220, Math.min(420, startW + ev.clientX - startX));
-      this.root.style.setProperty('--rail-width', `${w}px`);
-      handle.setAttribute('aria-valuenow', String(Math.round(w)));
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-    };
-    handle.addEventListener('pointerdown', (ev) => {
-      startX = ev.clientX;
-      startW = this.rail.getBoundingClientRect().width;
-      document.addEventListener('pointermove', move);
-      document.addEventListener('pointerup', up);
+    const rail = h('div', { class: 'rail-resizer', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': S.resizeRail, 'aria-valuemin': '220', 'aria-valuemax': '420', 'aria-valuenow': '272', tabindex: '0' });
+    this.rail.append(rail);
+    bindResizer(rail, {
+      get: () => this.rail.getBoundingClientRect().width,
+      set: (w) => this.root.style.setProperty('--rail-width', `${w}px`),
+      min: 220,
+      max: 420
     });
-    handle.addEventListener('keydown', (ev) => {
-      if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
-        const w = Math.max(220, Math.min(420, this.rail.getBoundingClientRect().width + (ev.key === 'ArrowRight' ? 16 : -16)));
-        this.root.style.setProperty('--rail-width', `${w}px`);
-        handle.setAttribute('aria-valuenow', String(Math.round(w)));
-        ev.preventDefault();
-      }
+    const insp = h('div', { class: 'inspector-resizer', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': S.panes.resizeInspector, 'aria-valuemin': '260', 'aria-valuemax': '480', 'aria-valuenow': '312', tabindex: '0' });
+    this.inspector.append(insp);
+    bindResizer(insp, {
+      get: () => this.inspector.getBoundingClientRect().width,
+      set: (w) => this.root.style.setProperty('--inspector-width', `${w}px`),
+      min: 260,
+      max: 480,
+      grow: -1
     });
+    this.navRail = paneRail('\u203a', S.panes.expandNavigator, () => this.toggleNavigator());
+    this.rail.append(this.navRail.el);
+    this.inspRail = paneRail('\u2039', S.panes.expandInspector, () => this.toggleInspector());
+    this.inspector.append(this.inspRail.el);
+    this.dockRail = paneRail('\u2303', S.panes.expandDock, () => this.toggleDock());
+    this.main.append(this.dockRail.el);
   }
 
   buildMain() {
@@ -143,8 +140,9 @@ export class Workspace {
     this.meta = h('span', { class: 'item-meta' });
     this.revertBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.revert() }, S.revert);
     this.inspectorToggle = h('button', { class: 'btn btn-quiet inspector-toggle', type: 'button', 'aria-expanded': 'true', 'aria-label': S.stepsPanel.toggleAria, onclick: () => this.toggleInspector() }, S.stepsPanel.toggle);
-    this.railToggle = h('button', { class: 'btn btn-quiet rail-toggle', type: 'button', 'aria-controls': 'rail', 'aria-expanded': false, onclick: () => this.setRailOpen(!this.railOpen, false) }, S.items);
-    this.head = h('div', { class: 'item-head' }, h('div', { class: 'item-title-row' }, this.railToggle, this.title), h('div', { class: 'item-actions' }, this.meta, this.revertBtn, this.inspectorToggle));
+    this.railToggle = h('button', { class: 'rail-toggle', type: 'button', 'aria-controls': 'rail', 'aria-expanded': 'false', 'aria-pressed': 'false', onclick: () => this.setRailOpen(!this.railOpen, false) }, S.items);
+    this.railToggleWide = h('button', { class: 'btn btn-quiet rail-toggle-wide', type: 'button', 'aria-controls': 'rail', 'aria-expanded': 'false', onclick: () => this.setRailOpen(!this.railOpen, false) }, S.items);
+    this.head = h('div', { class: 'item-head' }, h('div', { class: 'item-title-row' }, this.railToggleWide, this.title), h('div', { class: 'item-actions' }, this.meta, this.revertBtn, this.inspectorToggle));
     this.info = h('div', { class: 'info-strip', hidden: true });
     this.groupsEl = h('div', { class: 'editor-groups' });
     this.editorHost = this.groupsEl;
@@ -162,6 +160,8 @@ export class Workspace {
     this.addGroup();
     this.editor = this.groups[0].editor;
     this.runBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.run() }, S.run, h('span', { class: 'item-meta' }, '⌘↵'));
+    this.moreRunBtn = h('button', { class: 'btn btn-quiet more-run', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.panes.moreRun, onclick: () => this.openRunMenu() }, '\u25be');
+    this.dockToggle = h('button', { class: 'btn btn-quiet dock-toggle', type: 'button', 'aria-expanded': 'true', 'aria-label': S.panes.collapseDock, onclick: () => this.toggleDock() }, '\u2304');
     this.cancelBtn = h('button', { class: 'btn', type: 'button', hidden: true, onclick: () => this.cancel() }, S.cancel);
     this.steps = h('div', { class: 'steps', role: 'group', 'aria-label': S.stepsLabel });
     this.diffBox = h('input', { type: 'checkbox', id: 'diff-box' });
@@ -169,7 +169,7 @@ export class Workspace {
     this.diffBox.addEventListener('change', () => this.applyDiffs());
     this.diffBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.showDifferences() }, S.viewDifferences);
     this.splitter = h('div', { class: 'splitter', role: 'separator', 'aria-orientation': 'horizontal', tabindex: '0', 'aria-label': S.resizeSplit, 'aria-valuemin': '15', 'aria-valuemax': '85', 'aria-valuenow': '45' });
-    this.runbar = h('div', { class: 'runbar' }, this.splitter, this.runBtn, this.cancelBtn, this.steps, h('span', { class: 'spacer' }), this.diffLabel, this.diffBtn);
+    this.runbar = h('div', { class: 'runbar' }, this.splitter, this.runBtn, this.moreRunBtn, this.cancelBtn, this.steps, h('span', { class: 'spacer' }), this.diffLabel, this.diffBtn, this.dockToggle);
     this.progress = h('div', { class: 'progress', hidden: true, role: 'progressbar', 'aria-label': S.running });
     this.crumbs = h('div', { class: 'crumbs', hidden: true });
     this.capNotice = h('div', { class: 'result-notice', hidden: true });
@@ -180,10 +180,13 @@ export class Workspace {
     this.resultBody.style.minHeight = '0';
     this.sources = h('div', { class: 'crumbs', hidden: true });
     this.resultPanel = h('div', { class: 'result-panel' }, this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
-    this.segmented = h('div', { class: 'segmented', role: 'group', 'aria-label': S.pane },
-      h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setPane('code') }, S.code),
-      h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setPane('result') }, S.result));
-    this.main.append(this.head, this.segmented, this.info, this.groupsEl, this.runbar, this.resultPanel);
+    this.codeBtn = h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setRegion('code') }, S.code);
+    this.stepsBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('steps') }, S.stepsPanel.toggle);
+    this.resultBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('result') }, S.result);
+    this.barProblems = h('button', { class: 'bar-problems', type: 'button', hidden: true, onclick: () => this.openProblems() }, S.problems.count(0));
+    this.segmented = h('div', { class: 'segmented bottombar', role: 'group', 'aria-label': S.pane }, this.railToggle, this.codeBtn, this.stepsBtn, this.resultBtn, this.barProblems);
+    this.main.append(this.head, this.info, this.groupsEl, this.runbar, this.resultPanel);
+    this.root.append(this.segmented);
     this.grid = new Grid(this.resultBody, { onDrill: (v, label) => this.drill(v, label), onError: (v, anchor) => this.showErrorCell(v, anchor) });
     this.grid.onNotice = (t) => this.status.set({ note: t });
     this.grid.el.hidden = true;
@@ -218,7 +221,9 @@ export class Workspace {
         return;
       }
       this.problemRows = sortProblems(rows, order);
-      if (this.onProblems) this.onProblems(countProblems(this.problemRows), this.problemRows);
+      const counts = countProblems(this.problemRows);
+      this.paintBarProblems(counts);
+      if (this.onProblems) this.onProblems(counts, this.problemRows);
     };
     slice();
   }
@@ -319,9 +324,13 @@ export class Workspace {
 
   toggleInspector() {
     const open = this.root.dataset.inspector !== 'open';
+    const inside = this.inspector.contains(document.activeElement);
     this.root.dataset.inspector = open ? 'open' : 'closed';
     this.inspectorToggle.setAttribute('aria-expanded', String(open));
-    if (open) this.refreshSteps();
+    if (open) {
+      this.refreshSteps();
+      if (document.activeElement === this.inspRail.btn) this.inspectorToggle.focus();
+    } else if (inside) this.inspRail.btn.focus();
     return true;
   }
 
@@ -605,18 +614,122 @@ export class Workspace {
   setRailOpen(open, returnFocus) {
     this.railOpen = open;
     this.root.dataset.rail = open ? 'open' : 'closed';
-    this.railToggle.setAttribute('aria-expanded', String(open));
+    if (open) this.root.dataset.sheet = '';
+    for (const b of [this.railToggle, this.railToggleWide]) b.setAttribute('aria-expanded', String(open));
+    this.railToggle.setAttribute('aria-pressed', String(open));
     if (open) {
       const stop = this.rail.querySelector('[role="treeitem"][tabindex="0"]');
       if (stop) stop.focus();
     } else if (returnFocus || this.rail.contains(document.activeElement)) {
-      this.railToggle.focus();
+      (this.railToggle.getClientRects().length ? this.railToggle : this.railToggleWide).focus();
     }
+    this.paintBar();
   }
 
   setPane(p) {
     this.main.dataset.pane = p;
-    [...this.segmented.children].forEach((b, i) => b.setAttribute('aria-pressed', String((i === 0) === (p === 'code'))));
+    this.root.dataset.sheet = '';
+    this.paintBar();
+  }
+
+  setRegion(r) {
+    if (r === 'items') {
+      this.setRailOpen(true, false);
+      return;
+    }
+    if (this.railOpen) this.setRailOpen(false, false);
+    if (r === 'steps') {
+      this.root.dataset.sheet = 'steps';
+      this.refreshSteps();
+      this.paintBar();
+      const first = this.inspector.querySelector('button:not([hidden]), [tabindex="0"]');
+      if (first) first.focus();
+      return;
+    }
+    this.setPane(r);
+  }
+
+  paintBar() {
+    const sheet = this.root.dataset.sheet === 'steps';
+    const pane = this.main.dataset.pane;
+    this.codeBtn.setAttribute('aria-pressed', String(!this.railOpen && !sheet && pane === 'code'));
+    this.stepsBtn.setAttribute('aria-pressed', String(sheet));
+    this.resultBtn.setAttribute('aria-pressed', String(!this.railOpen && !sheet && pane === 'result'));
+  }
+
+  paintBarProblems(counts) {
+    const n = counts.error + counts.warning + counts.info;
+    this.barProblems.textContent = S.problems.count(n);
+    this.barProblems.classList.toggle('has-errors', counts.error > 0);
+    this.barProblems.hidden = false;
+  }
+
+  narrow() {
+    return window.matchMedia('(max-width: 1023px)').matches;
+  }
+
+  toggleNavigator() {
+    if (this.narrow()) {
+      this.setRailOpen(!this.railOpen, false);
+      return true;
+    }
+    const collapse = this.root.dataset.nav !== 'collapsed';
+    this.root.dataset.nav = collapse ? 'collapsed' : 'expanded';
+    if (collapse) this.navRail.btn.focus();
+    else if (!this.nav.focusStop()) this.rail.querySelector('input')?.focus();
+    return true;
+  }
+
+  toggleDock() {
+    if (window.matchMedia('(max-width: 639px)').matches) return false;
+    const collapse = this.main.dataset.dock !== 'collapsed';
+    const inside = this.resultPanel.contains(document.activeElement) || this.dockToggle === document.activeElement;
+    this.main.dataset.dock = collapse ? 'collapsed' : 'expanded';
+    this.dockToggle.setAttribute('aria-expanded', String(!collapse));
+    if (collapse && inside) this.dockRail.btn.focus();
+    else if (!collapse && document.activeElement === this.dockRail.btn) this.dockToggle.focus();
+    return true;
+  }
+
+  cycleRegion(dir) {
+    if (!this.regions) {
+      const r = S.panes.regions;
+      const list = [
+        { id: 'navigator', label: r.navigator, el: this.rail, focus: () => (this.root.dataset.nav === 'collapsed' ? this.navRail.btn : this.nav.focusStop() ? document.activeElement : null) },
+        { id: 'editor', label: r.editor, el: this.groupsEl, focus: () => this.editor.textarea },
+        { id: 'inspector', label: r.inspector, el: this.inspector, focus: () => (this.root.dataset.inspector === 'closed' ? this.inspRail.btn : null) },
+        { id: 'dock', label: r.dock, el: this.resultPanel, focus: () => (this.main.dataset.dock === 'collapsed' ? this.dockRail.btn : null) }
+      ];
+      if (this.readoutEl) list.push({ id: 'readout', label: r.readout, el: this.readoutEl, focus: null });
+      this.regions = new Regions(list);
+    }
+    return this.regions.cycle(dir);
+  }
+
+  selectedQueryNames() {
+    return this.nav ? this.nav.selectedItems().filter((i) => i.type === 'query').map((i) => i.name) : [];
+  }
+
+  runSelected(downstream) {
+    const names = this.selectedQueryNames();
+    if (!names.length) {
+      this.status.set({ note: S.panes.selectFirst });
+      return false;
+    }
+    this.runSelection(names, downstream);
+    return true;
+  }
+
+  openRunMenu() {
+    const isQuery = !!this.item && this.item.type === 'query';
+    const entries = [
+      { label: S.panes.runSelectedItems, disabled: !this.selectedQueryNames().length, run: () => this.runSelected(false) },
+      { label: S.panes.runDownstreamItems, disabled: !isQuery, run: () => this.runBatch('run-downstream') },
+      { label: S.panes.runStaleItems, run: () => this.runBatch('run-stale') },
+      { label: S.panes.runAllItems, run: () => this.runBatch('run-all') }
+    ];
+    this.moreRunBtn.setAttribute('aria-expanded', 'true');
+    menu(this.moreRunBtn, entries, () => this.moreRunBtn.setAttribute('aria-expanded', 'false'));
   }
 
   splitterSetup() {
@@ -708,6 +821,7 @@ export class Workspace {
       run: (names, downstream) => this.runSelection(names, downstream),
       revert: (items) => this.revertItems(items),
       graph: (name) => this.openGraph(name),
+      collapse: () => this.toggleNavigator(),
       notify: (note) => this.status.set({ note })
     };
   }
@@ -828,6 +942,7 @@ export class Workspace {
     this.root.dataset.kind = isQuery ? 'query' : 'vba';
     this.inspectorToggle.hidden = false;
     this.inspectorToggle.textContent = isQuery ? S.stepsPanel.toggle : S.outline.title;
+    this.stepsBtn.textContent = isQuery ? S.stepsPanel.toggle : S.outline.title;
     this.inspectorToggle.setAttribute('aria-label', isQuery ? S.stepsPanel.toggleAria : S.outline.toggleAria);
     this.stepResults = new Map();
     this.runbar.hidden = !isQuery;

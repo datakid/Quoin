@@ -54,6 +54,7 @@ Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md
 - Phase 2R: Glaze palette and the 02B visual refinement.
 - WB-1 to WB-9: dependency index, step model, let-block edits, VBA outline, fuzzy matcher, M generation, engine batch evaluation, result store and worker protocol v2, run planner, status book, orchestrator, and its UI (Run all, Run stale, status dots, stored results).
 - WB-13 palette and command registry. WB-14 Steps panel (partial). WB-17 dependency lists and graph. WB-18 Problems (dialog and counter). WB-19 sources inventory (no UI). WB-21 find and replace. WB-22 macro outline and per-procedure revert. WB-23 structure checks (no UI). WB-24 call graph (no UI). WB-25 macro to query links with "Run these queries". WB-26 step-level change summary. WB-27 budgets for what exists, with `many-queries.xlsx`.
+- WB-10 (part): `src/ui/wb/panes.js`, collapse rails, inspector resizer, F6, the 390 px bottom bar and Steps sheet, the run menu, `tests/e2e/layout.spec.js`.
 - WB-12 tabs and split: `src/core/wb/tabs-model.js` (unit tests), `src/ui/wb/tabs.js`, tab and group handling in `Workspace` (`select`, `present`, `applyTabState`, `addGroup`), the five tab commands, `tests/e2e/tabs.spec.js`.
 - WB-11 the navigator: `src/core/wb/nav-model.js` (unit tests) and `src/ui/wb/navigator.js` (virtualised tree, search with `code:` and `step:`, Group by, Sort by, chips, multi-select, selection bar, row menu), wired from `Workspace.renderRail`, with `tests/e2e/navigator.spec.js`. Deviations and changed expectations are in `PROGRESS.md`.
 
@@ -63,7 +64,7 @@ Last verified: lint 0 findings; unit 1047 pass; browser suite 188 pass, 0 fail (
 
 ## What is left, in the order to do it
 
-1. **WB-10 layout and mobile**: Run in the top bar as the one filled button with its menu (Run, to here, selected, downstream, stale, all), the Changes split button, the 390×844 bottom bar (Items, Code, Steps, Result, Problems counter), collapse shortcuts. Honour 02B tiers T1 to T4 and T-V-02/03/07.
+1. **WB-10 remainder**: Run as the one filled button in the top bar, the Changes split button, layout presets (Write, Debug, Review), an inspector between 640 and 1099 px, the top bar overflow menu. Collapse, resize, F6 and the mobile bottom bar are done (see `PROGRESS.md`).
 2. **WB-16 result dock**: tabs Result, Pinned, Compare, Problems, Queue, Graph; pin and compare two results (the result store already supports pin and `rows` by `resultId`); the worker messages `view` and `profile`; Queue tab listing a batch with durations; Problems and Graph as tabs instead of dialogs.
 3. **WB-14 remainder and WB-15**: drag grip, insert-step menu from the grid header (use `m-gen.js`), "Add as a step" from a view filter, step cursor with `F10`, Depends on and Used by already exist; step results refresh after a normal Run; narrow-screen presentation.
 4. **WB-19 UI**: Sources list in the top bar menu, binding up front, and the check before Run all.

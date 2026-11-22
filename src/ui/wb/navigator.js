@@ -93,7 +93,8 @@ export class Navigator {
     this.moreBtn.addEventListener('click', () => this.openMore());
     this.chips.append(this.moreBtn);
 
-    this.bar = h('div', { class: 'nav-searchbar' }, this.searchInput);
+    this.collapseBtn = h('button', { class: 'nav-collapse', type: 'button', 'aria-label': S.panes.collapseNavigator, title: S.panes.collapseNavigator, onclick: () => this.actions.collapse && this.actions.collapse() }, '\u2039');
+    this.bar = h('div', { class: 'nav-searchbar' }, this.searchInput, this.collapseBtn);
     this.controls = h('div', { class: 'nav-controls' },
       h('div', { class: 'nav-fields' }, this.groupSelect.wrap, this.sortSelect.wrap),
       this.chips);

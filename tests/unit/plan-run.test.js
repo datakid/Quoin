@@ -68,7 +68,7 @@ test('preview shows what would change, keeps each file hash, and drops the bytes
   assert.equal(out.ok, true);
   assert.deepEqual(out.rows.map((r) => [r.file, r.verdict]), [['one.xlsx', 'changed'], ['two.xlsx', 'changed'], ['none.xlsm', 'skipped']]);
   assert.equal(out.rows[2].reason_code, 'skip.notApplicable');
-  assert.deepEqual(out.counts, { changed: 2, unchanged: 0, skipped: 1, refused: 0, failed: 0, cancelled: 0 });
+  assert.deepEqual(out.counts, { changed: 2, unchanged: 0, skipped: 1, refused: 0, failed: 0, cancelled: 0, 'not-released': 0 });
   for (const id of ['f0001', 'f0002']) assert.match(out.hashes.get(id), /^[0-9a-f]{64}$/);
   assert.equal(out.hashes.has('f0003'), false);
   for (const v of out.perFile.values()) assert.equal(v.bytes === null, true, 'preview must not keep bytes');
@@ -153,22 +153,39 @@ test('a run uses the time frozen by the preview even when it is started later', 
   assert.equal(ran.hashes.get('f0001'), previewed.hashes.get('f0001'));
 });
 
-test('a run is refused as diverged when a file gives different bytes than it did in the preview', async () => {
+test('a file whose run hash differs from its preview is not released, the rest of the batch is, and the run is marked as having a defect', async () => {
   const session = await settledSet([[pq(), 'a/one.xlsx'], [pq(), 'b/two.xlsx']]);
   const recipe = injectReplace();
   const previewed = await preview({ session, pool: inProcessPool(), recipe }).promise;
   const tampering = inProcessPool({
-    mutate: (result) => {
+    mutate: (result, message) => {
+      if (message.fileRef.id !== 'f0002') return result;
       const bytes = new Uint8Array(result.bytes);
       bytes[bytes.length - 1] ^= 1;
       return { ...result, bytes, sha256: '0'.repeat(64) };
     }
   });
   const ran = await startPlanRun({ mode: 'run', session, pool: tampering, recipe, now: NOW, runId: 'r1', preview: previewed }).promise;
-  assert.equal(ran.ok, false);
-  assert.equal(ran.code, 'plan.diverged');
-  assert.deepEqual(ran.files, ['f0001', 'f0002']);
-  assert.equal(session.state, 'ready');
+  assert.equal(ran.ok, true);
+  assert.equal(ran.defect, true);
+  assert.deepEqual(ran.diverged, ['f0002']);
+  assert.ok(ran.perFile.get('f0001').bytes instanceof Uint8Array);
+  assert.equal(ran.perFile.get('f0002').bytes, null);
+  assert.equal(ran.hashes.has('f0002'), false);
+  assert.deepEqual(ran.rows.map((r) => [r.file, r.verdict, r.reason_code]), [['one.xlsx', 'changed', ''], ['two.xlsx', 'not-released', 'verify.planDrift']]);
+  assert.equal(ran.counts['not-released'], 1);
+  assert.equal(session.file('f0002').error, 'verify.planDrift');
+  assert.equal(session.state, 'doneWithFailures');
+});
+
+test('a clean run is not marked as having a defect', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx']]);
+  const pool = inProcessPool();
+  const recipe = injectReplace();
+  const previewed = await preview({ session, pool, recipe }).promise;
+  const ran = await startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r1', preview: previewed }).promise;
+  assert.equal(ran.defect, false);
+  assert.deepEqual(ran.diverged, []);
 });
 
 test('a run is refused as stale when the set changed after the preview, and nothing is sent', async () => {
@@ -257,4 +274,24 @@ test('a preview started while another preview is going throws at the call and le
   first.cancel();
   await first.promise;
   assert.equal(session.state, 'ready');
+});
+
+test('cancelling while the outputs are being built stops quietly: cancelled result, session ready, no error', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx']]);
+  const pool = inProcessPool();
+  const recipe = injectReplace();
+  const previewed = await preview({ session, pool, recipe }).promise;
+  let handle = null;
+  let sawStop = null;
+  const build = async (result, { shouldStop }) => {
+    handle.cancel();
+    sawStop = shouldStop();
+    return { ok: true, bytes: new Uint8Array(1), name: 'x.zip', rows: result.rows };
+  };
+  handle = startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r1', preview: previewed, build });
+  const out = await handle.promise;
+  assert.deepEqual(out, { cancelled: true });
+  assert.equal(sawStop, true);
+  assert.equal(session.state, 'ready');
+  assert.equal(session.move, null);
 });

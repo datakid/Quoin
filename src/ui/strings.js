@@ -227,6 +227,17 @@ export const S = {
   recipeLoadLabel: 'Recipe file',
   recipeClear: 'Remove recipe',
   recipePreview: 'Preview',
+  recipeGet: 'Get',
+  recipeGetFolder: 'Get into a folder',
+  signedTitle: 'Remove signatures?',
+  signedBody: (n) => `${n} ${n === 1 ? 'workbook has' : 'workbooks have'} a signed macro project. Editing removes ${n === 1 ? 'its' : 'their'} signature, so Excel will treat the macros as unsigned. The report marks ${n === 1 ? 'it' : 'them'}.`,
+  signedConfirm: 'Remove and get',
+  signedBack: 'Go back',
+  recipeResult: (c) => [`${c.changed} changed`, c.unchanged ? `${c.unchanged} unchanged` : '', c.skipped ? `${c.skipped} skipped` : '', c.refused ? `${c.refused} refused` : '', c.failed ? `${c.failed} failed` : '', c['not-released'] ? `${c['not-released']} not released` : ''].filter(Boolean).join(' · '),
+  folderUnavailable: 'The folder could not be opened. Nothing was written.',
+  recipeGotZip: (name) => `Downloaded ${name}.`,
+  recipeGotFolder: (name, n) => `Wrote ${n} ${n === 1 ? 'workbook' : 'workbooks'} and report.csv to ${name}.`,
+  runDefect: (n) => `${n} ${n === 1 ? 'file was' : 'files were'} not released because ${n === 1 ? 'its' : 'their'} output differs from the preview. The rest were released. Report this.`,
   recipeNone: 'No recipe loaded.',
   recipeLoaded: (name, kind) => `${kind} · ${name}`,
   recipeKind: { collect: 'Collect', inject: 'Inject', replace: 'Replace in code', transform: 'Transform', align: 'Align' },
@@ -529,10 +540,11 @@ export const ERRORS = {
   'pool.failed': 'The worker stopped while it handled this file. Nothing was written for it.',
   'plan.invalid': 'This recipe cannot be applied to this set. Nothing was changed.',
   'plan.stale': 'The files or the recipe changed after the preview. Preview again before you run it.',
-  'plan.diverged': 'The run did not match the preview, so nothing was released. Preview again.',
+  'verify.planDrift': 'Not released. The output differs from its preview. Report this file.',
   'vba.confirmNeeded': 'Running removes the signature from {count} signed macro projects. Confirm to continue.',
   'recipe.patternAdd': 'A recipe cannot add a query or module by pattern. Name the one to add.',
-  'output.failed': 'The outputs could not be written. Nothing was downloaded.'
+  'output.failed': 'The outputs could not be written. Nothing was downloaded.',
+  'output.folderFailed': 'Writing to the folder stopped. Files written before it stopped are kept; the rest were not written.'
 };
 
 export function errorMessage(code, values = {}) {

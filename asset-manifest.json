@@ -1,5 +1,5 @@
 {
-  "version": "4d6f66a5f430636a",
+  "version": "cd037b35b9be2e3a",
   "files": [
     "./",
     "index.html",
@@ -26,6 +26,7 @@
     "src/app/collect-run.js",
     "src/app/commands.js",
     "src/app/file-save.js",
+    "src/app/folder-output.js",
     "src/app/intake.js",
     "src/app/main.js",
     "src/app/orchestrator.js",

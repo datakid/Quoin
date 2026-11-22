@@ -4,8 +4,9 @@ import { S } from '../strings.js';
 const warningText = (w) => (w.code === 'recipe.ignored' ? S.recipeIgnoredBlock(w.path) : S.recipeWarning(w.path));
 
 export class RecipePanel {
-  constructor(host, { onLoad, onClear, onPreview }) {
-    this.view = { loaded: null, warnings: [], error: '', notes: [], canPreview: false };
+  constructor(host, { onLoad, onClear, onPreview, onGet, onGetFolder, canPickFolder = false }) {
+    this.view = { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false };
+    this.canPickFolder = canPickFolder;
     this.locked = false;
     this.ready = false;
     this.input = h('input', { type: 'file', class: 'sr-only', accept: '.json,application/json', tabindex: '-1', 'aria-label': S.recipeLoadLabel });
@@ -17,12 +18,14 @@ export class RecipePanel {
     this.loadBtn = h('button', { class: 'btn', type: 'button', onclick: () => this.input.click() }, S.recipeLoad);
     this.clearBtn = h('button', { class: 'btn', type: 'button', hidden: true, onclick: () => onClear() }, S.recipeClear);
     this.previewBtn = h('button', { class: 'btn btn-primary recipe-preview', type: 'button', disabled: true, onclick: () => onPreview() }, S.recipePreview);
+    this.getBtn = h('button', { class: 'btn btn-primary recipe-get', type: 'button', hidden: true, onclick: () => onGet() }, S.recipeGet);
+    this.folderBtn = h('button', { class: 'btn recipe-get-folder', type: 'button', hidden: true, onclick: () => onGetFolder() }, S.recipeGetFolder);
     this.line = h('p', { class: 'recipe-line' }, S.recipeNone);
     this.error = h('p', { class: 'recipe-error', role: 'alert' });
     this.warnings = h('ul', { class: 'recipe-warnings item-meta', 'aria-label': S.recipeWarnings });
     this.notes = h('div', { class: 'recipe-notes item-meta', role: 'status' });
     this.root = h('div', { class: 'recipe-panel' },
-      h('div', { class: 'recipe-actions' }, this.loadBtn, this.clearBtn, this.previewBtn, this.input),
+      h('div', { class: 'recipe-actions' }, this.loadBtn, this.clearBtn, this.previewBtn, this.getBtn, this.folderBtn, this.input),
       this.line, this.error, this.warnings, this.notes);
     host.append(this.root);
   }
@@ -50,7 +53,13 @@ export class RecipePanel {
   }
 
   sync() {
-    this.previewBtn.disabled = this.locked || !this.ready || !this.view.canPreview;
+    const { canPreview, canGet } = this.view;
+    this.previewBtn.disabled = this.locked || !this.ready || !canPreview;
+    this.previewBtn.classList.toggle('btn-primary', !canGet);
+    this.getBtn.hidden = !canGet;
+    this.getBtn.disabled = this.locked || !this.ready;
+    this.folderBtn.hidden = !canGet || !this.canPickFolder;
+    this.folderBtn.disabled = this.locked || !this.ready;
     this.loadBtn.disabled = this.locked;
     this.clearBtn.disabled = this.locked;
   }

@@ -19,6 +19,8 @@ import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
 import { startPlanRun } from './plan-run.js';
+import { buildPlanOutput } from './outputs.js';
+import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
 import { parseRecipe } from '../batch/recipe/recipe.js';
 import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
@@ -234,6 +236,9 @@ export class App {
       onLoadRecipe: (file) => this.loadRecipeFile(file),
       onClearRecipe: () => this.clearRecipe(),
       onPreview: () => this.previewRecipe(),
+      onGet: () => this.getRecipe({ folder: false }),
+      onGetFolder: () => this.getRecipe({ folder: true }),
+      canPickFolder: hasDirectoryPicker(),
       onPreviewCleared: () => this.forgetPreview(),
       loadVariantText: (item, version) => this.variantText(item, version),
       groupVariants
@@ -410,9 +415,10 @@ export class App {
 
   recipeView(extra = {}) {
     const held = this.recipeHeld;
-    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, ...extra };
+    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, ...extra };
     const previewable = PREVIEWABLE.includes(held.recipe.recipe);
-    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [S.recipeNotPreviewable], canPreview: previewable, ...extra };
+    const canGet = previewable && !!this.preview && this.preview.counts.changed > 0;
+    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [S.recipeNotPreviewable], canPreview: previewable, canGet, ...extra };
   }
 
   forgetPreview() {
@@ -449,6 +455,58 @@ export class App {
     const first = out.errors[0];
     const text = errorMessage(first.code, { token: first.detail });
     return out.errors.length > 1 ? `${text} ${S.recipePlanMore(out.errors.length - 1)}` : text;
+  }
+
+  async getRecipe({ folder }) {
+    const held = this.recipeHeld;
+    const preview = this.preview;
+    if (!held || !preview || this.setRun || !this.shell) return null;
+    let confirmSignatures = false;
+    if (preview.signedCount > 0) {
+      confirmSignatures = await confirmDialog({ title: S.signedTitle, body: S.signedBody(preview.signedCount), confirmLabel: S.signedConfirm, cancelLabel: S.signedBack });
+      if (!confirmSignatures) return null;
+    }
+    let root = null;
+    if (folder) {
+      try {
+        root = await window.showDirectoryPicker({ mode: 'readwrite' });
+      } catch (e) {
+        if (!e || e.name !== 'AbortError') this.showRecipe(this.recipeView({ error: S.folderUnavailable }));
+        return null;
+      }
+    }
+    const now = new Date().toISOString();
+    const build = (result, hooks) => (folder ? buildFolderOutput(root, result, hooks) : buildPlanOutput(result));
+    let run;
+    try {
+      run = startPlanRun({ session: this.set, pool: sharedPool(), recipe: held.recipe, now: preview.now, runId: `g${now}`, mode: 'run', preview, confirmSignatures, loadAlignText: (item, version) => this.variantText(item, version), build });
+    } catch {
+      this.status.set({ alertText: S.setBusy });
+      return null;
+    }
+    this.setRun = run;
+    return run.promise.then((out) => {
+      if (this.setRun === run) this.setRun = null;
+      if (!this.shell || out.cancelled) return out;
+      if (!out.ok) {
+        if (out.code === 'plan.stale' || out.code === 'plan.invalid') this.preview = null;
+        this.showRecipe(this.recipeView({ error: this.planProblem(out) }));
+        this.shell.recipePanel.restoreFocus();
+        return out;
+      }
+      const output = out.output;
+      if (!folder) saveBytes(output.bytes, output.name, 'application/zip');
+      this.preview = null;
+      this.shell.showResult(output.rows, 'report');
+      const notes = [S.recipeResult(out.counts), folder ? S.recipeGotFolder(output.name, output.files.length) : S.recipeGotZip(output.name)];
+      if (out.defect) {
+        notes.push(S.runDefect(out.diverged.length));
+        this.status.set({ alertText: S.runDefect(out.diverged.length) });
+      }
+      this.showRecipe(this.recipeView({ notes }));
+      this.shell.recipePanel.restoreFocus();
+      return out;
+    });
   }
 
   previewRecipe() {

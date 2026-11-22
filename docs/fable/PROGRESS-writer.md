@@ -262,6 +262,18 @@ Done: the injected deadline (see F2-08); a second action on the same target is r
 Fails without, by mutation (each reverted): deadline check before the search, between matches, between targets, not passed to the matcher for a query or a module, not passed on from `executeFile`, timeout thrown instead of rows, wrong code; duplicate check off, claim ignoring the kind, claim folding case; ChangeSet mutated, clock depending on the time zone, result holding a function, recipe mutated.
 Counts: lint 0 findings; unit counts are in the status line.
 
+### Random sequences
+Files: tests/unit/batch-writer-sequences.test.js (new), tests/unit/batch-pq-members.test.js
+Done: three tests with a seeded generator. Twelve seeds of up to eighteen steps each apply random mixes of query add, remove, rename and replace to an Excel-made workbook, and of module add, remove and replace to a macro workbook; each kind runs at least 25 times (asserted). After every step the output reopens with no warning and no anomaly, the query or module list and every text equal a model kept by the test, and the structure is exact: no stray blank lines or missing separators in the section, the same trailing space, the record, terminator and offset counts equal the module count, the PROJECT module lines equal the standard modules, the name map equals what a rebuild gives, and the module streams are the modules. The same sequence gives the same bytes twice. A separate test pins that trailing space after the last member survives an add and a remove.
+No bug in the writers turned up. The tests found two wrong assumptions in the tests themselves, and one rule that is by design: an add of a name that a remove or rename in the same change frees is refused.
+Fails without, by mutation (each reverted): removal range too long or starting at the member, metadata item kept, rename quoting dropped, separator lost on append, trailing space dropped, module count off by one, removed record group one short, added group in the wrong place, PROJECT line kept, name map not rebuilt, removed stream kept.
+
+### Corpus
+Files: tests/unit/batch-writer-corpus.test.js (new)
+Done: every writer path run over every fixture the test finds in `tests/fixtures/external` and `tests/fixtures/workbooks`, so a fixture added later is covered without editing the test. Query workbooks (eight files, including the Excel-made ones): add two queries, replace one, rename an added one, remove the added ones and get back the original section and metadata exactly, and refuse to remove or rename every loaded or connected query. Macro workbooks (six, including the five Excel-made `xw_macro` and `xw_button` files and `pq_vba_complex.xlsm`) and the five raw Excel-made `vbaProject.bin` files: add two modules, check names, texts, name map and anomalies, remove them and get back the same PROJECT stream, name map and record ids, then remove each removable module in turn. 32 tests, none skipped; no bug found in the writers.
+Fails without, by mutation (each reverted): name map not rebuilt, 13 fail; removed record group one record short, 13; metadata item kept on remove, 9; added metadata item not inserted, 18.
+Counts: lint 0 findings; unit 1402 tests, 1397 pass, 5 skipped.
+
 ## Open points for the user
 
 1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.

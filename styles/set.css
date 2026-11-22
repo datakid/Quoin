@@ -353,6 +353,47 @@
   min-width: 0;
 }
 
+.recipe-panel {
+  padding: 0 var(--s-4) var(--s-3);
+}
+
+.recipe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.recipe-line {
+  margin: var(--s-3) 0 0;
+  font-size: var(--t-md);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.recipe-error {
+  margin: var(--s-2) 0 0;
+  color: var(--madder-ink);
+  font-size: var(--t-md);
+}
+
+.recipe-warnings {
+  margin: var(--s-2) 0 0;
+  padding-left: var(--s-4);
+}
+
+.recipe-notes {
+  margin-top: var(--s-2);
+}
+
+.recipe-note {
+  margin: 0 0 var(--s-1);
+}
+
+.recipe-panel [hidden] {
+  display: none;
+}
+
 @media (min-width: 900px) {
   .set-shell:has(.set-result[data-matrix]):not([data-mode="file"]) {
     grid-template-columns: minmax(200px, 260px) minmax(0, 0.7fr) minmax(0, 2fr);

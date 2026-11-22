@@ -5,7 +5,7 @@ import { reportRows } from './outputs.js';
 import { indexesOf } from './set-indexes.js';
 
 const WRITE_RECIPES = ['inject', 'replace', 'align'];
-const VERDICTS = ['changed', 'unchanged', 'skipped', 'refused', 'failed', 'cancelled'];
+const VERDICTS = ['changed', 'unchanged', 'skipped', 'refused', 'failed', 'cancelled', 'not-released'];
 
 const countRows = (rows) => {
   const counts = Object.fromEntries(VERDICTS.map((v) => [v, 0]));
@@ -36,16 +36,21 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
   let cancelled = false;
   const refuse = (code, extra = {}) => ({ ok: false, code, ...extra });
 
-  const promise = (async () => {
+  const early = () => {
     if (plan.errors.length) return refuse('plan.invalid', { errors: plan.errors, plan });
     if (mode === 'run' && JSON.stringify(plan) !== JSON.stringify(preview.plan)) return refuse('plan.stale');
     const signed = mode === 'run' ? signedFiles(preview.perFile) : [];
     if (signed.length && !confirmSignatures) return refuse('vba.confirmNeeded', { count: signed.length });
+    return null;
+  };
+  const refused = early();
+  if (refused) return { promise: Promise.resolve(refused), cancel() {} };
 
-    const jobs = plan.files.filter((f) => f.units.length > 0);
-    if (mode === 'preview') session.beginPreview();
-    else session.beginRun(jobs.length);
+  const jobs = plan.files.filter((f) => f.units.length > 0);
+  if (mode === 'preview') session.beginPreview();
+  else session.beginRun(jobs.length);
 
+  const promise = (async () => {
     let alignText;
     if (recipe.recipe === 'align') {
       const source = alignSourceFor(recipe.align, indexes);
@@ -89,21 +94,24 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
     await Promise.all(jobs.map(runOne));
     if (cancelled) return { cancelled: true };
 
-    const hashes = new Map([...perFile].filter(([, v]) => typeof v.sha256 === 'string').map(([id, v]) => [id, v.sha256]));
+    let hashes = new Map([...perFile].filter(([, v]) => typeof v.sha256 === 'string').map(([id, v]) => [id, v.sha256]));
+    const split = mode === 'run' ? diverged(plan, preview.hashes, hashes, perFile) : [];
+    for (const id of split) {
+      const held = perFile.get(id);
+      perFile.set(id, { ...held, bytes: null, sha256: null, rows: held.rows.map((r) => ({ ...r, verdict: 'not-released', reason_code: 'verify.planDrift', verified: false })) });
+      session.markFailed(id, 'verify.planDrift');
+    }
+    if (split.length) hashes = new Map([...hashes].filter(([id]) => !split.includes(id)));
     const rows = reportRows(plan, indexes, new Map([...perFile].map(([id, v]) => [id, { rows: v.rows }])), runId);
-    const result = { ok: true, mode, plan, now: frozenNow, runId, indexes, perFile, hashes, rows, counts: countRows(rows), signedCount: signedFiles(perFile).length };
+    const result = { ok: true, mode, plan, now: frozenNow, runId, indexes, perFile, hashes, rows, counts: countRows(rows), signedCount: signedFiles(perFile).length, defect: split.length > 0, diverged: split };
 
     if (mode === 'preview') {
       session.endPreview();
       return result;
     }
-    const split = diverged(plan, preview.hashes, hashes, perFile);
-    if (split.length) {
-      session.abort();
-      return refuse('plan.diverged', { files: split });
-    }
     if (build) {
-      const out = await build(result);
+      const out = await build(result, { shouldStop: () => cancelled });
+      if (cancelled) return { cancelled: true };
       if (!out || out.ok === false) {
         session.abort();
         return refuse(out && out.code ? out.code : 'output.failed');

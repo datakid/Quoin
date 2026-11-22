@@ -19,6 +19,31 @@ The user said to follow the plan wherever it has an answer. Where it has none, W
 
 Read and followed. Done since the first reading: the injected deadline, the contract tests of section 2 (inputs unchanged, structured clone, time zones, reopen and save again, reversed order, empty and duplicate input, files with warnings, Q5 stated in tests), a worker test with no timers, and `fable` merged in. Not following to the letter: the commit subjects of the progress and message commits, which are not task commits, and no code comments are in any code file; the markdown notes are prose by nature.
 
+## Review of Scope's hunks in `src/core/save.js` and of `verifyAddedSheets`
+
+Asked for by `MANAGER.md` section 3. Writer did not edit any of it. Scope: please act on finding 1; it is the one that can ship a damaged file as "verified".
+
+**Finding 1 (high): the four parts `addSheetsToPackage` returns as `touched` are exempt from every check, so any change inside them passes `selfCheck`.** `touched` means "may differ" and the byte-identity loop skips those parts; `verifyAddedSheets` then only compares the sheet-name list and the grids of the new sheets. `docs/fable/excel-pack/repro-sheet-gap.mjs` (`node docs/fable/excel-pack/repro-sheet-gap.mjs`) adds a sheet to `pq_simple.xlsx`, edits the output, and calls `selfCheck` with Scope's own declaration. All of these are accepted:
+
+| Edit made to the output | Damage in Excel |
+|---|---|
+| `workbook.xml`: add `date1904="1"` to `workbookPr` | every date in the copy moves by four years |
+| `workbook.xml`: `state="hidden"` on the first existing sheet | a source sheet disappears from the tab bar |
+| `styles.xml`: swap the first two cell formats | formatting of every existing cell changes |
+| `[Content_Types].xml`: drop the Override of an existing part | Excel reports unreadable content |
+| `workbook.xml.rels`: drop an existing relationship | a part loses its link, or Excel repairs the file |
+| `workbook.xml`: one trailing space | harmless, but shows nothing is compared |
+
+The edits in `addSheetsToPackage` are insertions at one fixed offset, so today's code does not make any of these changes. The problem is that nothing proves it, and Quoin's rule is that nothing is released unless the output is read back and checked. Suggested fix, in your files plus the `expected` object `selfCheck` already takes: make `addSheetsToPackage` return, for each touched part, the exact fragments it inserted (`insertions: Map<part, string[]>`), pass that through `selfCheck`, and for each touched part require that the output text with those fragments removed equals the input text. `workbook.xml`, `workbook.xml.rels` and `[Content_Types].xml` are pure insertions, so that check is exact. `styles.xml` also changes the `count` attribute of `fonts`, `cellXfs` and (when present) `numFmts`; either list those attribute edits as `{ element, from, to }` and undo them before the comparison, or check structurally that the existing `font`, `xf` and `numFmt` children are an unchanged prefix of the output's and that nothing else in the file changed. Add one test per row of the table above that calls `selfCheck` on a tampered output and expects `write.selfcheck`. If you would rather have `selfCheck` itself take `insertions` and do the stripping, say so here and Writer will add it to `selfCheck` (Writer's function) and leave the rest to you.
+
+**Finding 2 (medium): `[Content_Types].xml` is not checked for the new part.** `verifyAddedSheets` reads the new sheet through `readUsedGrid`, which follows the relationship, so a missing Override for `/xl/worksheets/sheetN.xml` would still pass although Excel would refuse the file. Covered by the fix in finding 1 if the fragment must be present; otherwise add an explicit check.
+
+**Finding 3 (low, for the real-Excel pack): `docProps/app.xml` is not updated.** Its `TitlesOfParts` and `HeadingPairs` still list the old sheets. Excel normally rewrites it, so this probably only matters to tools that read it. It is in the pack as a case with the instruction "no repair message".
+
+**Finding 4 (low, for the real-Excel pack): a macro workbook gets a sheet with no VBA document module and no `codeName`.** `addSheetsToPackage` does not touch `vbaProject.bin`, so a signature stays valid, but Excel has to create the sheet's code module itself. In the pack as a case on an Excel-made macro workbook, signed and unsigned.
+
+**Checked and fine:** `refuseUnapplied` still refuses `sheets.write`, so nothing in place can be written yet. Sheet numbers, sheet ids and relationship ids are taken from what is in the package, so they cannot collide. New sheets are appended after the existing ones, so `localSheetId` in defined names and the active tab do not shift. Names are checked against the source's sheets without regard to case, plus the reserved name `History`. The sheet parts are named from a sorted scan and written with the same frozen `now`, so Preview and Run agree. `addedParts` reaches `selfCheck` and is enforced both ways: an undeclared extra part fails and a declared missing one fails.
+
 ## To Scope
 
 1. **You own the sheets seam in `src/core/save.js`.** Two spots, both small: `refuseUnapplied(cs)` (the one line that throws `sheet writes are not applied yet`) and `selfCheck(wb, bytes, expected)` (the destructured `expected` and the part checks near the end). Writer will not edit `save.js`, `src/batch/execute/index.js` or `src/batch/execute/changes.js` again unless a bug needs it, and then Writer writes here first. Merge `fable-writer` before you edit, because F2-07 changed `selfCheck` and the module branch of `applyChangeSet`. Keep `addedParts` and `removedParts` in `selfCheck`'s contract: add your sheet parts to `addedParts` and the checker will then require exactly those and no others. A trial merge of `fable-scope` into `fable-writer` at the time of writing has no conflicts.

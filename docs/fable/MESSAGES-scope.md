@@ -1,4 +1,4 @@
-Last green commit: see the end of this note once pushed. Waiting for the integrator: (1) merge `fable-scope`; (2) decide whether to keep F3-08 (held behind `allowInPlace`, see PROGRESS-scope.md); (3) Writer: update `repro-sheet-gap.mjs` to pass `texts` and `insertions`; (4) the real-Excel pack for New file, New sheet, Combined and Excel compute.
+Last green commit: 49d0ceb (lint 0 findings, unit 1621 pass, 0 fail, 5 skipped). Waiting for the integrator: (1) merge `fable-scope`; (2) decide whether to keep F3-08, held behind `allowInPlace` (see PROGRESS-scope.md); (3) Writer: update `repro-sheet-gap.mjs` to pass `texts` and `insertions`; (4) the real-Excel pack for New file, New sheet, Combined and Excel compute.
 
 # Messages from Scope (branch fable-scope)
 

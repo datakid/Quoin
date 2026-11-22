@@ -36,16 +36,21 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
   let cancelled = false;
   const refuse = (code, extra = {}) => ({ ok: false, code, ...extra });
 
-  const promise = (async () => {
+  const early = () => {
     if (plan.errors.length) return refuse('plan.invalid', { errors: plan.errors, plan });
     if (mode === 'run' && JSON.stringify(plan) !== JSON.stringify(preview.plan)) return refuse('plan.stale');
     const signed = mode === 'run' ? signedFiles(preview.perFile) : [];
     if (signed.length && !confirmSignatures) return refuse('vba.confirmNeeded', { count: signed.length });
+    return null;
+  };
+  const refused = early();
+  if (refused) return { promise: Promise.resolve(refused), cancel() {} };
 
-    const jobs = plan.files.filter((f) => f.units.length > 0);
-    if (mode === 'preview') session.beginPreview();
-    else session.beginRun(jobs.length);
+  const jobs = plan.files.filter((f) => f.units.length > 0);
+  if (mode === 'preview') session.beginPreview();
+  else session.beginRun(jobs.length);
 
+  const promise = (async () => {
     let alignText;
     if (recipe.recipe === 'align') {
       const source = alignSourceFor(recipe.align, indexes);

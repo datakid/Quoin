@@ -247,3 +247,14 @@ async function planOfInject(bytes) {
   const index = await indexWorkbook(bytes, { id: 'f0001', name: 'x.xlsx', relPath: 'x.xlsx', size: bytes.length });
   return resolvePlan(injectReplace(), [index], { now: NOW }).files[0];
 }
+
+test('a preview started while another preview is going throws at the call and leaves the first one alone', async () => {
+  const session = await settledSet([[pq(), 'a.xlsx']]);
+  const pool = inProcessPool({ hold: true });
+  const first = startPlanRun({ mode: 'preview', session, pool, recipe: injectReplace(), now: NOW, runId: 'r1' });
+  assert.throws(() => startPlanRun({ mode: 'preview', session, pool, recipe: injectReplace(), now: NOW, runId: 'r2' }), /cannot preview/);
+  assert.equal(session.state, 'previewing');
+  first.cancel();
+  await first.promise;
+  assert.equal(session.state, 'ready');
+});

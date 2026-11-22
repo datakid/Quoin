@@ -2,6 +2,10 @@ import { h, clear } from '../dom.js';
 import { S, errorMessage } from '../strings.js';
 import { ResultMatrix } from './result-matrix.js';
 import { VariantsPanel } from './variants.js';
+import { RecipePanel } from './recipe-panel.js';
+
+const SETTLED = ['ready', 'done', 'doneWithFailures'];
+const BUSY = ['previewing', 'running'];
 
 const BADGE_TEXT = { ready: S.setBadgeReady, edited: S.setBadgeEdited, skipped: S.setBadgeSkipped, failed: S.setBadgeFailed, pending: S.setBadgePending };
 
@@ -45,13 +49,18 @@ function splitPath(relPath, name) {
 }
 
 export class SetShell {
-  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
+  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, onLoadRecipe = () => {}, onClearRecipe = () => {}, onPreview = () => {}, onPreviewCleared = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
     this.container = container;
     this.session = session;
     this.onSummary = onSummary;
     this.onCollect = onCollect;
     this.onCancel = onCancel;
     this.onOpen = onOpen;
+    this.onLoadRecipe = onLoadRecipe;
+    this.onClearRecipe = onClearRecipe;
+    this.onPreview = onPreview;
+    this.onPreviewCleared = onPreviewCleared;
+    this.resultMode = null;
     this.openId = null;
     this.rovingId = null;
     this.matrix = null;
@@ -82,6 +91,7 @@ export class SetShell {
     this.empty = h('p', { class: 'set-empty item-meta' });
     this.files = h('section', { class: 'set-pane set-files', 'aria-label': S.setFiles }, h('div', { class: 'set-pane-head' }, h('h2', { class: 'set-pane-title' }, S.setFiles), this.count), this.filter, this.list, this.empty);
     this.recipe = h('section', { class: 'set-pane set-recipe', 'aria-label': S.setRecipe, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setRecipe));
+    this.recipePanel = new RecipePanel(this.recipe, { onLoad: (file) => this.onLoadRecipe(file), onClear: () => this.onClearRecipe(), onPreview: () => this.onPreview() });
     this.result = h('section', { class: 'set-pane set-result', 'aria-label': S.setResult, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setResult));
     this.runText = h('span', { class: 'set-run-text' });
     this.bar = h('progress', { class: 'set-bar', hidden: true, 'aria-label': S.setRunRunning(0, 0) });
@@ -105,7 +115,8 @@ export class SetShell {
     const all = this.session.list();
     const shown = this.query ? all.filter((f) => f.relPath.toLowerCase().includes(this.query)) : all;
     this.root.dataset.state = this.session.state;
-    if (this.session.state === 'running' || this.session.state === 'empty') this.clearResult();
+    if (this.session.state === 'running' || this.session.state === 'previewing' || this.session.state === 'empty') this.clearResult();
+    else if (this.session.state === 'indexing' && this.resultMode === 'preview') this.dropPreview();
     this.root.dataset.mode = this.openId ? 'file' : 'set';
     this.count.textContent = all.length ? S.setCount(shown.length, all.length) : '';
     const focused = this.list.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.id : null;
@@ -126,7 +137,8 @@ export class SetShell {
     }
     const counts = this.session.counts();
     this.collectBtn.hidden = !(this.session.state === 'ready' || this.session.state === 'done' || this.session.state === 'doneWithFailures') || counts.ready + counts.edited === 0;
-    this.cancelBtn.hidden = this.session.state !== 'running';
+    this.cancelBtn.hidden = !BUSY.includes(this.session.state);
+    this.recipePanel.setState({ locked: BUSY.includes(this.session.state), ready: SETTLED.includes(this.session.state) && counts.ready + counts.edited > 0 });
     this.onSummary(counts);
   }
 
@@ -193,13 +205,28 @@ export class SetShell {
     this.clearResult();
     this.matrix = new ResultMatrix(this.result, { mode });
     this.matrix.setRows(rows);
+    this.resultMode = mode;
     this.result.dataset.matrix = 'true';
+  }
+
+  setRecipeView(view) {
+    this.recipePanel.setView(view);
+  }
+
+  dropPreview() {
+    this.clearResult();
+    this.onPreviewCleared();
+  }
+
+  clearPreview() {
+    if (this.resultMode === 'preview') this.dropPreview();
   }
 
   clearResult() {
     if (!this.matrix) return;
     this.matrix.destroy();
     this.matrix = null;
+    this.resultMode = null;
     delete this.result.dataset.matrix;
   }
 
@@ -211,6 +238,7 @@ export class SetShell {
     this.openId = id;
     this.root.dataset.mode = 'file';
     this.recipe.dataset.hosting = 'true';
+    this.recipePanel.root.hidden = true;
     if (this.variants) this.variants.root.hidden = true;
     this.render();
   }
@@ -219,6 +247,7 @@ export class SetShell {
     this.openId = null;
     this.root.dataset.mode = 'set';
     delete this.recipe.dataset.hosting;
+    this.recipePanel.root.hidden = false;
     if (this.variants) this.variants.root.hidden = false;
     this.render();
   }

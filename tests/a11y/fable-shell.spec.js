@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { openApp, dropTree, waitForSet, ext } from '../e2e/helpers.js';
+import { openApp, dropTree, waitForSet, ext, fx } from '../e2e/helpers.js';
 import { SET_STATES, setUpSetState } from '../e2e/states.js';
 
 const require = createRequire(import.meta.url);
@@ -68,5 +68,23 @@ for (const theme of ['light', 'dark']) {
     await page.locator('.variant-item summary').first().click();
     await page.locator('.variant-version').first().waitFor();
     await audit(page, `${theme} versions`);
+  });
+}
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations in the recipe panel with a preview and with an error, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await dropTree(page, [{ name: 'books', children: [{ name: 'mixed.xlsm', data: readFileSync(fx('mixed.xlsm')).toString('base64') }, { name: 'pq_simple.xlsx', data: readFileSync(ext('pq_simple.xlsx')).toString('base64') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'replace', v: 1, replace: { in: ['m', 'vba'], find: 'DateTime', with: 'MyDateTime', kind: 'text', matchCase: true, shiny: true } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'my.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.waitForSelector('[role=grid]');
+    await audit(page, `${theme} preview`);
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('not json') });
+    await page.waitForSelector('.recipe-error:not([hidden])');
+    await audit(page, `${theme} recipe error`);
   });
 }

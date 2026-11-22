@@ -1,5 +1,5 @@
 {
-  "version": "128d74d9c634f3cb",
+  "version": "4d6f66a5f430636a",
   "files": [
     "./",
     "index.html",
@@ -146,6 +146,7 @@
     "src/ui/mark.js",
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
+    "src/ui/set/recipe-panel.js",
     "src/ui/set/result-matrix.js",
     "src/ui/set/shell.js",
     "src/ui/set/variants.js",

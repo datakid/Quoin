@@ -18,8 +18,13 @@ import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
+import { startPlanRun } from './plan-run.js';
+import { parseRecipe } from '../batch/recipe/recipe.js';
 import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
+
+const MAX_RECIPE_BYTES = 256 * 1024;
+const PREVIEWABLE = ['inject', 'replace', 'align'];
 
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
 
@@ -159,6 +164,8 @@ export class App {
     this.set = new SetSession();
     this.shell = null;
     this.fromSet = null;
+    this.recipeHeld = null;
+    this.preview = null;
     this.build();
     this.bindGlobal();
     this.set.subscribe(() => {
@@ -224,13 +231,19 @@ export class App {
       onCollect: () => this.collectSet(),
       onCancel: () => this.cancelSetRun(),
       onOpen: (id) => this.openFromSet(id),
+      onLoadRecipe: (file) => this.loadRecipeFile(file),
+      onClearRecipe: () => this.clearRecipe(),
+      onPreview: () => this.previewRecipe(),
+      onPreviewCleared: () => this.forgetPreview(),
       loadVariantText: (item, version) => this.variantText(item, version),
       groupVariants
     });
+    this.showRecipe(this.recipeView());
   }
 
   unmountShell() {
     if (!this.shell) return;
+    this.preview = null;
     this.shell.destroy();
     this.shell = null;
     document.title = S.appName;
@@ -389,6 +402,86 @@ export class App {
     if (!this.setRun) return;
     this.setRun.cancel();
     this.setRun = null;
+  }
+
+  showRecipe(view) {
+    if (this.shell) this.shell.setRecipeView(view);
+  }
+
+  recipeView(extra = {}) {
+    const held = this.recipeHeld;
+    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, ...extra };
+    const previewable = PREVIEWABLE.includes(held.recipe.recipe);
+    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [S.recipeNotPreviewable], canPreview: previewable, ...extra };
+  }
+
+  forgetPreview() {
+    this.preview = null;
+    this.showRecipe(this.recipeView());
+  }
+
+  async loadRecipeFile(file) {
+    this.recipeHeld = null;
+    this.preview = null;
+    if (this.shell) this.shell.clearPreview();
+    if (file.size > MAX_RECIPE_BYTES) return this.showRecipe(this.recipeView({ error: S.recipeTooLarge }));
+    let text;
+    try {
+      text = await file.text();
+    } catch {
+      return this.showRecipe(this.recipeView({ error: S.recipeUnreadable }));
+    }
+    const parsed = parseRecipe(text);
+    if (!parsed.ok) return this.showRecipe(this.recipeView({ error: errorMessage(parsed.code, { detail: parsed.detail }) }));
+    this.recipeHeld = { name: file.name, recipe: parsed.recipe, warnings: parsed.warnings };
+    this.showRecipe(this.recipeView());
+  }
+
+  clearRecipe() {
+    this.recipeHeld = null;
+    this.preview = null;
+    if (this.shell) this.shell.clearPreview();
+    this.showRecipe(this.recipeView());
+  }
+
+  planProblem(out) {
+    if (out.code !== 'plan.invalid' || !out.errors.length) return errorMessage(out.code, { count: out.count });
+    const first = out.errors[0];
+    const text = errorMessage(first.code, { token: first.detail });
+    return out.errors.length > 1 ? `${text} ${S.recipePlanMore(out.errors.length - 1)}` : text;
+  }
+
+  previewRecipe() {
+    const held = this.recipeHeld;
+    if (!held || this.setRun || !this.shell) return Promise.resolve(null);
+    const now = new Date().toISOString();
+    let run;
+    try {
+      if (this.set.state !== 'ready') {
+        this.set.beginChoose();
+        this.set.endChoose();
+      }
+      run = startPlanRun({ session: this.set, pool: sharedPool(), recipe: held.recipe, now, runId: `p${now}`, mode: 'preview', loadAlignText: (item, version) => this.variantText(item, version) });
+    } catch {
+      this.status.set({ alertText: S.setBusy });
+      return Promise.resolve(null);
+    }
+    this.preview = null;
+    this.showRecipe(this.recipeView());
+    this.setRun = run;
+    return run.promise.then((out) => {
+      if (this.setRun === run) this.setRun = null;
+      if (!this.shell || out.cancelled) return out;
+      if (out.ok) {
+        this.preview = out;
+        this.shell.showResult(out.rows, 'preview');
+        this.showRecipe(this.recipeView({ notes: [S.recipeCounts(out.counts), ...(out.signedCount ? [S.recipeSigned(out.signedCount)] : [])] }));
+      } else {
+        this.showRecipe(this.recipeView({ error: this.planProblem(out) }));
+      }
+      this.shell.recipePanel.restoreFocus();
+      return out;
+    });
   }
 
   chooseFolder() {

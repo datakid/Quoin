@@ -281,6 +281,20 @@ Done: Q5 means an added query has no connection, so `refreshOnLoad: true` has no
 Fails without, by mutation (each reverted): warning dropped for an add, 2 fail; warning when not asked, 1; warning although a connection exists, 4; no warning without a connection, 1; the file's own warnings dropped, 1; warning kept on a failed write, 1.
 Counts: lint 0 findings; unit 1406 tests, 1401 pass, 5 skipped.
 
+### F2-15 Real-Excel pack
+Layer: scripts and docs (the card's own files: `scripts/make-excel-pack.mjs`, `docs/fable/excel-pack/`)
+Files: scripts/make-excel-pack.mjs (new), docs/fable/excel-pack/README.md, CHECKLIST.md and repro-sheet-gap.mjs (new), tests/unit/excel-pack.test.js (new)
+Do: `node scripts/make-excel-pack.mjs` writes one zip (`excel-pack/quoin-excel-pack.zip`, 353 KB, 42 files) and `CHECKLIST.md`. 19 cases: query replace, add, add with awkward names, remove, rename and replace-in-code; module replace, add, remove and replace-in-code; the same module changes on a signed project (the signature is removed and the checklist says to check that); a locked-project case that the person makes in Excel and Quoin must refuse; and Scope's three result modes plus a new sheet in a macro workbook and in a signed macro workbook. Each case has the input and the output workbook, and a block of tick boxes saying exactly what to look at. Nothing is ticked and nothing is marked verified. Every case is run through `parseRecipe`, `resolvePlan`, `executeFile`, `combineOutputs` or `applyChangeSet`, and the script stops if any case does not give a verified change.
+Test that fails without it: `tests/unit/excel-pack.test.js`, 13 tests (the file failed at import before the script existed): valid zip and manifest hashes, identical builds, every file opens with no warning, inputs are the fixtures, the checklist text matches the files for every case (queries, modules, sheets, signatures), the locked-project recipe is refused, no box ticked and no result claimed, the committed `CHECKLIST.md` equals the script's, and the command line works.
+Fails without, by mutation (each reverted): checklist text changed without regenerating the committed copy, 1 fails; a box pre-ticked, 2; clock not frozen, 2; a case dropped, 7; a wrong awkward name, 2; a file missing from the manifest, 2; a signed case not acknowledged, the build stops.
+Result: Done. Not run in Excel: that is what the pack is for.
+Deviations: none.
+Decisions inside gaps (log, not yet confirmed by the user):
+- The checklist is committed (`docs/fable/excel-pack/CHECKLIST.md`) and the zip is not, because the zip is rebuilt in seconds and a committed zip would go stale at every merge. A test makes the committed checklist unable to go stale.
+- A protected project cannot be made without Excel, so M08 is a guided case: the person locks the project, and Quoin must refuse. The test shows the refusal with a project marked locked.
+- Q04 and Q05 start from the output of Q02, as the card asks ("on workbooks Quoin adds the query to").
+Counts after this task: lint 0 findings; unit counts are in the status line.
+
 ## Open points for the user
 
 1. Planning for Inject, Replace and Align is not assigned. `resolvePlan` only handles Collect and `src/batch/resolve/**` belongs to Scope. `executeFile` needs the recipe text (the query text, the find and with strings, the aligned hash), but `FilePlan` and `Action` carry none of it. I take `executeFile(wb, filePlan, { now, recipe })`, where `recipe` is `plan.recipe`, unless told otherwise. Someone has to extend `resolve` to emit `add`, `replace`, `rename`, `remove`, `replaceText` and `align` actions.

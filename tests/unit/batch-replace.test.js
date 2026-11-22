@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Worker } from 'node:worker_threads';
+import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { replaceInText, MATCH_LIST_LIMIT } from '../../src/batch/execute/replace.js';
@@ -204,36 +205,71 @@ test('F2-08: a timed-out or crashed job can be turned into failed rows with the 
 const workerFile = fileURLToPath(new URL('./redos-worker.mjs', import.meta.url));
 const simplePath = fileURLToPath(new URL('../fixtures/external/pq_simple.xlsx', import.meta.url));
 
-function runInWorker(data) {
-  const worker = new Worker(workerFile, { workerData: { path: simplePath, ...data } });
-  const messages = [];
-  worker.on('message', (m) => messages.push(m));
-  const errors = [];
-  worker.on('error', (e) => errors.push(e));
-  return { worker, messages, errors };
+const startWorker = (data) => new Worker(workerFile, { workerData: { path: simplePath, ...data } });
+
+async function nextOfType(worker, type) {
+  for (;;) {
+    const [message] = await once(worker, 'message');
+    if (message.type === type) return message;
+  }
 }
 
-const waitFor = async (predicate, ms) => {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    if (predicate()) return true;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  return predicate();
+test('F2-08: a catastrophic regex never returns, its worker can be stopped, and the next file still runs', async () => {
+  const bad = startWorker({ find: '(a+)+$', text: `${'a'.repeat(45)}b` });
+  const seen = [];
+  bad.on('message', (m) => seen.push(m.type));
+  await nextOfType(bad, 'started');
+  const exited = once(bad, 'exit');
+  await bad.terminate();
+  await exited;
+  assert.ok(!seen.includes('done'));
+  const good = startWorker({ find: 'StudentNames' });
+  assert.deepEqual(await nextOfType(good, 'done'), { type: 'done', verdict: 'changed', hasBytes: true });
+  await good.terminate();
+});
+
+const countingStop = (limit) => {
+  const state = { calls: 0 };
+  state.stop = () => {
+    state.calls += 1;
+    return limit !== null && state.calls >= limit;
+  };
+  return state;
 };
 
-test('F2-08: a catastrophic regex never returns, its worker can be stopped, and the next file still runs', async () => {
-  const bad = runInWorker({ find: '(a+)+$', text: `${'a'.repeat(45)}b` });
-  assert.ok(await waitFor(() => bad.messages.some((m) => m.type === 'started'), 10000));
-  await new Promise((r) => setTimeout(r, 300));
-  assert.ok(!bad.messages.some((m) => m.type === 'done'));
-  const began = Date.now();
-  await bad.worker.terminate();
-  assert.ok(Date.now() - began < 3000);
-  assert.deepEqual(bad.errors, []);
-  assert.ok(!bad.messages.some((m) => m.type === 'done'));
-  const good = runInWorker({ find: 'StudentNames' });
-  assert.ok(await waitFor(() => good.messages.some((m) => m.type === 'done'), 20000));
-  assert.deepEqual(good.messages.find((m) => m.type === 'done'), { type: 'done', verdict: 'changed', hasBytes: true });
-  await good.worker.terminate();
+test('F2-08: a deadline checked between targets and between matches fails the file with m.timeout at every possible point and never writes part of it', async () => {
+  const wb = await openMixed();
+  const plan = planOf([['query', 'FinalTable'], ['module', 'Module1'], ['query', 'RawInput'], ['module', 'Sheet1']]);
+  const recipe = recipeOf({ find: '(DateTime|MsgBox)', with: 'My$1', kind: 'regex' });
+  const free = countingStop(null);
+  const whole = await executeFile(wb, plan, { now: NOW, recipe, shouldStop: free.stop });
+  assert.ok(whole.bytes);
+  assert.ok(free.calls > 8);
+  for (let n = 1; n <= free.calls; n++) {
+    const state = countingStop(n);
+    const res = await executeFile(wb, plan, { now: NOW, recipe, shouldStop: state.stop });
+    assert.ok(res.bytes === null, `stop at check ${n}`);
+    assert.ok(res.sha256 === null);
+    assert.deepEqual(res.changes, []);
+    assert.deepEqual(res.rows.map((r) => [r.verdict, r.reason_code, r.verified]), plan.actions.map(() => ['failed', 'm.timeout', false]));
+  }
+  const after = await executeFile(wb, plan, { now: NOW, recipe, shouldStop: countingStop(free.calls + 1).stop });
+  assert.equal(after.sha256, whole.sha256);
+});
+
+test('F2-08: a deadline that is already past stops before any match is looked for', async () => {
+  const wb = await openSimple();
+  const res = await executeFile(wb, planOf([['query', 'StudentResults']]), { now: NOW, recipe: recipeOf(), shouldStop: () => true });
+  assert.equal(res.rows[0].verdict, 'failed');
+  assert.equal(res.rows[0].reason_code, 'm.timeout');
+  assert.throws(() => replaceInText('abc', spec({ find: 'a' }), () => true), (e) => e.code === 'm.timeout');
+});
+
+test('F2-08: a slow replace over a very long text is stopped between matches', async () => {
+  const wb = await openSimple();
+  wb.queries[0].original = 'x'.repeat(200000);
+  const state = countingStop(500);
+  const res = await executeFile(wb, planOf([['query', 'StudentResults']]), { now: NOW, recipe: recipeOf({ find: 'x', with: 'y' }), shouldStop: state.stop });
+  assert.equal(res.rows[0].reason_code, 'm.timeout');
+  assert.equal(state.calls, 500);
 });

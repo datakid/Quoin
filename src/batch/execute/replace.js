@@ -1,3 +1,5 @@
+import { QuoinError } from '../../core/errors.js';
+
 export const MATCH_LIST_LIMIT = 100;
 const SIDE_LIMIT = 200;
 
@@ -56,8 +58,9 @@ function lineStarts(text) {
   return starts;
 }
 
-export function replaceInText(text, { find, with: replacement, kind, matchCase }) {
+export function replaceInText(text, { find, with: replacement, kind, matchCase }, shouldStop = () => false) {
   if (!find) return { text, count: 0, matches: [] };
+  if (shouldStop()) throw new QuoinError('m.timeout', 'the deadline passed before the search began');
   const re = new RegExp(kind === 'regex' ? find : escapeRegExp(find), matchCase ? 'g' : 'gi');
   const starts = lineStarts(text);
   const matches = [];
@@ -66,6 +69,7 @@ export function replaceInText(text, { find, with: replacement, kind, matchCase }
   let count = 0;
   let line = 0;
   for (const m of text.matchAll(re)) {
+    if (shouldStop()) throw new QuoinError('m.timeout', 'the deadline passed during the search');
     if (m[0].length === 0) continue;
     const after = kind === 'regex' ? expand(m, text, replacement) : replacement;
     out += text.slice(last, m.index) + after;

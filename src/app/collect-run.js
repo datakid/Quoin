@@ -3,15 +3,11 @@ import { parseRecipe } from '../batch/recipe/recipe.js';
 import { resolvePlan } from '../batch/resolve/resolve.js';
 import { failedResult } from '../batch/execute/collect.js';
 import { buildCollectOutput } from './outputs.js';
-
-const refusedShell = (f, code) => ({ id: f.id, name: f.name, relPath: f.relPath, size: f.size, status: 'refused', refused: { code }, format: null, sheets: [], tables: [], queries: [], modules: [], pq: { editable: false, reason: null }, vba: { present: false, signed: false, locked: false, writable: false }, warnings: [] });
-
-const indexOf = (f) => (f.status === 'ready' && f.index ? f.index : refusedShell(f, f.skipReason || 'file.notWorkbook'));
+import { indexesOf } from './set-indexes.js';
 
 export function startCollect({ session, pool, now, runId, ceilingBytes }) {
   const recipe = parseRecipe(JSON.stringify({ recipe: 'collect', v: 1 })).recipe;
-  const records = session.list().filter((f) => f.status !== 'pending');
-  const indexes = records.map(indexOf);
+  const indexes = indexesOf(session);
   const plan = resolvePlan(recipe, indexes, { now });
   const jobs = plan.files.filter((f) => f.units.length > 0);
   session.beginRun(jobs.length);

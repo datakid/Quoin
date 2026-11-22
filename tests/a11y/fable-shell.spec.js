@@ -55,3 +55,18 @@ for (const theme of ['light', 'dark']) {
     await audit(page, `${theme} matrix`);
   });
 }
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations in the versions panel with a diff, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    const data = readFileSync(ext('pq_vba_complex.xlsm')).toString('base64');
+    const other = readFileSync(ext('pq_simple.xlsx')).toString('base64');
+    await dropTree(page, [{ name: 'books', children: [{ name: 'a.xlsm', data }, { name: 'b.xlsx', data: other }] }]);
+    await waitForSet(page);
+    await page.locator('.variant-item summary').first().click();
+    await page.locator('.variant-version').first().waitFor();
+    await audit(page, `${theme} versions`);
+  });
+}

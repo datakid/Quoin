@@ -91,7 +91,7 @@ test('fable collect: the run bar shows Cancel while running and the button is hi
   await expect(exportButton(page)).toBeHidden();
   await page.evaluate(() => {
     const set = window.__quoin.set;
-    set.indexed('f0001', { status: 'ready', queries: [{ name: 'Q' }] });
+    set.indexed('f0001', { status: 'ready', queries: [{ name: 'Q', hash: 'a'.repeat(64) }], modules: [] });
     set.beginRun(1);
   });
   await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();

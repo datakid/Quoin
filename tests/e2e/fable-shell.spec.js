@@ -107,7 +107,10 @@ test('fable shell: Tab reaches the filter, the files list, the recipe region and
   await expect(page.locator('.set-file-open').first()).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('region', { name: 'Recipe' })).toBeFocused();
-  await page.keyboard.press('Tab');
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    if (await page.getByRole('region', { name: 'Result' }).evaluate((el) => el === document.activeElement)) break;
+  }
   await expect(page.getByRole('region', { name: 'Result' })).toBeFocused();
   const outline = await page.getByRole('region', { name: 'Result' }).evaluate((el) => parseFloat(getComputedStyle(el).outlineWidth));
   expect(outline).toBeGreaterThan(0);

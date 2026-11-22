@@ -1,4 +1,5 @@
 import { normalizeQueryText, toViewText } from '../../core/pq/section.js';
+import { QuoinError } from '../../core/errors.js';
 import { emptyChangeSet } from '../../core/save.js';
 import { joinModuleSource, splitLines, splitModuleSource } from '../../core/vba/module-source.js';
 import { moduleNameProblem, moduleRemovalProblem, newModuleText } from '../../core/vba/writeback.js';
@@ -177,19 +178,19 @@ function withMatches(outcome, found) {
   return { ...outcome, change: { ...outcome.change, op: 'replaceText', matchCount: found.count, matches: found.matches.map(({ line, col, before, after }) => ({ line, col, before, after })) } };
 }
 
-async function replaceText(wb, action, recipe, changeSet, { acknowledgeSignature }) {
+async function replaceText(wb, action, recipe, changeSet, { acknowledgeSignature, shouldStop }) {
   const { type, name } = action.target;
   const spec = recipe.replace;
   if (!spec.in.includes(CODE_KIND[type])) return skipped('skip.notApplicable');
   if (type === 'query') {
     const query = wb.queries.find((x) => x.name === name);
     if (!query) return skipped('skip.notApplicable');
-    const found = replaceInText(normalizeQueryText(query.original), spec);
+    const found = replaceInText(normalizeQueryText(query.original), spec, shouldStop);
     return withMatches(await stageQuery(query, toViewText(normalizeQueryText(found.text)), changeSet), found);
   }
   const target = moduleTarget(wb, name);
   if (target.outcome) return target.outcome;
-  const found = replaceInText(target.mod.model.visible, spec);
+  const found = replaceInText(target.mod.model.visible, spec, shouldStop);
   return withMatches(await stageModule(wb, target.project, target.mod, splitLines(found.text).join('\n'), changeSet, acknowledgeSignature), found);
 }
 
@@ -219,15 +220,24 @@ async function alignTarget(wb, action, recipe, changeSet, source, { acknowledgeS
   return asAlign(await stageModule(wb, target.project, target.mod, source.text, changeSet, acknowledgeSignature));
 }
 
-export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature = false, alignText } = {}) {
+export async function planChanges(wb, filePlan, recipe, { acknowledgeSignature = false, alignText, shouldStop = () => false } = {}) {
   const changeSet = emptyChangeSet();
   const outcomes = [];
   const source = recipe.recipe === 'align' ? await alignSource(recipe.align, alignText) : null;
+  const claimed = new Set();
   for (const action of filePlan.actions) {
+    if (shouldStop()) throw new QuoinError('m.timeout', 'the deadline passed before the next target');
+    const claim = `${action.target.type}|${action.target.name}`;
+    if (claimed.has(claim)) {
+      outcomes.push(refused('refused.duplicate'));
+      continue;
+    }
+    claimed.add(claim);
     if (action.op === 'replace' && action.target.type === 'query') outcomes.push(await replaceQuery(wb, action, recipe, changeSet));
     else if (action.op === 'replace' && action.target.type === 'module') outcomes.push(await replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
-    else if (action.op === 'replaceText' && (action.target.type === 'query' || action.target.type === 'module')) outcomes.push(await replaceText(wb, action, recipe, changeSet, { acknowledgeSignature }));
+    else if (action.op === 'replaceText' && (action.target.type === 'query' || action.target.type === 'module')) outcomes.push(await replaceText(wb, action, recipe, changeSet, { acknowledgeSignature, shouldStop }));
     else if (action.op === 'align') outcomes.push(await alignTarget(wb, action, recipe, changeSet, source, { acknowledgeSignature }));
+    else if (action.op === 'rename' && action.target.type === 'module') outcomes.push(refused('refused.unsupported'));
     else if (action.op === 'add' && action.target.type === 'module') outcomes.push(await addModule(wb, action, recipe, changeSet, { acknowledgeSignature }));
     else if (action.op === 'remove' && action.target.type === 'module') outcomes.push(await removeModule(wb, action, changeSet, { acknowledgeSignature }));
     else if (action.op === 'add' && action.target.type === 'query') outcomes.push(await addQuery(wb, action, recipe, changeSet));

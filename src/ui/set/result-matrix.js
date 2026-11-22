@@ -8,15 +8,24 @@ const VERDICT_TEXT = { changed: S.matrixYes, unchanged: S.matrixNo, skipped: S.m
 const VERDICT_COLUMN = 4;
 
 export class ResultMatrix {
-  constructor(host, { mode = 'report' } = {}) {
+  constructor(host, { mode = 'report', onSelectRow = null } = {}) {
     this.mode = mode;
     this.verdicts = [];
-    this.grid = new Grid(host, { cellClass: (r, c) => (c === VERDICT_COLUMN ? VERDICT_CLASS[this.verdicts[r]] || '' : '') });
+    this.selected = -1;
+    this.grid = new Grid(host, {
+      onActive: (r) => {
+        if (r === this.selected) return;
+        this.selected = r;
+        if (onSelectRow) onSelectRow(r);
+      },
+      cellClass: (r, c) => (c === VERDICT_COLUMN ? VERDICT_CLASS[this.verdicts[r]] || '' : '')
+    });
     this.grid.el.setAttribute('aria-label', S.matrixLabel);
   }
 
   setRows(rows) {
     this.verdicts = rows.map((r) => r.verdict);
+    this.selected = -1;
     const text = (name) => ({ name, type: 'text' });
     const columns = [text(S.matrixFile), text(S.matrixUnit), text(S.matrixAction), text(S.matrixCompute), text(this.mode === 'preview' ? S.matrixWouldChange : S.matrixChanged), text(S.matrixReason), text(S.matrixOldHash), text(S.matrixNewHash)];
     const data = rows.map((r) => [`${r.folder}${r.file}`, r.unit, r.action, r.compute, VERDICT_TEXT[r.verdict] || r.verdict, r.reason || (r.reason_code ? errorMessage(r.reason_code) : ''), r.old_hash, r.new_hash]);

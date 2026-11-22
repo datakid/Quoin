@@ -90,6 +90,9 @@ test('apply may carry the recipe, the set-wide signature confirmation and the te
   assert.equal(m({ recipe, alignText: 5 }).ok, false);
   assert.match(m({ recipe: 'inject' }).reason, /recipe/);
   assert.match(m({ recipe, acknowledgeSignature: 1 }).reason, /acknowledgeSignature/);
+  assert.equal(m({ recipe, includeTexts: true }).ok, true);
+  assert.equal(m({ recipe, includeTexts: 'yes' }).ok, false);
+  assert.match(m({ recipe, includeTexts: 1 }).reason, /includeTexts/);
   assert.match(m({ recipe, alignText: 5 }).reason, /alignText/);
 });
 

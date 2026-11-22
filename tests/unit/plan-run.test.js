@@ -295,3 +295,17 @@ test('cancelling while the outputs are being built stops quietly: cancelled resu
   assert.equal(session.state, 'ready');
   assert.equal(session.move, null);
 });
+
+test('a preview keeps the text before and after each change for the diff and a run does not carry any', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx']]);
+  const pool = inProcessPool();
+  const recipe = injectReplace();
+  const previewed = await preview({ session, pool, recipe }).promise;
+  const [change] = previewed.perFile.get('f0001').changes;
+  assert.equal(typeof change.texts.before, 'string');
+  assert.equal(typeof change.texts.after, 'string');
+  assert.notEqual(change.texts.before, change.texts.after);
+  assert.deepEqual(pool.submitted.map((s) => s.type), ['apply']);
+  const ran = await startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r2', preview: previewed }).promise;
+  assert.equal('texts' in ran.perFile.get('f0001').changes[0], false);
+});

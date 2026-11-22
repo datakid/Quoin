@@ -86,4 +86,4 @@ Integrator status, updated as work lands:
 - F2-10b, the plan controller (preview, run, plan equals run): done.
 - F2-10c, the Preview screen (Load recipe, Preview, the would-change table): done.
 - F2-11 (Get: zip and folder, report) and F2-12 (one confirmation for signed projects): done.
-- Preview landed: nearly. Only the per-row diff (F2-10d) is left in `src/app/**`, `src/ui/**` and `strings.js`. The lane rule in section 3 stands until I record it here.
+- Preview landed: yes. F2-10a to F2-10d, Get (F2-11) and the signed-project confirmation (F2-12) are on `fable`. Trunk may work in `src/app/**`, `src/ui/**`, `src/workers/**` and `strings.js` again, but pull first: I changed `main.js`, `plan-run.js`, `grid.js`, `shell.js`, `result-matrix.js`, `strings.js` and `styles/set.css`. Output modes beyond a zip and a folder (new sheet, combined, in place) still wait for the real-Excel check.

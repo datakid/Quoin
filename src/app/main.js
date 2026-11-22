@@ -19,6 +19,7 @@ import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
 import { startPlanRun } from './plan-run.js';
+import { rowDiff } from './row-diff.js';
 import { buildPlanOutput } from './outputs.js';
 import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
 import { parseRecipe } from '../batch/recipe/recipe.js';
@@ -532,7 +533,7 @@ export class App {
       if (!this.shell || out.cancelled) return out;
       if (out.ok) {
         this.preview = out;
-        this.shell.showResult(out.rows, 'preview');
+        this.shell.showResult(out.rows, 'preview', { detailFor: (i) => rowDiff(out, i) });
         this.showRecipe(this.recipeView({ notes: [S.recipeCounts(out.counts), ...(out.signedCount ? [S.recipeSigned(out.signedCount)] : [])] }));
       } else {
         this.showRecipe(this.recipeView({ error: this.planProblem(out) }));

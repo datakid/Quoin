@@ -219,7 +219,7 @@ export function diffTable(name, before, after) {
   return h('div', { class: 'diff-scroll' },
     h('table', { class: 'diff' },
       h('caption', { class: 'sr-only' }, S.diffCaption(name)),
-      h('thead', { class: 'sr-only' }, h('tr', null, h('th', null, S.diffOld), h('th', null, S.diffNew), h('th', null, ''), h('th', null, ''))),
+      h('thead', { class: 'sr-only' }, h('tr', null, h('th', null, S.diffOld), h('th', null, S.diffNew), h('th', null, S.diffMarkHead), h('th', null, S.diffTextHead))),
       h('tbody', null, ...rows.map((r) => (r.kind === 'gap'
         ? h('tr', { class: 'diff-gap' }, h('td', { colspan: '4' }, S.diffGap(r.hidden)))
         : h('tr', { class: `diff-${r.kind}` },

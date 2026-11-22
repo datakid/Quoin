@@ -28,7 +28,7 @@ export async function runFilePlan(bytes, meta, filePlan, options) {
     throw e;
   }
   try {
-    return await executeFile(wb, filePlan, { now: options.now, recipe, meta, runId, acknowledgeSignature: options.acknowledgeSignature === true, alignText: options.alignText, shouldStop });
+    return await executeFile(wb, filePlan, { now: options.now, recipe, meta, runId, acknowledgeSignature: options.acknowledgeSignature === true, alignText: options.alignText, includeTexts: options.includeTexts === true, shouldStop });
   } catch (e) {
     return fail(e && typeof e.code === 'string' ? e.code : 'internal');
   }

@@ -225,7 +225,7 @@ async function applyFile(m) {
     return;
   }
   const meta = metaOf(m.fileRef);
-  const options = { now: m.options.now, runId: typeof m.options.runId === 'string' ? m.options.runId : '', recipe: m.options.recipe, limits: m.options.limits, acknowledgeSignature: m.options.acknowledgeSignature, alignText: m.options.alignText };
+  const options = { now: m.options.now, runId: typeof m.options.runId === 'string' ? m.options.runId : '', recipe: m.options.recipe, limits: m.options.limits, acknowledgeSignature: m.options.acknowledgeSignature, includeTexts: m.options.includeTexts, alignText: m.options.alignText };
   let result;
   try {
     result = await runFilePlan(await bytesOf(m.fileRef), meta, m.filePlan, options);

@@ -111,3 +111,21 @@ for (const theme of ['light', 'dark']) {
     await audit(page, `${theme} after get`);
   });
 }
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations with a preview row selected and its diff showing, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await dropTree(page, [{ name: 'books', children: [{ name: 'signed.xlsm', data: readFileSync(fx('signed.xlsm')).toString('base64') }, { name: 'mixed.xlsm', data: readFileSync(fx('mixed.xlsm')).toString('base64') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'inject', v: 1, inject: { target: 'module', op: 'replace', match: 'name', name: 'Module1', source: 'inline', text: 'Sub A()\r\nEnd Sub\r\n', refreshOnLoad: false } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'my.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.waitForSelector('[role=grid]');
+    await audit(page, `${theme} preview hint`);
+    await page.locator('.grid-row', { hasText: 'Yes' }).first().locator('.grid-cell:not(.grid-index)').first().click();
+    await page.locator('.set-detail [role=region]').waitFor();
+    await audit(page, `${theme} preview diff`);
+  });
+}

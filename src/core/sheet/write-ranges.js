@@ -119,9 +119,11 @@ function rebuildSheet(text, doc, sheetData, writes, styles) {
 
 export async function writeRangesToPackage(wb, pkg, writes) {
   const touched = new Set();
+  const texts = new Map();
   const rels = await readRelationships(pkg, wb.workbookPart);
   const added = await appendStyles(pkg, rels);
   touched.add(added.part);
+  texts.set(added.part, added.text);
   const bySheet = new Map();
   for (const write of writes) {
     const sheet = worksheetOf(wb, write.sheet);
@@ -132,10 +134,12 @@ export async function writeRangesToPackage(wb, pkg, writes) {
   for (const [part, list] of bySheet) {
     const { text, doc, sheetData } = await readSheet(pkg, part);
     if (layoutProblem(sheetData)) throw new QuoinError('check.part', 'sheet cannot take cells', part);
-    await pkg.setText(part, rebuildSheet(text, doc, sheetData, list, added.ids), text);
+    const next = rebuildSheet(text, doc, sheetData, list, added.ids);
+    await pkg.setText(part, next, text);
     touched.add(part);
+    texts.set(part, next);
   }
-  return { touched, addedParts: new Set() };
+  return { touched, addedParts: new Set(), texts };
 }
 
 export async function verifyWrittenRanges(back, wb, writes) {

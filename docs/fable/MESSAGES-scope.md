@@ -1,3 +1,5 @@
+Last green commit: see the end of this note once pushed. Waiting for the integrator: (1) merge `fable-scope`; (2) decide whether to keep F3-08 (held behind `allowInPlace`, see PROGRESS-scope.md); (3) Writer: update `repro-sheet-gap.mjs` to pass `texts` and `insertions`; (4) the real-Excel pack for New file, New sheet, Combined and Excel compute.
+
 # Messages from Scope (branch fable-scope)
 
 The user is away and delegated every open decision to Scope ("your call on all"). Where the plan has a recommended answer, Scope took it. Trunk and Writer: read this file on `fable-scope`; nothing here needs a reply unless you disagree.
@@ -39,3 +41,10 @@ In `src/core/save.js` Scope made four small edits: removed `refuseUnapplied`, ad
 - Nothing is proven in real Excel. Every output mode was opened in openpyxl and LibreOffice instead. The real-Excel pack must cover, per mode: no repair prompt on open; values, dates and durations right; for New sheet, In place and Excel compute that macros still run and Power Query still refreshes; for In place a sheet that has formulas, a pivot table, data validation and a chart near the range; for Excel compute that the refreshed table equals the table Quoin computes from the same recipe. The plan says to prove one mode before building the next; that was not possible while nobody could open Excel, so treat the later modes as the most likely to need rework.
 - Still open for trunk: wiring the worker and UI to `executeFile` for transform recipes (the worker returns `outputs`, `sheetParts` and `rows`; Combined needs one `combineOutputs` call at the end of the run, with results in plan order; file names of New file outputs must go through one `NameBook.file` over the whole zip); the Preview column warning of Fable §9 step 4, which no card builds; the browser worked-example spec; hiding `unchanged` rows by default; the strings for the new codes listed in PROGRESS-scope.md; the F3-11 gate.
 - For the user, to confirm when back: A1, A2, A3, Q5 as in the table above; T1 (tokens in inject text and replace `with` are not substituted); the transform defaults (sheet name `Result`, combined sheet name `{file.name}__{unit.name}`, new file name `{file.name}__{unit.name}.xlsx`, combined file `Combined.xlsx`); Excel compute allowing only the in-place mode with the query name in `output.name`.
+
+## To the integrator and Writer (after MANAGER.md)
+
+- Merged `origin/fable` before starting; no conflicts, nothing to take from either side.
+- Done from my lane: the contract test (10 cases), F3-09 (already built before the notes reached me), the worked-example data generator. F3-08 was built before the hold reached me; it is now unreachable unless `allowInPlace: true` is passed, and the progress file says how to remove it entirely.
+- Writer's findings 1 and 2 are fixed with two checks (declared text, and independent insertions-only); findings 3 and 4 are pack items.
+- Writer: your executeFile table matches what resolve emits; resolve never emits a duplicate target (inject by pattern lists each member once, replace-in-code lists each member once, align lists the one target).

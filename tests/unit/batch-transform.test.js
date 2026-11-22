@@ -148,7 +148,7 @@ test('executeFile hands a transform recipe to the transform step and returns its
 
 const runSheet = async (name, recipe, extra = {}) => {
   const s = await setup(name, recipe);
-  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', ...extra });
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', allowInPlace: true, ...extra });
   return { ...s, result, back: result.outputs && result.outputs.length ? await openWorkbook(result.outputs[0].bytes, 'copy.xlsx') : null };
 };
 
@@ -275,14 +275,14 @@ test('two units that would write over each other are caught at run time as well'
   const s = await setup('pq_simple.xlsx', recipe);
   const twin = { ...s.filePlan.units[0], index: 2 };
   const plan = { ...s.filePlan, units: [s.filePlan.units[0], twin], actions: [s.filePlan.actions[0], { ...s.filePlan.actions[0], unit: twin }] };
-  const result = await executeFile(s.wb, plan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  const result = await executeFile(s.wb, plan, { now: NOW, recipe, meta: s.index, runId: 'r1', allowInPlace: true });
   assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['changed', ''], ['refused', 'refused.overlap']]);
 });
 
 test('a macro workbook keeps its modules when a range is written in place', async () => {
   const recipe = placeRecipe('K1', { type: 'tables', match: 'position', position: { kind: 'first' } });
   const s = await setup('pq_vba_complex.xlsm', recipe);
-  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', allowInPlace: true });
   assert.equal(result.rows[0].verdict, 'changed');
   const back = await openWorkbook(result.outputs[0].bytes, 'copy.xlsm');
   assert.deepEqual(back.vba.project.modules.map((m) => m.text), s.wb.vba.project.modules.map((m) => m.text));
@@ -292,4 +292,12 @@ test('the same in-place run twice gives the same copy byte for byte', async () =
   const a = await runSheet('pq_simple.xlsx', placeRecipe('E1'));
   const b = await runSheet('pq_simple.xlsx', placeRecipe('E1'));
   assert.equal(a.result.sha256, b.result.sha256);
+});
+
+test('in place is held back until the real-Excel check: without the explicit flag every unit is refused and nothing is written', async () => {
+  const recipe = placeRecipe('E1');
+  const s = await setup('pq_simple.xlsx', recipe);
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'refused', 'refused.inPlaceHeld', false], ['StudentResults', 'refused', 'refused.inPlaceHeld', false]]);
+  assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
 });

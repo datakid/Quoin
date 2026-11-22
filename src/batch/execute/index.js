@@ -6,8 +6,8 @@ import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
 import { executeTransform } from './transform.js';
 
-export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, shouldStop = () => false }) {
-  if (recipe.recipe === 'transform') return executeTransform(wb, filePlan, recipe, { now, meta, runId, apply: (changeSet) => applyChangeSet(wb, changeSet, { now: zipClock(now), refreshOnLoad: false, checkSection }) });
+export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, shouldStop = () => false, allowInPlace = false }) {
+  if (recipe.recipe === 'transform') return executeTransform(wb, filePlan, recipe, { now, meta, runId, allowInPlace, apply: (changeSet) => applyChangeSet(wb, changeSet, { now: zipClock(now), refreshOnLoad: false, checkSection }) });
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
   const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));

@@ -61,15 +61,8 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
     for (const part of written.touched) touched.add(part);
   }
   const addedParts = new Set();
-  if (cs.sheets.add.length) {
-    const written = await addSheetsToPackage(wb, pkg, cs.sheets.add);
-    for (const part of written.touched) touched.add(part);
-    for (const part of written.addedParts) addedParts.add(part);
-  }
-  if (cs.sheets.write.length) {
-    const written = await writeRangesToPackage(wb, pkg, cs.sheets.write);
-    for (const part of written.touched) touched.add(part);
-  }
+  const partTexts = new Map();
+  const insertions = new Map();
   let signatureRemoved = false;
   if (cs.modules.replace.size || cs.modules.add.size || cs.modules.remove.size) {
     if (!wb.vba || !wb.vba.project) throw new QuoinError('vba.unreadable', 'no readable VBA project');
@@ -82,9 +75,21 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
       signatureRemoved = true;
     }
   }
+  if (cs.sheets.add.length) {
+    const written = await addSheetsToPackage(wb, pkg, cs.sheets.add);
+    for (const part of written.touched) touched.add(part);
+    for (const part of written.addedParts) addedParts.add(part);
+    for (const [part, text] of written.texts) partTexts.set(part, text);
+    for (const [part, ins] of written.insertions) insertions.set(part, ins);
+  }
+  if (cs.sheets.write.length) {
+    const written = await writeRangesToPackage(wb, pkg, cs.sheets.write);
+    for (const part of written.touched) touched.add(part);
+    for (const [part, text] of written.texts) partTexts.set(part, text);
+  }
   const bytes = await pkg.write({ now });
   if (faultInject) throw new QuoinError('write.selfcheck', 'injected fault');
-  await selfCheck(wb, bytes, { changes: cs, touched, addedParts, removedParts: new Set(), signatureRemoved });
+  await selfCheck(wb, bytes, { changes: cs, touched, addedParts, removedParts: new Set(), signatureRemoved, partTexts, insertions });
   return {
     bytes,
     name: suggestedFileName(wb),
@@ -114,7 +119,22 @@ function expectedModules(wb, m) {
   return out;
 }
 
-export async function selfCheck(wb, bytes, { changes, touched, addedParts, removedParts, signatureRemoved }) {
+function withoutCounts(text, elements) {
+  return elements.length ? text.replace(new RegExp(`(<(?:${elements.join('|')})\\b[^>]*?)\\s+count="\\d+"`, 'g'), '$1') : text;
+}
+
+function removable(text, fragments, original) {
+  if (!fragments.length) return text === original;
+  const [first, ...rest] = fragments;
+  for (let at = text.indexOf(first); at !== -1; at = text.indexOf(first, at + 1)) if (removable(text.slice(0, at) + text.slice(at + first.length), rest, original)) return true;
+  return false;
+}
+
+function onlyInsertions(original, output, { fragments, countElements }) {
+  return removable(withoutCounts(output, countElements), fragments, withoutCounts(original, countElements));
+}
+
+export async function selfCheck(wb, bytes, { changes, touched, addedParts, removedParts, signatureRemoved, partTexts = new Map(), insertions = new Map() }) {
   try {
     const back = await openWorkbook(bytes, wb.fileName, wb.limits);
     const knownWarnings = new Set(wb.warnings.map((w) => w.code));
@@ -150,6 +170,15 @@ export async function selfCheck(wb, bytes, { changes, touched, addedParts, remov
     for (const name of addedParts) if (!present.has(name)) throw new QuoinError('check.part', 'declared part is missing', name);
     for (const name of removedParts) if (present.has(name)) throw new QuoinError('check.part', 'declared removal is still present', name);
     const signatureParts = signatureRemoved ? (n) => /vbaProjectSignature/i.test(n) || /vbaProject\.bin\.rels$/i.test(n) || n === '[Content_Types].xml' : () => false;
+    for (const [name, text] of partTexts) {
+      const got = await back.pkg.text(name);
+      if (got.text !== text) throw new QuoinError('check.part', 'part differs from what was written', name);
+    }
+    for (const [name, ins] of insertions) {
+      const got = await back.pkg.text(name);
+      const original = await wb.pkg.text(name);
+      if (!onlyInsertions(original.text, got.text, ins)) throw new QuoinError('check.part', 'part changed beyond what was inserted', name);
+    }
     for (const e of wb.pkg.zip.entries) {
       if (touched.has(e.name) || removedParts.has(e.name) || signatureParts(e.name)) continue;
       const n = back.pkg.zip.get(e.name);

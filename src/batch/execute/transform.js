@@ -132,7 +132,7 @@ async function writeNewSheets(wb, items, culture, apply) {
   return { settled, outputs: [{ unit: null, name: written.name, bytes: written.bytes, sha256 }], bytes: written.bytes, sha256, sheetParts: [] };
 }
 
-export async function executeTransform(wb, filePlan, recipe, { now, meta, runId = '', apply } = {}) {
+export async function executeTransform(wb, filePlan, recipe, { now, meta, runId = '', apply, allowInPlace = false } = {}) {
   if (recipe.compute === 'excel') return executeOnOpen(wb, filePlan, recipe, { meta, runId, apply });
   if (!recipe.output) throw new TypeError('a transform recipe needs an output');
   const mode = recipe.output.mode;
@@ -141,6 +141,10 @@ export async function executeTransform(wb, filePlan, recipe, { now, meta, runId 
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
   const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));
+  if (mode === 'inPlace' && !allowInPlace) {
+    const rows = filePlan.actions.map((action) => reportRow(file, action, recipe, { run_id: runId, verdict: 'refused', reason_code: 'refused.inPlaceHeld', verified: false, duration_ms: Math.round(performance.now() - started) }));
+    return { fileId: filePlan.fileId, outputs: [], bytes: null, sha256: null, sheetParts: [], rows, failures: [], warnings };
+  }
   const culture = recipe.more.culture;
   const { runs } = await runFileUnits(wb, file, filePlan, recipe, { now });
   const failures = [];

@@ -255,6 +255,24 @@ Fails without: n/a (it checks what the earlier cards built)
 Changed expectations: none.
 Deviations: this is not the test the card asks for.
 
+## Manager lane (MANAGER.md section 3) and Writer's review
+
+Layer: execute, core save, tests
+Files: tests/unit/batch-contract.test.js (new, 10), tests/unit/sheet-selfcheck.test.js (new, 19), tests/fixtures/generators/worked-example.js (new), tests/unit/batch-worked-example.test.js (now uses the generator), src/core/save.js (`selfCheck` and the sheet hooks), src/core/sheet/add-sheets.js, styles.js, write-ranges.js, src/batch/execute/transform.js, src/batch/execute/index.js (one option forwarded).
+Do:
+- Contract test: resolve into `executeFile` for query add, replace, rename and remove, module add, replace and remove, replace in code, and align for queries and modules. Each checks verified rows, that two runs with the same `now` give the same bytes (the wall-clock `duration_ms` column is left out of the comparison), and that an aligned output's index hash equals the recipe's hash. Rename and remove run on a query the run itself added, because loaded queries are refused by design; the refusals are tested too. Mutations of resolve (rename resolved as replace, align resolved to no action) fail three cases each.
+- Worked-example data: `tests/fixtures/generators/worked-example.js` exports `buildWorkedExample()` (the twelve workbooks as `{name, relPath, bytes}`: seven with `Data` and `Notes`, three with `Data` and `Extra`, two `.xls` that cannot open), `writeWorkedExample(dir)` (the same twelve on disk under `east/`, `west/` and `legacy/`), the tables and the Clean Sales query text. The workbooks are built by the product's own writer, not by Excel.
+- Writer's findings 1 and 2: fixed, in two layers. (a) The sheet writers return the final text of every part they touched (`texts`) and `selfCheck` requires the output to match it byte for byte. (b) They also return the exact fragments they inserted (`insertions`) and `selfCheck` removes those fragments from the output and requires the result to equal the original part, ignoring only the `count` attributes of `fonts`, `cellXfs` and `numFmts` in `styles.xml`; (b) does not trust the writer's own idea of the result. The sheet writes now run after the query and module writes, so the declared text is final. A `numFmts` element that is self-closing is refused as `check.part` instead of being rewritten. Tests: one per row of Writer's table, in the form "refused", and again "refused even when the writer itself had expected the damaged text". With layer (b) removed, 7 of those fail.
+- Findings 3 (`docProps/app.xml` not updated) and 4 (no VBA document module or `codeName` for a new sheet in a macro workbook) are for the real-Excel pack as Writer has them; nothing to change before that. Writer's `repro-sheet-gap.mjs` still reports its edits as accepted, because it declares no `partTexts` and no `insertions`; it should pass `written.texts` and `written.insertions` from `addSheetsToPackage` to show the fix.
+Result: Done locally.
+Fails without: yes (by mutation, as above).
+Changed expectations: none.
+Deviations: see the next section.
+
+## F3-08 in place is held (MANAGER.md section 3 item 4)
+
+I had built in place before the hold reached me (commit c15016d). It is now unreachable by default: `executeFile` takes `allowInPlace` (default false) and passes it to `executeTransform`; without it every unit of an in-place recipe is a `refused / refused.inPlaceHeld` row, nothing is written and no unit is run. Excel compute is a different path and is not affected. The tests pass `allowInPlace: true`. To release in place after the real-Excel check, pass `allowInPlace: true` from the worker, or make it the default in `executeFile`. The core writer (`ChangeSet.sheets.write`, `write-ranges.js`) is still in `applyChangeSet`, because the sheet seam is shared; nothing but a change set that asks for it reaches it. If the integrator would rather not carry F3-08 at all, the commit to leave out is c15016d plus the three hunks listed under F3-08 above; say so here and Scope will remove it.
+
 ## For trunk when merging
 
 - `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on a merge of `fable-writer` and `fable-scope` into `fable` adds these runtime modules to the manifest: `src/batch/execute/{changes,combine,excel-compute,index,replace,transform,units}.js`, `src/batch/resolve/{align-source,scope,tokens}.js`, `src/core/export/limits.js`, `src/core/pq/members.js` and `src/core/sheet/{add-sheets,grid,names,sheet-xml,styles,write-ranges}.js`.

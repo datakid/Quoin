@@ -2,33 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { readUsedGrid } from '../../src/core/cells.js';
-import { runOnce } from '../../src/core/m/engine.js';
-import { workbookFromSheets, STANDARD_STYLES } from '../../src/core/export/xlsx.js';
-import { sheetXml } from '../../src/core/sheet/sheet-xml.js';
 import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { sha256Bytes } from '../../src/batch/index/hash.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 import { resolvePlan } from '../../src/batch/resolve/resolve.js';
 import { executeFile } from '../../src/batch/execute/index.js';
+import { buildWorkedExample, CLEAN_SALES_M } from '../fixtures/generators/worked-example.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
-const tableOf = (m) => runOnce({ sectionText: `section Section1;\r\n\r\nshared Result =\r\n${m};`, queryName: 'Result', now: NOW, previewRows: 1 }).value;
-const SALES = '#table({"Item", "Qty"}, {{"a", 1}, {"b", null}, {"c", 3}})';
-const MORE = '#table({"Item", "Qty"}, {{"x", 7}, {"y", 8}})';
-
-async function book(sheets) {
-  return workbookFromSheets(sheets.map(([name, m]) => ({ name, xml: sheetXml(tableOf(m), 'en-US', STANDARD_STYLES) })), { now: new Date(NOW) });
-}
-
-const CLEAN_SALES = 'let Raw = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content], Promoted = Table.PromoteHeaders(Raw), Clean = Table.SelectRows(Promoted, each [Qty] <> null) in Clean';
-
-async function twelve() {
-  const files = [];
-  for (let i = 1; i <= 7; i++) files.push({ name: `region${i}.xlsx`, relPath: `east/region${i}.xlsx`, bytes: await book([['Data', SALES], ['Notes', MORE]]) });
-  for (let i = 1; i <= 3; i++) files.push({ name: `branch${i}.xlsx`, relPath: `west/branch${i}.xlsx`, bytes: await book([['Data', SALES], ['Extra', MORE]]) });
-  files.push({ name: 'old1.xls', relPath: 'legacy/old1.xls', bytes: new Uint8Array([1, 2, 3]) }, { name: 'old2.xls', relPath: 'legacy/old2.xls', bytes: new Uint8Array([4, 5, 6]) });
-  return files;
-}
+const twelve = buildWorkedExample;
+const CLEAN_SALES = CLEAN_SALES_M;
 
 async function indexAll(files) {
   const indexes = [];

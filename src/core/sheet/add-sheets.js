@@ -35,10 +35,14 @@ export async function addSheetsToPackage(wb, pkg, adds) {
   validateNames(wb, adds);
   const touched = new Set();
   const addedParts = new Set();
+  const texts = new Map();
+  const insertions = new Map();
   const rels = await readRelationships(pkg, wb.workbookPart);
   const added = await appendStyles(pkg, rels);
   const styles = added.ids;
   touched.add(added.part);
+  texts.set(added.part, added.text);
+  insertions.set(added.part, { fragments: added.fragments, countElements: added.countElements });
 
   const dir = wb.workbookPart.slice(0, wb.workbookPart.lastIndexOf('/') + 1);
   const usedNumbers = new Set();
@@ -70,23 +74,36 @@ export async function addSheetsToPackage(wb, pkg, adds) {
     const rid = `rId${ridNumber}`;
     usedRids.add(rid);
     const part = `${dir}worksheets/sheet${number}.xml`;
-    pkg.set(part, utf8Encode(sheetXml(add.table, add.culture || 'en-US', styles)));
+    const xml = sheetXml(add.table, add.culture || 'en-US', styles);
+    pkg.set(part, utf8Encode(xml));
+    texts.set(part, xml);
     addedParts.add(part);
     sheetTags.push(`<${prefixOf(sheetsEl)}sheet name="${escapeAttr(add.name)}" sheetId="${sheetId}" ${relAttr}="${rid}"/>`);
     relTags.push(`<Relationship Id="${rid}" Type="${TYPE_WORKSHEET}" Target="worksheets/sheet${number}.xml"/>`);
     typeTags.push(`<Override PartName="/${part}" ContentType="${CT_WORKSHEET}"/>`);
   }
-  await pkg.setText(wb.workbookPart, applyEdits(wbText.text, [{ start: sheetsEl.closeStart, end: sheetsEl.closeStart, replacement: sheetTags.join('') }]), wbText);
+  const sheetsFragment = sheetTags.join('');
+  const workbookNext = applyEdits(wbText.text, [{ start: sheetsEl.closeStart, end: sheetsEl.closeStart, replacement: sheetsFragment }]);
+  insertions.set(wb.workbookPart, { fragments: [sheetsFragment], countElements: [] });
+  await pkg.setText(wb.workbookPart, workbookNext, wbText);
   touched.add(wb.workbookPart);
+  texts.set(wb.workbookPart, workbookNext);
 
   const relEdit = { start: rels.doc.root.closeStart, end: rels.doc.root.closeStart, replacement: relTags.map((t) => t.replace('<Relationship ', `<${prefixOf(rels.doc.root)}Relationship `)).join('') };
-  await pkg.setText(rels.part, applyEdits(rels.text.text, [relEdit]), rels.text);
+  const relsNext = applyEdits(rels.text.text, [relEdit]);
+  insertions.set(rels.part, { fragments: [relEdit.replacement], countElements: [] });
+  await pkg.setText(rels.part, relsNext, rels.text);
   touched.add(rels.part);
+  texts.set(rels.part, relsNext);
 
   const ct = await readContentTypes(pkg);
-  await pkg.setText('[Content_Types].xml', applyEdits(ct.text.text, [{ start: ct.doc.root.closeStart, end: ct.doc.root.closeStart, replacement: typeTags.map((t) => t.replace('<Override ', `<${prefixOf(ct.doc.root)}Override `)).join('') }]), ct.text);
+  const ctFragment = typeTags.map((t) => t.replace('<Override ', `<${prefixOf(ct.doc.root)}Override `)).join('');
+  const ctNext = applyEdits(ct.text.text, [{ start: ct.doc.root.closeStart, end: ct.doc.root.closeStart, replacement: ctFragment }]);
+  insertions.set('[Content_Types].xml', { fragments: [ctFragment], countElements: [] });
+  await pkg.setText('[Content_Types].xml', ctNext, ct.text);
   touched.add('[Content_Types].xml');
-  return { touched, addedParts };
+  texts.set('[Content_Types].xml', ctNext);
+  return { touched, addedParts, texts, insertions };
 }
 
 export async function verifyAddedSheets(back, wb, adds) {

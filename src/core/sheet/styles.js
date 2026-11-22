@@ -40,10 +40,12 @@ export async function appendStyles(pkg, rels) {
     { start: cellXfs.closeStart, end: cellXfs.closeStart, replacement: [xf(14), xf(datetimeFormat), xf(21), xf(durationFormat), xf(0, fontId)].join('') },
     attributeEdit(cellXfs, 'count', String(base + 5))
   ];
-  if (created.length && numFmts && !numFmts.selfClosing) edits.push({ start: numFmts.closeStart, end: numFmts.closeStart, replacement: created.join('') }, attributeEdit(numFmts, 'count', String(known.length + created.length)));
-  else if (created.length && numFmts) edits.push({ start: numFmts.start, end: numFmts.end, replacement: `<numFmts count="${known.length + created.length}">${created.join('')}</numFmts>` });
+  if (created.length && numFmts && numFmts.selfClosing) throw new QuoinError('check.part', 'styles cannot take new styles', stylesPart);
+  if (created.length && numFmts) edits.push({ start: numFmts.closeStart, end: numFmts.closeStart, replacement: created.join('') }, attributeEdit(numFmts, 'count', String(known.length + created.length)));
   else if (created.length) edits.push({ start: fonts.start, end: fonts.start, replacement: `<numFmts count="${created.length}">${created.join('')}</numFmts>` });
-  await pkg.setText(stylesPart, applyEdits(text.text, edits), text);
-  return { part: stylesPart, ids: { date: base, datetime: base + 1, time: base + 2, duration: base + 3, header: base + 4 } };
+  const fragments = edits.filter((e) => e.start === e.end).map((e) => e.replacement);
+  const next = applyEdits(text.text, edits);
+  await pkg.setText(stylesPart, next, text);
+  return { part: stylesPart, text: next, fragments, countElements: ['fonts', 'cellXfs', 'numFmts'], ids: { date: base, datetime: base + 1, time: base + 2, duration: base + 3, header: base + 4 } };
 }
 

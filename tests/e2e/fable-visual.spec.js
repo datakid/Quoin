@@ -55,3 +55,22 @@ for (const view of VIEWS.slice(0, 2)) {
     await ctx.close();
   });
 }
+
+for (const view of VIEWS) {
+  test(`T-I-04-FABLE: set shell with a recipe previewed and Get offered at ${view.size} in the ${view.theme} theme`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: view.theme, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await openApp(page);
+    const b64 = (name) => readFileSync(ext(name)).toString('base64');
+    await dropTree(page, [{ name: 'books', children: [{ name: 'pq_simple.xlsx', data: b64('pq_simple.xlsx') }, { name: 'pq_vba_complex.xlsm', data: b64('pq_vba_complex.xlsm') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'inject', v: 1, inject: { target: 'query', op: 'replace', match: 'name', name: 'StudentResults', source: 'inline', text: 'let\n    Source = 2\nin\n    Source', refreshOnLoad: false }, shiny: true };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'students.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.waitForSelector('[role=grid]');
+    await page.getByRole('button', { name: 'Get', exact: true }).waitFor();
+    await settle(page);
+    await expect(page).toHaveScreenshot(`fable-shell-recipe-preview-${view.size}-${view.theme}.png`, { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' });
+    await ctx.close();
+  });
+}

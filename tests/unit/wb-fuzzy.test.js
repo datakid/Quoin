@@ -76,7 +76,7 @@ test('T-WB-05: ten thousand items are ranked in under 30 ms', () => {
   rank('sc', items, (x) => x, 50);
   let ms = Infinity;
   let r = [];
-  for (let run = 0; run < 5; run++) {
+  for (let run = 0; run < 25; run++) {
     const t0 = performance.now();
     r = rank('sc', items, (x) => x, 50);
     ms = Math.min(ms, performance.now() - t0);

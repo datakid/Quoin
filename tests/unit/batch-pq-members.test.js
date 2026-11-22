@@ -447,3 +447,26 @@ test('F2-05: the same now gives the same bytes for a rename', async () => {
   const b = await renameIn(wb, [['A', 'B']]);
   assert.equal(sha(a.res.bytes), sha(b.res.bytes));
 });
+
+async function withSectionTail(tail) {
+  const wb = await openSimple();
+  const m = wb.mashup;
+  const section = { text: `${m.section.text.replace(/\s+$/, '')}${tail}`, bom: m.section.bom };
+  const encoded = base64Encode(await buildDataMashup(m.model, section));
+  const pkg = wb.pkg.clone();
+  await pkg.setText(m.part, applyEdits(m.text.text, [textContentEdit(parseXml(m.text.text, m.part).root, encoded)]), m.text);
+  return openWorkbook(await pkg.write({ now: NOW }), 'tail.xlsx');
+}
+
+test('F2-03: trailing space after the last member is kept when a member is added and when it is removed', async () => {
+  for (const tail of ['\r\n', '\r\n\r\n', ' \r\n']) {
+    const wb = await withSectionTail(tail);
+    assert.deepEqual(wb.warnings, []);
+    const base = wb.mashup.section.text.slice(0, wb.mashup.section.text.length - tail.length);
+    const { back } = await addTo(wb, [['Extra', NEW_M]]);
+    const eol = '\r\n';
+    assert.equal(back.mashup.section.text, `${base}${eol}${eol}shared Extra = let${eol}    Source = 1${eol}in${eol}    Source;${tail}`, JSON.stringify(tail));
+    const gone = await removeFrom(back, ['Extra']);
+    assert.equal(gone.back.mashup.section.text, wb.mashup.section.text, JSON.stringify(tail));
+  }
+});

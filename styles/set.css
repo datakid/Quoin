@@ -352,3 +352,9 @@
 .variant-diff {
   min-width: 0;
 }
+
+@media (min-width: 900px) {
+  .set-shell:has(.set-result[data-matrix]):not([data-mode="file"]) {
+    grid-template-columns: minmax(200px, 260px) minmax(0, 0.7fr) minmax(0, 2fr);
+  }
+}

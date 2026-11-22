@@ -82,4 +82,8 @@ Open for the user: nothing at the moment.
 Integrator status, updated as work lands:
 
 - Merge of Writer and Scope into `fable`: done.
-- Preview landed: not yet.
+- F2-10a, the worker runs inject and replace: done.
+- F2-10b, the plan controller (preview, run, plan equals run): done.
+- F2-10c, the Preview screen (Load recipe, Preview, the would-change table): done.
+- F2-11 (Get: zip and folder, report) and F2-12 (one confirmation for signed projects): done.
+- Preview landed: nearly. Only the per-row diff (F2-10d) is left in `src/app/**`, `src/ui/**` and `strings.js`. The lane rule in section 3 stands until I record it here.

@@ -48,7 +48,7 @@ Quoin opens an Excel `.xlsx` or `.xlsm` file in your browser and shows its Power
 
 ## Working with several workbooks (Fable branch)
 
-On the `fable` branch, dropping two or more workbooks or a folder builds a set. Each file is indexed in a pool of background workers and listed with a badge (Ready, Skipped, Failed) and its reason; the top bar shows the number of files and queries. The Recipe and Result regions are placeholders for the next phases. Dropping one workbook opens it exactly as before. Nothing is written to any file in this version.
+On the `fable` branch, dropping two or more workbooks or a folder builds a set. Each file is indexed in a pool of background workers and listed with a badge (Ready, Skipped, Failed) and its reason; the top bar shows the number of files and queries. Choosing a file opens it beside the list exactly as a single dropped workbook opens, with an All files button back. The Versions panel groups every query and module by name and content and shows how many files hold each version; choosing a version shows its diff against the most common one. Export everything downloads one zip with a folder for each workbook, an index of every query and module, and a report with a row for every action and every file that was skipped. Nothing is written to any file: the workbooks you drop are only read. Dropping one workbook opens it as before.
 
 ## What it does not do
 

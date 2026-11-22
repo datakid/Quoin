@@ -125,3 +125,13 @@ These entries cover the Fable branch (`fable`, cut from `beta`). The plan is `do
 - The set shell shows Files, Recipe and Result regions and a run bar. The start screen is unchanged.
 - The `.github/workflows/ci.yml` workflow runs lint, unit and browser tests on every push to `fable`, and condenses the results into check annotations.
 
+## 25. Fable Phase F1: Collect and Variants (read only)
+
+- A recipe is data. `src/batch/recipe/recipe.js` parses the JSON of Appendix A with defaults, warns on unknown fields and on blocks that belong to another recipe kind, refuses newer versions, and serialises to one canonical form. Nothing in a recipe is evaluated.
+- The resolver (`src/batch/resolve/resolve.js`) is pure: a recipe, the file indexes and a frozen time give a plan, independent of input order. Collect makes one workbook unit per usable file with one action per query and per module.
+- Collect output equals the single-file "everything" zip byte for byte, because the worker uses the same `queryFile`, `moduleFile` and `zipFiles` and reads the zip back before releasing it. Every writer takes a frozen time, and the zip clock is built from its UTC parts, so the bytes do not depend on the machine's time zone.
+- The Collect zip holds `index.xlsx`, `report.csv` and one folder per file that produced output, named after its path without the extension (`-2`, `-3` on collisions, compared without regard to case). `report.csv` carries timings, so it is the one entry that differs between two runs of the same set. A run over 1 GiB of compressed outputs or 65,534 entries is refused with `output.zipTooLarge`.
+- The result table reuses the virtualised grid. A verdict is always a word; colour only adds to it.
+- The Versions panel groups names by content hash; its diff text comes from running a Collect on one file through the worker pool, so no parsing happens on the main thread and the worker protocol did not change.
+- "Read only" is tested: a run that spies on every file system write API sees no call, and the dropped files are byte-identical afterwards (`tests/e2e/fable-readonly.spec.js`).
+

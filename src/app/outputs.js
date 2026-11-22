@@ -13,6 +13,11 @@ const INDEX_COLUMNS = ['file', 'name', 'kind', 'load target', 'hash'];
 
 export const collectZipName = (now) => `Collect ${now.slice(0, 10)}.zip`;
 
+const PLAN_KIND = { inject: 'Inject', replace: 'Replace', align: 'Align' };
+const YES_NO = ['verified', 'signature_removed'];
+
+export const planZipName = (kind, now) => `${PLAN_KIND[kind] || 'Run'} ${now.slice(0, 10)}.zip`;
+
 export function loadTargetText(load) {
   if (load.kind === 'connection') return S.loadConnectionOnly;
   if (load.kind === 'table') return S.loadTable(load.tableName, load.sheet);
@@ -53,7 +58,7 @@ function indexTable(indexes) {
 
 const reasonOf = (code) => (code ? errorMessage(code) : '');
 
-function reportRows(plan, indexes, results, runId) {
+export function reportRows(plan, indexes, results, runId) {
   const byId = new Map(indexes.map((ix) => [ix.id, ix]));
   const rows = [];
   for (const fp of plan.files) {
@@ -65,6 +70,37 @@ function reportRows(plan, indexes, results, runId) {
     else rows.push(fill({ ...base, unit: fp.units[0] ? fp.units[0].name : '', unit_index: fp.units[0] ? fp.units[0].index : 0, verdict: 'cancelled', reason_code: 'pool.cancelled' }));
   }
   return rows;
+}
+
+export function reportCsvBytes(rows) {
+  const cell = (r, k) => (YES_NO.includes(k) ? (r[k] ? 'yes' : 'no') : r[k]);
+  return tableToDelimited(table(REPORT_COLUMNS, rows.map((r) => REPORT_COLUMNS.map((k) => cell(r, k)))), { bom: true, guard: true });
+}
+
+function outputParts(relPath) {
+  const parts = relPath.split('/').filter(Boolean);
+  const file = parts.pop() || '';
+  const dot = file.lastIndexOf('.');
+  const ext = dot > 0 ? file.slice(dot) : '';
+  return { folders: parts.map((p) => sanitizeFileName(p, '')), stem: sanitizeFileName(file, ext), ext };
+}
+
+export function releasedFiles({ indexes, perFile }) {
+  const seen = new Set();
+  const out = [];
+  for (const ix of indexes) {
+    const result = perFile.get(ix.id);
+    if (!result || !result.bytes) continue;
+    const { folders, stem, ext } = outputParts(ix.relPath);
+    const base = ext ? stem.slice(0, stem.length - ext.length) : stem;
+    let name = stem;
+    let n = 2;
+    while (seen.has([...folders, name].join('/').toLowerCase())) name = `${base}-${n++}${ext}`;
+    const path = [...folders, name].join('/');
+    seen.add(path.toLowerCase());
+    out.push({ fileId: ix.id, path, data: result.bytes });
+  }
+  return out;
 }
 
 async function entriesOf(zipBytes) {
@@ -86,8 +122,26 @@ export async function buildCollectOutput({ plan, indexes, results, now, runId, c
     for (const e of await entriesOf(result.bytes)) files.push({ name: `${folders.get(ix.id)}/${e.name}`, data: e.data });
   }
   const indexBytes = await tablesToXlsx([indexTable(indexes)], 'en-US', { now: zipClock(now) });
-  const reportBytes = tableToDelimited(table(REPORT_COLUMNS, rows.map((r) => REPORT_COLUMNS.map((k) => r[k]))), { bom: true, guard: true });
+  const reportBytes = reportCsvBytes(rows);
   if (compressed + indexBytes.length + reportBytes.length > ceilingBytes || files.length + 2 > maxEntries) return { ok: false, code: 'output.zipTooLarge', rows };
   const bytes = await zipFiles([{ name: 'index.xlsx', data: indexBytes }, { name: 'report.csv', data: reportBytes }, ...files], { now: zipClock(now) });
   return { ok: true, bytes, name: collectZipName(now), rows, folders: [...folders.values()] };
+}
+
+export function fillOutputs(rows, indexes, pathOf) {
+  const idOf = new Map(indexes.map((ix) => [ix.relPath, ix.id]));
+  return rows.map((r) => {
+    const path = pathOf.get(idOf.get(`${r.folder}${r.file}`));
+    return r.verdict === 'changed' && path ? { ...r, output: path } : r;
+  });
+}
+
+export async function buildPlanOutput({ plan, indexes, perFile, rows, now, ceilingBytes = GIB, maxEntries = CLASSIC_ZIP_ENTRIES }) {
+  const files = releasedFiles({ indexes, perFile });
+  const filled = fillOutputs(rows, indexes, new Map(files.map((f) => [f.fileId, f.path])));
+  const reportBytes = reportCsvBytes(filled);
+  const compressed = files.reduce((n, f) => n + f.data.length, 0);
+  if (compressed + reportBytes.length > ceilingBytes || files.length + 1 > maxEntries) return { ok: false, code: 'output.zipTooLarge', rows: filled };
+  const bytes = await zipFiles([{ name: 'report.csv', data: reportBytes }, ...files.map((f) => ({ name: f.path, data: f.data }))], { now: zipClock(now) });
+  return { ok: true, bytes, name: planZipName(plan.recipe.recipe, now), rows: filled, files: files.map((f) => f.path), reportBytes };
 }

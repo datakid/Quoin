@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { openApp, dropTree, waitForSet, ext } from '../e2e/helpers.js';
+import { openApp, dropTree, waitForSet, ext, fx } from '../e2e/helpers.js';
 import { SET_STATES, setUpSetState } from '../e2e/states.js';
 
 const require = createRequire(import.meta.url);
@@ -68,5 +68,46 @@ for (const theme of ['light', 'dark']) {
     await page.locator('.variant-item summary').first().click();
     await page.locator('.variant-version').first().waitFor();
     await audit(page, `${theme} versions`);
+  });
+}
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations in the recipe panel with a preview and with an error, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await dropTree(page, [{ name: 'books', children: [{ name: 'mixed.xlsm', data: readFileSync(fx('mixed.xlsm')).toString('base64') }, { name: 'pq_simple.xlsx', data: readFileSync(ext('pq_simple.xlsx')).toString('base64') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'replace', v: 1, replace: { in: ['m', 'vba'], find: 'DateTime', with: 'MyDateTime', kind: 'text', matchCase: true, shiny: true } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'my.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.waitForSelector('[role=grid]');
+    await audit(page, `${theme} preview`);
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('not json') });
+    await page.waitForSelector('.recipe-error:not([hidden])');
+    await audit(page, `${theme} recipe error`);
+  });
+}
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations with Get shown, the signature dialog open and after Get, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await dropTree(page, [{ name: 'books', children: [{ name: 'signed.xlsm', data: readFileSync(fx('signed.xlsm')).toString('base64') }, { name: 'mixed.xlsm', data: readFileSync(fx('mixed.xlsm')).toString('base64') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'inject', v: 1, inject: { target: 'module', op: 'replace', match: 'name', name: 'Module1', source: 'inline', text: 'Sub A()\r\nEnd Sub\r\n', refreshOnLoad: false } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'my.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.waitForSelector('[role=grid]');
+    await page.getByRole('button', { name: 'Get', exact: true }).waitFor();
+    await audit(page, `${theme} get shown`);
+    await page.getByRole('button', { name: 'Get', exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+    await audit(page, `${theme} signature dialog`);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Remove and get' }).click()]);
+    await download.path();
+    await page.waitForSelector('.recipe-notes:not([hidden])');
+    await audit(page, `${theme} after get`);
   });
 }

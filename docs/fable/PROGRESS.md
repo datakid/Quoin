@@ -369,5 +369,19 @@ Found on the way: a plain click on a grid cell left the grid in drag mode, so ev
 Tests: `tests/unit/batch-texts.test.js` (6), `tests/unit/row-diff.test.js` (8, including a hand-built two-file case that fails when the file lookup is wrong), the `includeTexts` cases in `batch-protocol.test.js` and `plan-run.test.js`, `tests/e2e/fable-row-diff.spec.js` (9), a drag test in `fable-matrix.spec.js`, axe for the hint and the diff in both themes. Breaking the code six ways (texts always kept, texts never asked for, wrong file chosen, drag guard removed, `extend` repainting, drag never ending) fails a test each time.
 The visual baseline of the previewed recipe changes (the hint line); CI regenerates it.
 
+### F1-08 Phase F1 gate (section 9)
+Evidence is from CI on `fable` at `4261657` (run 44947148629: lint 0 findings; unit 1,539 tests, 0 failing; browser 333 passing, 0 failing) and from the tasks above.
+- [x] `npm test` is green: lint 0 findings; unit and browser green on CI at the commit above. The unit timing test T-WB-05 failed once on a slow runner at a later commit (30.4 ms against 30); it now takes the best of 25 runs with the limit unchanged.
+- [x] Every new test was shown to fail without its change: recorded in F1-01 to F1-07. The read-only test was also checked by deliberately calling `showSaveFilePicker` in the run, which made it fail.
+- [x] No existing test was weakened, skipped or deleted in Phase F1. Changed expectations: none. One of the assistant's own shell tests (Tab order) was widened twice because the Files list and the Versions panel became tab stops.
+- [x] Every new surface has a keyboard path, axe checks in both themes, and reviewed baselines: result table (arrow keys, Home, End, Ctrl+Home, Ctrl+End; axe in two themes; baselines in two themes), Versions panel (keyboard test; axe in two themes), Export everything and Cancel (buttons). Baselines were opened and reviewed; one defect was found in review (the Changed column cut off in the Result region) and fixed by widening the region while a table is showing.
+- [x] No new dependency (`package.json` unchanged), no network call, no new storage key (T-LINT-4, T-LINT-8 green), no base64 or binary data persisted (T-LINT-20 green).
+- [ ] The vertical slice works by hand in Chromium: walked through in Chromium by a script with screenshots viewed (drop a folder, see Ready and Skipped, open the Versions panel, Export everything, see the result table); a person has not done it. Left open for a person.
+- [x] README, `docs/decisions.md` (entry 25) and PROGRESS.md are updated.
+- [x] F1: 500 files are indexed in under 60 s (about 20 s locally; `fable-scale.spec.js` passes on CI).
+- [x] F1: drift is grouped by content hash (`batch-variants.test.js`, `fable-variants.spec.js`, and the 500-file test).
+- [x] F1: nothing is written (`fable-readonly.spec.js`: no write API call, source files byte-identical).
+Result: Phase F1 gate passed, except the by-hand slice, which a person still has to do.
+
 ### Next
 F2-13 (`fable-cancel.spec.js`, `fable-failures.spec.js`) and F2-14 (`fable-batch50.spec.js`), which are test-only, then the F2-16 gate. The plan-equals-run end-to-end check (Preview hashes equal the hashes of the files in Get's zip) is test 1 of `fable-get.spec.js`; a separate `fable-plan-equals-run.spec.js` with all three write recipes is still open.

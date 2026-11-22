@@ -3,7 +3,7 @@ import { S, fmt } from '../strings.js';
 import { menu } from '../dialogs.js';
 import { matches } from '../../app/commands.js';
 
-const KEYS = { rename: 'F2', del: 'Delete', bypass: 'b', up: 'Alt+Shift+ArrowUp', down: 'Alt+Shift+ArrowDown', runTo: 'Mod+F10', dup: 'Mod+D' };
+const KEYS = { rename: 'F2', del: 'Delete', bypass: 'b', up: 'Alt+Shift+ArrowUp', down: 'Alt+Shift+ArrowDown', runTo: 'Mod+F10', dup: 'Mod+D', insert: 'Insert' };
 
 export class StepsPanel {
   constructor(host, actions) {
@@ -22,6 +22,15 @@ export class StepsPanel {
     this.caret = null;
     this.focusName = null;
     this.list.addEventListener('keydown', (ev) => this.onKey(ev));
+    this.dropNote = h('p', { class: 'panel-note item-meta step-drop-note', hidden: true, role: 'status' });
+    host.append(this.dropNote);
+    this.drag = null;
+    this.dropTo = null;
+    this.list.addEventListener('dragover', (ev) => this.onDragOver(ev));
+    this.list.addEventListener('drop', (ev) => this.onDrop(ev));
+    this.list.addEventListener('dragleave', (ev) => {
+      if (!this.list.contains(ev.relatedTarget)) this.clearDrop();
+    });
   }
 
   announce(text) {
@@ -70,7 +79,18 @@ export class StepsPanel {
         delta ? h('span', { class: 'step-delta item-meta' }, delta) : null,
         warn);
       const more = editable ? h('button', { class: 'btn btn-quiet step-more', type: 'button', 'aria-label': `${S.stepsPanel.menu} ${st.name}`, 'aria-haspopup': 'menu', onclick: (ev) => this.openMenu(ev.currentTarget, st) }, '\u22ef') : null;
-      this.list.append(h('li', { class: 'step-item' }, row, more));
+      const grip = editable ? h('span', { class: 'step-grip', 'aria-hidden': 'true', title: S.stepsPanel.grip }, '\u22ee\u22ee') : null;
+      const li = h('li', { class: 'step-item', draggable: editable }, grip, row, more);
+      if (editable) {
+        li.addEventListener('dragstart', (ev) => {
+          this.drag = st;
+          ev.dataTransfer.setData('text/plain', st.name);
+          ev.dataTransfer.effectAllowed = 'move';
+          li.classList.add('is-dragging');
+        });
+        li.addEventListener('dragend', () => this.endDrag(li));
+      }
+      this.list.append(li);
     });
   }
 
@@ -131,7 +151,99 @@ export class StepsPanel {
     } else if (matches(ev, KEYS.runTo)) {
       ev.preventDefault();
       this.actions.runTo(st);
+    } else if (matches(ev, KEYS.insert)) {
+      ev.preventDefault();
+      this.startInsert(row, st);
+    } else if (ev.key.toLowerCase() === 'j' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      ev.preventDefault();
+      this.actions.cursor(1, st.name);
+    } else if (ev.key.toLowerCase() === 'k' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      ev.preventDefault();
+      this.actions.cursor(-1, st.name);
     }
+  }
+
+  clearDrop() {
+    for (const el of this.list.querySelectorAll('.drop-before, .drop-after, .drop-ok, .drop-bad')) el.classList.remove('drop-before', 'drop-after', 'drop-ok', 'drop-bad');
+    this.dropNote.hidden = true;
+    this.dropTo = null;
+  }
+
+  endDrag(li) {
+    if (li) li.classList.remove('is-dragging');
+    this.drag = null;
+    this.clearDrop();
+  }
+
+  onDragOver(ev) {
+    if (!this.drag) return;
+    const li = ev.target.closest && ev.target.closest('.step-item');
+    if (!li) return;
+    const rect = li.getBoundingClientRect();
+    const after = ev.clientY > rect.top + rect.height / 2;
+    const i = Number(li.querySelector('.step-row').dataset.index);
+    const gap = after ? i + 1 : i;
+    const from = this.drag.index;
+    const to = gap > from ? gap - 1 : gap;
+    const can = this.actions.can(this.drag, to);
+    this.clearDrop();
+    li.classList.add(after ? 'drop-after' : 'drop-before', can.ok ? 'drop-ok' : 'drop-bad');
+    if (can.ok) {
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'move';
+      this.dropTo = to;
+    } else {
+      ev.dataTransfer.dropEffect = 'none';
+      this.dropNote.hidden = false;
+      this.dropNote.textContent = S.stepsPanel.dropNote(this.drag.name, can.reason);
+    }
+  }
+
+  onDrop(ev) {
+    if (!this.drag) return;
+    ev.preventDefault();
+    const st = this.drag;
+    const to = this.dropTo;
+    this.endDrag();
+    if (to !== null && to !== undefined) this.actions.move(st, to);
+  }
+
+  startInsert(row, st) {
+    const names = new Set(this.model.steps.map((x) => x.name));
+    let n = this.model.steps.length + 1;
+    while (names.has(`Step${n}`)) n++;
+    const nameIn = h('input', { class: 'step-rename', type: 'text', value: `Step${n}`, 'aria-label': S.stepsPanel.insertName });
+    const exprIn = h('input', { class: 'step-rename step-expr', type: 'text', value: this.actions.ref(st), 'aria-label': S.stepsPanel.insertExpr, spellcheck: false });
+    const apply = h('button', { class: 'btn btn-quiet', type: 'button' }, S.stepsPanel.insertApply);
+    const cancel = h('button', { class: 'btn btn-quiet', type: 'button' }, S.stepsPanel.cancel);
+    const form = h('li', { class: 'step-insert' }, nameIn, exprIn, h('span', { class: 'step-insert-actions' }, apply, cancel));
+    row.closest('.step-item').after(form);
+    nameIn.focus();
+    nameIn.select();
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      const name = nameIn.value.trim();
+      const expr = exprIn.value.trim();
+      form.remove();
+      if (commit && name && expr) this.actions.insert(st, name, expr);
+      else row.focus();
+    };
+    const key = (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        finish(true);
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(false);
+      }
+    };
+    nameIn.addEventListener('keydown', key);
+    exprIn.addEventListener('keydown', key);
+    apply.addEventListener('click', () => finish(true));
+    cancel.addEventListener('click', () => finish(false));
   }
 
   startRename(row, st) {
@@ -169,6 +281,7 @@ export class StepsPanel {
       { label: S.stepsPanel.moveUp, run: () => this.actions.move(st, st.index - 1), disabled: st.index === 0 },
       { label: S.stepsPanel.moveDown, run: () => this.actions.move(st, st.index + 1), disabled: st.index === n - 1 },
       { label: S.stepsPanel.rename, run: () => this.startRename(this.rows()[st.index], st) },
+      { label: S.stepsPanel.insert, run: () => this.startInsert(this.rows()[st.index], st) },
       { label: S.stepsPanel.duplicate, run: () => this.actions.duplicate(st) },
       { label: st.bypassed ? S.stepsPanel.restore : S.stepsPanel.bypass, run: () => this.actions.bypass(st), disabled: st.index === 0 },
       { label: S.stepsPanel.runTo, run: () => this.actions.runTo(st) },

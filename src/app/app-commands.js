@@ -21,6 +21,8 @@ export function buildRegistry(app) {
   r.register({ id: 'goTab', keys: Array.from({ length: 9 }, (_, i) => `Alt+${i + 1}`), shortcutLabel: 'Alt+1 to Alt+9', surfaces: ['T2'], enabled: needsFile, run: (a, ev) => (a.ws && ev ? a.ws.goTab(Number(ev.code.slice(5))) : false) });
   r.register({ id: 'splitEditor', keys: ['Mod+\\'], surfaces: ['T2'], enabled: (a) => (a.ws ? a.ws.canSplit() : 'Open a workbook first.'), run: (a) => (a.ws ? a.ws.toggleSplit() : false) });
   r.register({ id: 'print', keys: ['Mod+P'], surfaces: ['T1'], enabled: needsFile, run: (a) => a.ws && a.openPrint() });
+  r.register({ id: 'stepNext', keys: ['F10'], surfaces: ['T2'], when: (ev, a) => !!a.ws && a.ws.stepCursorActive(), enabled: (a) => (a.ws && a.ws.hasSteps() ? true : 'Open a query with steps first.'), run: (a) => (a.ws ? a.ws.moveStepCursor(1) : false) });
+  r.register({ id: 'stepPrev', keys: ['Shift+F10'], surfaces: ['T2'], when: (ev, a) => !!a.ws && a.ws.stepCursorActive(), enabled: (a) => (a.ws && a.ws.hasSteps() ? true : 'Open a query with steps first.'), run: (a) => (a.ws ? a.ws.moveStepCursor(-1) : false) });
   r.register({ id: 'toggleNavigator', keys: ['Mod+B'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.toggleNavigator() : false) });
   r.register({ id: 'toggleDock', keys: ['Mod+J'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.toggleDock() : false) });
   r.register({ id: 'focusNext', keys: ['F6'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.cycleRegion(1) : false) });

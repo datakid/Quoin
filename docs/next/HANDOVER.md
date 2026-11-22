@@ -54,6 +54,7 @@ Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md
 - Phase 2R: Glaze palette and the 02B visual refinement.
 - WB-1 to WB-9: dependency index, step model, let-block edits, VBA outline, fuzzy matcher, M generation, engine batch evaluation, result store and worker protocol v2, run planner, status book, orchestrator, and its UI (Run all, Run stale, status dots, stored results).
 - WB-13 palette and command registry. WB-14 Steps panel (partial). WB-17 dependency lists and graph. WB-18 Problems (dialog and counter). WB-19 sources inventory (no UI). WB-21 find and replace. WB-22 macro outline and per-procedure revert. WB-23 structure checks (no UI). WB-24 call graph (no UI). WB-25 macro to query links with "Run these queries". WB-26 step-level change summary. WB-27 budgets for what exists, with `many-queries.xlsx`.
+- WB-14/15 (part): F10 step cursor, drag reorder, Insert step after and the narrow Steps sheet in `steps-panel.js` and `Workspace`, `tests/e2e/step-ops.spec.js`.
 - WB-16 (first slice): `src/ui/wb/dock.js`, `dock-views.js`, `problems-view.js`, `graph-view.js` (`mountGraph`), `src/core/wb/compare-results.js`, pin and tab handling in `Workspace`, `tests/e2e/dock.spec.js`.
 - WB-10 (part): `src/ui/wb/panes.js`, collapse rails, inspector resizer, F6, the 390 px bottom bar and Steps sheet, the run menu, `tests/e2e/layout.spec.js`.
 - WB-12 tabs and split: `src/core/wb/tabs-model.js` (unit tests), `src/ui/wb/tabs.js`, tab and group handling in `Workspace` (`select`, `present`, `applyTabState`, `addGroup`), the five tab commands, `tests/e2e/tabs.spec.js`.
@@ -65,9 +66,9 @@ Last verified: lint 0 findings; unit 1047 pass; browser suite 188 pass, 0 fail (
 
 ## What is left, in the order to do it
 
-1. **WB-10 remainder**: Run as the one filled button in the top bar, the Changes split button, layout presets (Write, Debug, Review), an inspector between 640 and 1099 px, the top bar overflow menu. Collapse, resize, F6 and the mobile bottom bar are done (see `PROGRESS.md`).
+1. **WB-10 remainder**: Run as the one filled button in the top bar, the Changes split button, layout presets (Write, Debug, Review), the top bar overflow menu. Collapse, resize, F6 and the mobile bottom bar are done (see `PROGRESS.md`).
 2. **WB-16 remainder**: the result header line and Excel verdict chip, Export per result id, the column header menu with sort, filter, profile, hide and Add as a step (`view` and `profile` worker messages, `profile.js`, the profile sheet), side by side compare, the Changes tab. Tabs, Pin, Pinned, Compare (schema, rows, cells), Queue, Problems and Graph are done (see `PROGRESS.md`).
-3. **WB-14 remainder and WB-15**: drag grip, insert-step menu from the grid header (use `m-gen.js`), "Add as a step" from a view filter, step cursor with `F10`, Depends on and Used by already exist; step results refresh after a normal Run; narrow-screen presentation.
+3. **WB-14 and WB-15 remainder**: peek, pin a step, Invoke for function queries, delta chips beyond row counts, the Count rows setting, Add as a step from a view filter and Insert from the grid header (after the WB-16 column menu), the operation history with Undo and the History popover, the multi-step preview popover, Auto-run steps after structural edits, the editor gutter band. F10 cursor, drag with per-gap checks, Insert step after and the 640 to 1099 px sheet are done (see `PROGRESS.md`).
 4. **WB-19 UI**: Sources list in the top bar menu, binding up front, and the check before Run all.
 5. **WB-20 editor intelligence**: completion (library names from `lib-names.js`, steps, queries, VBA), signature help, go to definition and find references (`refs.js` for VBA, `deps.js` for queries), the "no callers" note. Show `structure.js` problems as gutter markers and in the Download tooltip.
 6. **WB-27 remainder**: `vba-big.xlsm` cannot be generated; measure the VBA outline on synthetic text in a unit test instead and say so.

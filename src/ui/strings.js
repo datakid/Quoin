@@ -292,9 +292,17 @@ export const S = {
     rewireBody: (name) => `Moving "${name}" there changes the step that its neighbours read. The text of those steps is rewritten to match.`,
     rewireConfirm: 'Move and rewire',
     cancel: 'Cancel',
-    done: { move: (n) => `Moved ${n}.`, rename: (n) => `Renamed to ${n}.`, delete: (n) => `Deleted ${n}.`, bypass: (n) => `Bypassed ${n}.`, restore: (n) => `Put back ${n}.`, duplicate: (n) => `Duplicated ${n}.` },
+    done: { move: (n) => `Moved ${n}.`, rename: (n) => `Renamed to ${n}.`, delete: (n) => `Deleted ${n}.`, bypass: (n) => `Bypassed ${n}.`, restore: (n) => `Put back ${n}.`, duplicate: (n) => `Duplicated ${n}.`, insert: (n) => `Inserted ${n}.` },
     toggle: 'Steps',
-    toggleAria: 'Show or hide the steps panel'
+    toggleAria: 'Show or hide the steps panel',
+    insert: 'Insert step after',
+    insertName: 'Name of the new step',
+    insertExpr: 'Expression of the new step',
+    insertApply: 'Insert',
+    grip: 'Drag to move the step',
+    dropNote: (name, why) => `${name} cannot go there. ${why}`,
+    notEvaluated: 'This step has no result yet. Evaluate the steps to see it.',
+    cursorAt: (name, i, n) => `Step ${i} of ${n}: ${name}`
   },
   nav: {
     searchLabel: 'Search queries',
@@ -515,6 +523,8 @@ export const S = {
     toggleDock: 'Show or hide the result dock',
     focusNext: 'Go to the next region',
     focusPrev: 'Go to the previous region',
+    stepNext: 'Go to the next step',
+    stepPrev: 'Go to the previous step',
     runSelected: 'Run the selected queries'
   },
   dock: {

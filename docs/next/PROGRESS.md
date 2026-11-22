@@ -394,3 +394,18 @@
 - Side by side grids with synchronised scroll in Compare, comparing a step with the previous run, quoin against Excel.
 - The Changes tab (WB-17).
 
+### WB-14 and WB-15: step cursor, drag, insert, narrow inspector
+- Step cursor: `F10` and `Shift+F10` (and `J` and `K` when a step row has focus) move to the next or previous step. The editor goes to the step's line, the panel marks it current, and the step's stored result is shown in the Result tab without a run; a step with no stored result says so in the status line. The commands only act while focus is in the editor or the steps panel, so `Shift+F10` stays the browser's context menu key everywhere else (the navigator rows and the tab menus depend on it).
+- Drag to reorder: every row has a grip (shown on hover or focus, hidden on coarse pointers; the keyboard and menu ways remain). While dragging, each gap is checked with `canMove`: a usable gap shows a slate line, an unusable one a dashed madder line and a note with the reason (the drop is refused). A drop that needs rewiring goes through the same confirm dialog as the keyboard move.
+- Insert step after (`Insert` on a row, or the step menu): an inline editor under the row with a name (a free `StepN`) and an expression (the previous step's name), Enter applies, Escape cancels. The new step is wired in (the next step is rewired to read it when it read the previous one; otherwise the step is added unwired). A name that exists is refused with the reason.
+- Narrow screens: between 640 and 1099 px the Steps or Outline button opens the inspector as a sheet over the editor, `Escape` closes it and returns focus to the button. At 390 px the bottom bar still does this.
+- Tests: `tests/e2e/step-ops.spec.js` (9 tests, T-WB-14 and T-WB-15) on `pq_simple.xlsx`.
+
+#### Deviations
+- `Shift+F10` and `F10` are scoped to the editor and the steps panel (see above); the plan makes them global.
+- No gutter band for the current step in the editor (the editor has no decoration layer for it yet); the panel's current marker and the caret line carry it.
+- Peek, Pin a step, Invoke for function queries, delta chips for columns, types and renames, the Count rows setting, Add as a step from a view filter and Insert from the grid header are not built (the last two need the WB-16 column menu).
+
+#### Not done in WB-15
+- The operation history with Undo in the status region and the History popover, the multi-step preview popover with Apply and Cancel, and Auto-run steps after structural edits. The text of the editor still undoes with the editor's own undo.
+

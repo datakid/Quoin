@@ -24,7 +24,7 @@ import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
 import { paneRail, bindResizer, Regions } from '../ui/wb/panes.js';
 import { TabModel, keyOf } from '../core/wb/tabs-model.js';
-import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, duplicateStep } from '../core/wb/let-edit.js';
+import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, duplicateStep, insertStepAfter, quoteIdent } from '../core/wb/let-edit.js';
 import { parseExpressionText, MParseError } from '../core/m/parser.js';
 import { readTable } from '../core/cells.js';
 import { formatsFor } from '../ui/formats.js';
@@ -102,6 +102,12 @@ export class Workspace {
       revert: (key, name) => this.revertProc(key, name, false),
       putBack: (key, name) => this.revertProc(key, name, true),
       runLinked: (name, names) => this.runLinked(name, names)
+    });
+    this.inspector.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && this.root.dataset.sheet === 'steps' && !ev.defaultPrevented) {
+        ev.stopPropagation();
+        this.toggleInspector();
+      }
     });
     this.drillStack = [];
     this.lastRun = null;
@@ -433,6 +439,17 @@ export class Workspace {
   }
 
   toggleInspector() {
+    if (window.matchMedia('(max-width: 1099px)').matches) {
+      if (this.root.dataset.sheet === 'steps') {
+        this.setPane(this.main.dataset.pane || 'code');
+        this.inspectorToggle.setAttribute('aria-expanded', 'false');
+        this.inspectorToggle.focus();
+      } else {
+        this.setRegion('steps');
+        this.inspectorToggle.setAttribute('aria-expanded', 'true');
+      }
+      return true;
+    }
     const open = this.root.dataset.inspector !== 'open';
     const inside = this.inspector.contains(document.activeElement);
     this.root.dataset.inspector = open ? 'open' : 'closed';
@@ -668,8 +685,45 @@ export class Workspace {
       bypass: (st) => this.applySteps(st.bypassed ? unbypassStep(text(), st.index) : bypassStep(text(), st.index), (st.bypassed ? S.stepsPanel.done.restore : S.stepsPanel.done.bypass)(st.name), st.name),
       duplicate: (st) => this.applySteps(duplicateStep(text(), st.index), S.stepsPanel.done.duplicate(st.name), st.name),
       runTo: (st) => this.runSteps(st.name),
-      runSteps: () => this.runSteps(null)
+      runSteps: () => this.runSteps(null),
+      can: (st, to) => {
+        const c = canMove(stepsOf(text(), 0), st.index, to);
+        return { ok: c.ok, reason: c.reason };
+      },
+      ref: (st) => quoteIdent(st.name),
+      insert: (st, name, expr) => {
+        const t = text();
+        const wired = insertStepAfter(t, st.index, name, expr, { rewire: true });
+        this.applySteps(wired.ok ? wired : insertStepAfter(t, st.index, name, expr), S.stepsPanel.done.insert(name), name);
+      },
+      cursor: (dir, from) => this.moveStepCursor(dir, from)
     };
+  }
+
+  hasSteps() {
+    const m = this.stepsModel;
+    return !!this.item && this.item.type === 'query' && !!m && !!m.steps && m.steps.length > 0;
+  }
+
+  stepCursorActive() {
+    if (!this.hasSteps()) return false;
+    const a = document.activeElement;
+    return !!a && (this.groupsEl.contains(a) || this.stepsHost.contains(a));
+  }
+
+  moveStepCursor(dir, from = null) {
+    const model = this.stepsModel;
+    if (!this.hasSteps()) return false;
+    const cur = from || this.caretStep(model);
+    const at = cur ? model.steps.findIndex((x) => x.name === cur) : -1;
+    const idx = Math.max(0, Math.min(model.steps.length - 1, at + dir));
+    const next = model.steps[idx];
+    this.stepActions().go(next);
+    this.syncCaretStep();
+    if (from) this.stepsPanel.focusStep(next.name);
+    this.stepsPanel.announce(S.stepsPanel.cursorAt(next.name, idx + 1, model.steps.length));
+    if (!this.stepResults.get(next.name)) this.status.set({ note: S.stepsPanel.notEvaluated });
+    return true;
   }
 
   showStepResult(name) {

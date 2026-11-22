@@ -32,28 +32,28 @@ async function openMany(page) {
 async function openSix(page) {
   await toTop(page);
   for (const n of ['Staging_01', 'Staging_02', 'Staging_03', 'Staging_04', 'Staging_05', 'Staging_06']) await row(page, n).dblclick();
-  await expect(page.getByRole('tab')).toHaveCount(6);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(6);
 }
 
 test('T-WB-12: a single click opens a preview tab that the next click replaces, and a double click keeps it', async ({ page }) => {
   await openMany(page);
-  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(1);
   await row(page, 'Staging_01').click();
-  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(1);
   await expect(tab(page, 'Staging_01')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.tab[data-key="query:Staging_01"]')).toHaveAttribute('data-preview', 'true');
   await row(page, 'Staging_02').click();
-  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(1);
   await expect(tab(page, 'Staging_02')).toBeVisible();
   await row(page, 'Staging_02').dblclick();
   await expect(page.locator('.tab[data-key="query:Staging_02"]')).toHaveAttribute('data-preview', 'false');
   await row(page, 'Staging_03').click();
-  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(2);
   await area(page, 0).fill('Table.FirstN(Staging_02, 3)');
   await expect(page.locator('.tab[data-key="query:Staging_03"]')).toHaveAttribute('data-preview', 'false');
   await expect(page.locator('.tab[data-key="query:Staging_03"] .tab-edited')).toBeVisible();
   await row(page, 'Staging_04').click();
-  await expect(page.getByRole('tab')).toHaveCount(3);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(3);
 });
 
 test('T-WB-12: open six items, split, edit in both groups, close an edited tab, reopen it and the edit is still there', async ({ page }) => {
@@ -96,11 +96,11 @@ test('T-WB-12: Alt+] and Alt+[ cycle, Alt+number jumps, Alt+W closes, and the on
   await page.keyboard.press('Alt+9');
   await expect(page.locator('.item-title')).toHaveText('Staging_03');
   await page.keyboard.press('Alt+w');
-  await expect(page.getByRole('tab')).toHaveCount(5);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(5);
   for (let i = 0; i < 4; i++) await page.keyboard.press('Alt+w');
-  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(1);
   await page.keyboard.press('Alt+w');
-  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.locator('.tabstrip').getByRole('tab')).toHaveCount(1);
   await expect(page.getByRole('button', { name: /^Close / })).toHaveCount(0);
 });
 
@@ -174,7 +174,7 @@ test('T-WB-12: a preview tab is italic and the strip is a tablist with the activ
   await openMany(page);
   await row(page, 'Staging_01').click();
   await expect(page.locator('.tab[data-key="query:Staging_01"] .tab-name')).toHaveCSS('font-style', 'italic');
-  await expect(page.getByRole('tablist')).toHaveCount(1);
+  await expect(page.locator('.tabstrip')).toHaveCount(1);
   await expect(page.locator('.tab-main[tabindex="0"]')).toHaveCount(1);
   await row(page, 'Staging_01').dblclick();
   await expect(page.locator('.tab[data-key="query:Staging_01"] .tab-name')).toHaveCSS('font-style', 'normal');

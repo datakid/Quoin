@@ -27,7 +27,7 @@ test('T-WB-17: the graph opens on the current query, the keyboard walks along ed
   await open(page);
   await page.locator('[role=treeitem][data-name="FinalTable"]').click();
   await page.getByRole('button', { name: 'Graph' }).click();
-  const dlg = page.locator('dialog.graph');
+  const dlg = page.locator('.graph-panel');
   await expect(dlg).toBeVisible();
   await expect(dlg.locator('.graph-node')).toHaveCount(3);
   await expect(dlg.locator('.graph-node.is-selected')).toHaveAttribute('data-name', 'FinalTable');
@@ -39,7 +39,6 @@ test('T-WB-17: the graph opens on the current query, the keyboard walks along ed
   await expect(dlg.locator('.graph-node.is-selected')).toHaveAttribute('data-name', 'FinalTable');
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('Enter');
-  await expect(dlg).toHaveCount(0);
   await expect(page.locator('.item-title')).toContainText('RawInput');
 });
 
@@ -48,7 +47,7 @@ test('T-WB-17: the graph is a labelled application region, node colours do not d
   await page.keyboard.press('Control+k');
   await page.keyboard.type('>dependency graph');
   await page.keyboard.press('Enter');
-  const dlg = page.locator('dialog.graph');
+  const dlg = page.locator('.graph-panel');
   await expect(dlg).toBeVisible();
   await expect(dlg.locator('.graph-svg')).toHaveAttribute('role', 'application');
   await expect(dlg.locator('.graph-svg')).toHaveAttribute('aria-label', /Arrow left goes to a query/);

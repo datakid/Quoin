@@ -1,12 +1,11 @@
 import { h, clear, svg } from '../dom.js';
 import { S } from '../strings.js';
 import { layoutGraph, neighbourhood, pathsOf, NODE_W, NODE_H } from '../../core/wb/graph-layout.js';
-import { openDialog } from '../dialogs.js';
 
 const BEAD = { ok: 'ok', error: 'error', stopped: 'stopped', cancelled: 'stopped', stale: 'stale', skipped: 'never' };
 const MAX_LABEL = 20;
 
-export function openGraph(source, handlers, { start = null } = {}) {
+export function mountGraph(host, source, handlers, { start = null } = {}) {
   const nodesAll = source.nodes();
   const edgesAll = source.edges();
   const state = { selected: start && nodesAll.includes(start) ? start : nodesAll[0] || null, all: !start, view: null, layout: null };
@@ -28,12 +27,10 @@ export function openGraph(source, handlers, { start = null } = {}) {
     state.all = false;
     draw(true);
   });
-  const close = h('button', { class: 'btn', type: 'button', onclick: () => dlg.close() }, S.close);
-  const dlg = h('dialog', { class: 'graph', 'aria-labelledby': 'graph-title' },
-    h('h2', { id: 'graph-title' }, S.graph.title),
+  const root = h('div', { class: 'graph-panel' },
     h('div', { class: 'graph-tools' }, modeBtn, mk(S.graph.fit, () => fit()), mk(S.graph.zoomOut, () => zoom(1 / 1.25)), mk(S.graph.zoomIn, () => zoom(1.25)), h('span', { class: 'spacer' }), count),
     wrap, sel, live,
-    h('div', { class: 'dialog-actions' }, openBtn, runBtn, downBtn, onlyBtn, h('span', { class: 'spacer' }), close));
+    h('div', { class: 'dock-actions' }, openBtn, runBtn, downBtn, onlyBtn));
 
   const visible = () => {
     if (state.all || !state.selected) return new Set(nodesAll);
@@ -41,9 +38,7 @@ export function openGraph(source, handlers, { start = null } = {}) {
   };
   const act = (kind) => {
     if (!state.selected) return;
-    const name = state.selected;
-    dlg.close();
-    setTimeout(() => handlers[kind](name), 0);
+    handlers[kind](state.selected);
   };
   const setView = (v) => {
     state.view = v;
@@ -182,9 +177,9 @@ export function openGraph(source, handlers, { start = null } = {}) {
   svgEl.addEventListener('pointerup', () => {
     drag = null;
   });
-  openDialog(dlg);
+  clear(host);
+  host.append(root);
   draw(true);
-  svgEl.focus();
   if (state.selected) live.textContent = S.graph.selected(state.selected, source.upstream(state.selected), source.downstream(state.selected));
-  return dlg;
+  return { root, focus: () => svgEl.focus() };
 }

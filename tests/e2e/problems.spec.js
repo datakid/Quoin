@@ -11,7 +11,7 @@ async function open(page) {
 const counter = (page) => page.locator('.status-problems');
 const readCount = async (page) => Number((await counter(page).textContent()).replace(/\D+/g, ''));
 
-test('T-WB-18: the counter appears with the workbook and the dialog lists a typed mistake at its position', async ({ page }) => {
+test('T-WB-18: the counter appears with the workbook and the Problems tab lists a typed mistake at its position', async ({ page }) => {
   const problems = await open(page);
   await expect(counter(page)).toBeVisible();
   await expect.poll(() => counter(page).textContent()).toMatch(/Problems \d+/);
@@ -20,14 +20,14 @@ test('T-WB-18: the counter appears with the workbook and the dialog lists a type
   await page.locator('.editor-wrap textarea').fill('let\n  a = Missing + 1\nin a');
   await expect.poll(() => readCount(page), { timeout: 2000 }).toBeGreaterThan(before);
   await counter(page).click();
-  const dlg = page.locator('dialog.problems');
+  const dlg = page.locator('.problems-panel');
   await expect(dlg).toBeVisible();
   const row = dlg.locator('.problem-row', { hasText: 'Missing' });
   await expect(row).toContainText('RawInput');
   await expect(row).toContainText('2:7');
   await expect(row).toContainText('is not a query, a step or a library function');
   await row.click();
-  await expect(dlg).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /^Problems/ })).toHaveAttribute('aria-selected', 'true');
   const line = await page.evaluate(() => {
     const ta = document.querySelector('.editor-wrap textarea');
     return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
@@ -63,7 +63,7 @@ test('T-WB-18: the filters narrow the list and a parse error is an error row wit
   await page.keyboard.press('Control+k');
   await page.keyboard.type('>problems');
   await page.keyboard.press('Enter');
-  const dlg = page.locator('dialog.problems');
+  const dlg = page.locator('.problems-panel');
   await expect(dlg).toBeVisible();
   await dlg.getByRole('button', { name: /^Errors/ }).click();
   const rows = dlg.locator('.problem-row');
@@ -72,8 +72,7 @@ test('T-WB-18: the filters narrow the list and a parse error is an error row wit
   await expect(dlg.locator('.sev-warning')).toHaveCount(0);
   await dlg.getByRole('button', { name: /^Macros/ }).click();
   await expect(dlg.locator('.problems-status')).toContainText(/No problems|result/);
-  await page.keyboard.press('Escape');
-  await expect(dlg).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /^Problems/ })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('T-WB-18: computing the problems never blocks the page for more than 50 ms in one task', async ({ page }) => {

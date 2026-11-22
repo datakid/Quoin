@@ -375,3 +375,22 @@
 - Between 640 and 1099 px there is still no inspector (Steps is only reachable at 390 px and at 1100 px and wider).
 - The top bar at 390 px still leaves the file name almost no room; the overflow menu of 02B §4.1 is not built.
 
+### WB-16: the result dock (first slice)
+- `src/ui/wb/dock.js`: the result panel now has a `tablist` (Result, Pinned, Compare, Problems, Queue, Graph; arrows, Home and End walk it, the selected tab is the one tab stop) and one `tabpanel` per tab. The existing result content (progress, crumbs, row cap notice, grid, sources) lives in the Result panel unchanged. Tabs show a count badge (pinned, problems, queue).
+- Problems and Graph are tabs instead of dialogs: `problems-dialog.js` became `problems-view.js` (`mountProblems`), `graph-view.js` exports `mountGraph`. The status counter, the 390 px bar counter, the palette and the Graph buttons all open the tab; opening one expands a collapsed dock and, at 390 px, switches to the result region. For a macro the dock is normally hidden; it opens when a tab other than Result is chosen and closes again when Result is chosen. Opening a node, running it or running it with its downstream from the graph leaves the graph tab on screen (Run goes to Result, Run with downstream to Queue).
+- Pin: a Pin this result button above the grid keeps the current table result in the worker store (`runner.pin`, protected from eviction until the store is over its limits). The Pinned tab lists query, step, time and shape, says Out of date when the query text has changed since, and offers Show, Compare and Unpin. The plain Run path now passes `resultId` to `renderResult` (it did not; only step runs did).
+- Compare: choose two results (pinned ones plus the current one); schema diff first (added, removed, retyped columns), then the row count change, then the first 200 differing cells by position out of the first 1000 rows of each. The logic is `src/core/wb/compare-results.js` (4 unit tests).
+- Queue: the last batch from `orchestrator.queue()` with status, rows and time per query and a total.
+- Tests: `tests/e2e/dock.spec.js` (T-WB-16, 7 tests) and `tests/unit/wb-compare-results.test.js`.
+
+#### Changed expectations
+- `problems.spec.js` and `graph.spec.js` no longer look for `dialog.problems` and `dialog.graph`; they use `.problems-panel` and `.graph-panel` and check the Problems tab is selected. Clicking a problem row or a graph node no longer closes anything, and Escape no longer closes the list.
+- `tabs.spec.js` (T-WB-12) now scopes its locators to `.tabstrip`: the dock tabs are `tab` elements too, so `getByRole('tab')` counted both strips.
+- Visual baselines regenerated (the dock tab strip is on every result view).
+
+#### Not done in WB-16
+- The result header line (`928 rows · 6 cols · 41 ms · step 5 of 7`) and the Excel verdict chip in the Result tab; Export per result id from the dock.
+- The column header menu (sort, filter, profile, hide, Add as a step), `view` and `profile` worker messages, `profile.js` and the column profile sheet, the viewOnly chip.
+- Side by side grids with synchronised scroll in Compare, comparing a step with the previous run, quoin against Excel.
+- The Changes tab (WB-17).
+

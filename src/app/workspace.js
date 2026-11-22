@@ -6,13 +6,15 @@ import { popover, menu, bindingDialog, differencesDialog, confirmDialog } from '
 import { StepsPanel } from '../ui/wb/steps-panel.js';
 import { OutlinePanel } from '../ui/wb/outline-panel.js';
 import { DepsPanel } from '../ui/wb/deps-panel.js';
-import { openGraph } from '../ui/wb/graph-view.js';
+import { mountGraph } from '../ui/wb/graph-view.js';
 import { upstreamOf, downstreamOf } from '../core/wb/deps.js';
 import { impactOf } from '../core/wb/graph-layout.js';
 import { outlineModule } from '../core/vba/outline.js';
 import { pqLinksOfModule, resolveLinks, runPlanOf, refreshedBy } from '../core/vba/pq-links.js';
 import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
-import { openProblems } from '../ui/wb/problems-dialog.js';
+import { mountProblems } from '../ui/wb/problems-view.js';
+import { Dock } from '../ui/wb/dock.js';
+import { renderPinned, renderQueue, renderCompare, pinLabel } from '../ui/wb/dock-views.js';
 import { openFind } from '../ui/wb/find-dialog.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
@@ -45,6 +47,10 @@ export class Workspace {
     this.tabs = new TabModel();
     this.groups = [];
     this.dragKey = null;
+    this.pins = [];
+    this.currentResult = null;
+    this.lastStep = null;
+    this.compareState = { a: null, b: null };
     this.rail = h('nav', { class: 'rail', id: 'rail', 'aria-label': S.itemsAria });
     this.railOpen = false;
     this.main = h('section', { class: 'main', 'data-pane': 'code' });
@@ -179,7 +185,10 @@ export class Workspace {
     this.resultBody.style.flex = '1';
     this.resultBody.style.minHeight = '0';
     this.sources = h('div', { class: 'crumbs', hidden: true });
-    this.resultPanel = h('div', { class: 'result-panel' }, this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
+    this.dock = new Dock({ onShow: (id) => this.onDockShow(id) });
+    this.pinBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.pinCurrent() }, S.dock.pin);
+    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.pinBtn), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
+    this.resultPanel = h('div', { class: 'result-panel' }, this.dock.tabs, this.dock.body);
     this.codeBtn = h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setRegion('code') }, S.code);
     this.stepsBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('steps') }, S.stepsPanel.toggle);
     this.resultBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('result') }, S.result);
@@ -269,14 +278,114 @@ export class Workspace {
   }
 
   openProblems() {
-    if (!this.problemRows) return true;
-    openProblems(() => this.problemRows, {
-      onOpen: (r) => {
-        this.select(r.item);
-        this.editor.goto(r.line, r.col);
+    this.showDock('problems');
+    return true;
+  }
+
+  showDock(id) {
+    if (this.main.dataset.dock === 'collapsed') this.toggleDock();
+    this.dock.show(id);
+    if (window.matchMedia('(max-width: 639px)').matches) this.setPane('result');
+    this.syncDock();
+  }
+
+  syncDock() {
+    const isQuery = !!this.item && this.item.type === 'query';
+    const open = isQuery || this.dock.current !== 'result';
+    this.resultPanel.hidden = !open;
+    this.main.dataset.dockOpen = String(!isQuery && open);
+    if (!isQuery) this.pinBtn.hidden = true;
+  }
+
+  onDockShow(id) {
+    this.syncDock();
+    this.paintDockTab(id);
+  }
+
+  paintDockTab(id) {
+    const panel = this.dock.panel(id);
+    if (id === 'problems') {
+      this.problemsView = mountProblems(panel, () => this.problemRows || [], {
+        onOpen: (r) => {
+          this.select(r.item);
+          this.editor.goto(r.line, r.col);
+        }
+      });
+    } else if (id === 'pinned') this.paintPinned();
+    else if (id === 'queue') this.paintQueue();
+    else if (id === 'compare') this.paintCompare();
+    else if (id === 'graph') this.mountGraphPanel();
+  }
+
+  pinStale(p) {
+    const q = this.session.query(p.query);
+    return !q || this.session.textOf({ type: 'query', name: p.query }) !== p.text;
+  }
+
+  async pinCurrent() {
+    const c = this.currentResult;
+    if (!c || !c.id) {
+      this.status.set({ note: S.dock.pinNone });
+      return;
+    }
+    if (this.pins.some((p) => p.id === c.id)) {
+      this.dock.show('pinned');
+      return;
+    }
+    const ok = await this.runner.pin(c.id);
+    if (!ok) {
+      this.status.set({ note: S.dock.pinNone });
+      return;
+    }
+    this.pins.push({ ...c, text: this.session.textOf({ type: 'query', name: c.query }) });
+    this.dock.badge('pinned', this.pins.length);
+    this.status.set({ note: S.dock.pinned(pinLabel(c)) });
+    if (this.dock.current === 'pinned') this.paintPinned();
+  }
+
+  paintPinned() {
+    renderPinned(this.dock.panel('pinned'), this.pins, {
+      isStale: (p) => this.pinStale(p),
+      onShow: (p) => this.showPin(p),
+      onUnpin: (p) => this.unpin(p),
+      onCompare: (p) => {
+        this.compareState.a = p.id;
+        this.dock.show('compare');
       }
     });
-    return true;
+  }
+
+  showPin(p) {
+    if (this.session.query(p.query)) this.select({ type: 'query', name: p.query });
+    this.dock.show('result');
+    this.setPane('result');
+    this.showTable({ columns: p.columns, rowCount: p.rowCount, rows: [] }, true, p.id);
+    this.status.set({ note: pinLabel(p) });
+  }
+
+  async unpin(p) {
+    await this.runner.pin(p.id, false);
+    this.pins = this.pins.filter((x) => x.id !== p.id);
+    this.dock.badge('pinned', this.pins.length || null);
+    this.paintPinned();
+  }
+
+  compareOptions() {
+    const opts = this.pins.map((p) => ({ id: p.id, label: pinLabel(p), columns: p.columns, rowCount: p.rowCount }));
+    const c = this.currentResult;
+    if (c && c.id && !this.pins.some((p) => p.id === c.id)) opts.push({ id: c.id, label: `${S.dock.current}: ${pinLabel(c)}`, columns: c.columns, rowCount: c.rowCount });
+    return opts;
+  }
+
+  paintCompare() {
+    renderCompare(this.dock.panel('compare'), this.compareOptions(), this.compareState, (o) => this.runner.rowsOf(o.id, 0, 1000), () => this.paintCompare());
+  }
+
+  paintQueue() {
+    const rows = this.orchestrator.queue();
+    const ms = rows.reduce((n, r) => n + (r.durationMs || 0), 0);
+    renderQueue(this.dock.panel('queue'), rows, S.dock.queueSummary(rows.length, Math.round(ms)));
+    this.dock.badge('queue', rows.length || null);
   }
 
   onBatchEvent(e) {
@@ -297,6 +406,7 @@ export class Workspace {
     if (this.nav) this.nav.schedule();
     this.syncInactive();
     this.paintTabs();
+    if (this.dock.current === 'queue') this.paintQueue();
   }
 
   async runBatch(mode) {
@@ -380,9 +490,21 @@ export class Workspace {
   }
 
   openGraph(start = null) {
+    this.graphStart = start || (this.item && this.item.type === 'query' ? this.item.name : null);
+    if (this.main.dataset.dock === 'collapsed') this.toggleDock();
+    if (window.matchMedia('(max-width: 639px)').matches) this.setPane('result');
+    if (this.dock.current === 'graph') this.mountGraphPanel();
+    else this.dock.show('graph');
+    this.syncDock();
+    if (this.graphView) this.graphView.focus();
+    return true;
+  }
+
+  mountGraphPanel() {
     const index = this.orchestrator.refresh();
-    const cur = start || (this.item && this.item.type === 'query' ? this.item.name : null);
-    openGraph({
+    const cur = this.graphStart || (this.item && this.item.type === 'query' ? this.item.name : null);
+    this.graphStart = null;
+    this.graphView = mountGraph(this.dock.panel('graph'), {
       nodes: () => index.members.map((m) => m.name),
       edges: () => index.members.flatMap((m) => [...(index.refs.get(m.name) || [])].map((d) => [d, m.name])),
       statuses: () => this.orchestrator.statuses(),
@@ -392,14 +514,15 @@ export class Workspace {
       open: (n) => this.select({ type: 'query', name: n }),
       run: (n) => {
         this.select({ type: 'query', name: n });
+        this.dock.show('result');
         this.run();
       },
       runDownstream: (n) => {
         this.select({ type: 'query', name: n });
+        this.dock.show('queue');
         this.runBatch('run-downstream');
       }
     }, { start: cur });
-    return true;
   }
 
   refreshedByFor(name) {
@@ -662,6 +785,8 @@ export class Workspace {
     this.barProblems.textContent = S.problems.count(n);
     this.barProblems.classList.toggle('has-errors', counts.error > 0);
     this.barProblems.hidden = false;
+    this.dock.badge('problems', n || null);
+    if (this.dock.current === 'problems' && this.problemsView) this.problemsView.paint();
   }
 
   narrow() {
@@ -946,7 +1071,7 @@ export class Workspace {
     this.inspectorToggle.setAttribute('aria-label', isQuery ? S.stepsPanel.toggleAria : S.outline.toggleAria);
     this.stepResults = new Map();
     this.runbar.hidden = !isQuery;
-    this.resultPanel.hidden = !isQuery;
+    this.syncDock();
     this.segmented.hidden = !isQuery;
     this.title.textContent = item.name;
     this.loadInto(grp, item);
@@ -1332,6 +1457,7 @@ export class Workspace {
     const item = this.item;
     if (!item || item.type !== 'query' || this.runner.running) return;
     const s = this.session;
+    this.lastStep = step || null;
     const token = ++this.runToken;
     this.setPane('result');
     try {
@@ -1373,7 +1499,7 @@ export class Workspace {
     }, { onNeedBinding: (kind, key) => this.askBinding(kind, key) });
     if (token !== this.runToken) return;
     this.setRunning(false);
-    this.renderResult(res, !!step);
+    this.renderResult(res, !!step, res.resultId || null);
   }
 
   async askBinding(kind, key) {
@@ -1418,6 +1544,8 @@ export class Workspace {
     this.crumbs.hidden = true;
     this.drillStack = [];
     this.lastResult = res;
+    this.currentResult = null;
+    this.pinBtn.hidden = true;
     if (res.status === 'cancelled') return;
     if (res.status === 'ok' && res.steps && res.steps.length) {
       this.steps.append(h('span', null, S.stepsLabel));
@@ -1464,6 +1592,10 @@ export class Workspace {
     if (r.kind === 'table') {
       const t = r.value;
       this.showTable(t, true, resultId);
+      if (resultId) {
+        this.currentResult = { id: resultId, query: this.item.name, step: isStep ? this.lastStep : null, columns: t.columns, rowCount: t.rowCount, at: Date.now() };
+        this.pinBtn.hidden = false;
+      }
       this.status.set({ run: { rows: t.rowCount, secs }, compare: isStep ? null : res.compare, flags: res.flags });
       this.pendingDiffs = res.compare && res.compare.diffs ? new Set(res.compare.diffs.map(([row, col]) => `${row}:${col}`)) : null;
       this.diffLabel.hidden = !(res.compare && res.compare.count > 0);

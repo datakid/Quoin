@@ -2652,3 +2652,199 @@ dialog.graph {
     display: none;
   }
 }
+
+.dock-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-2) 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-bottom: 1px solid var(--line);
+}
+
+.dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: none;
+  min-height: var(--h-ctl-sm);
+  padding: 0 var(--s-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-sm-lh);
+  cursor: pointer;
+}
+
+.dock-tab[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--slate);
+}
+
+.dock-count {
+  min-width: var(--s-4);
+  padding: 0 var(--s-1);
+  border-radius: var(--r-pill);
+  background: var(--sunk);
+  color: var(--ink-2);
+  font-size: var(--t-2xs);
+  line-height: var(--t-sm-lh);
+  text-align: center;
+}
+
+.dock-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-panel {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.dock-panel[data-panel="result"] {
+  overflow: hidden;
+}
+
+.dock-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-3);
+}
+
+.result-actions {
+  flex: none;
+  justify-content: flex-end;
+  padding-bottom: 0;
+}
+
+.dock-empty {
+  margin: 0;
+  padding: var(--s-4);
+  color: var(--ink-2);
+}
+
+.pin-list {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  list-style: none;
+}
+
+.pin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--h-row);
+  padding: var(--s-1) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pin-name {
+  font-weight: 600;
+}
+
+.pin-stale {
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--ochre-soft);
+  color: var(--ochre-ink);
+  font-size: var(--t-xs);
+}
+
+.queue-summary {
+  margin: 0;
+  padding: var(--s-2) var(--s-4) 0;
+}
+
+.queue-scroll {
+  overflow: auto;
+  padding: var(--s-2) var(--s-3);
+}
+
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+
+.queue-table th,
+.queue-table td {
+  padding: var(--s-1) var(--s-3);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.queue-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-3);
+}
+
+.dock-select {
+  min-height: var(--h-ctl);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.compare-out {
+  padding: 0 var(--s-3) var(--s-3);
+}
+
+.compare-sec h3 {
+  margin: var(--s-3) 0 var(--s-1);
+  font-size: var(--t-sm);
+}
+
+.compare-sec p,
+.compare-sec ul {
+  margin: 0;
+}
+
+.graph-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+}
+
+.graph-panel .graph-wrap {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.problems-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-height: 0;
+  padding: var(--s-2) var(--s-3);
+}
+
+.main.is-vba[data-dock-open="true"] {
+  grid-template-rows: auto auto auto minmax(0, 1fr) 0 minmax(0, 1fr);
+}

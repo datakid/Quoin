@@ -3,6 +3,7 @@ import { parseRecipe } from '../batch/recipe/recipe.js';
 import { resolvePlan } from '../batch/resolve/resolve.js';
 import { Package } from '../core/opc.js';
 import { readZip } from '../core/zip-read.js';
+import { moduleSourceOfFile } from '../core/export/files.js';
 
 export function createVariantTextLoader({ pool, session, now, runId }) {
   const recipe = parseRecipe(JSON.stringify({ recipe: 'collect', v: 1 })).recipe;
@@ -18,7 +19,8 @@ export function createVariantTextLoader({ pool, session, now, runId }) {
     const output = at < 0 ? '' : reply.message.result.rows[at].output;
     if (!output) throw new Error('variant.read');
     const entry = await new Package(readZip(reply.message.result.bytes)).bytes(output);
-    return new TextDecoder().decode(entry);
+    const text = new TextDecoder().decode(entry);
+    return item.kind === 'module' ? moduleSourceOfFile(output, text) : text;
   }
 
   return (item, version) => {

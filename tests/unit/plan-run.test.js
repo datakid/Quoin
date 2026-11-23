@@ -259,6 +259,22 @@ test('align previews against the text of the chosen version read from its file',
   assert.deepEqual(out.rows.map((r) => [r.file, r.verdict]), [['original.xlsx', 'unchanged'], ['edited.xlsx', 'changed']]);
 });
 
+test('align previews a module against the text of the chosen version read from its file', async () => {
+  const original = noQuery();
+  const index = await indexWorkbook(original, { id: 'f0001', name: 'x.xlsm', relPath: 'x.xlsm', size: original.length });
+  const { resolvePlan } = await import('../../src/batch/resolve/resolve.js');
+  const plan = resolvePlan(moduleReplace(), [index], { now: NOW }).files[0];
+  const edited = (await runFilePlan(original, { id: 'f0001', name: 'x.xlsm', relPath: 'x.xlsm', size: original.length }, plan, { now: NOW, dryRun: false, limits: { timeoutMs: 30000, maxRows: 1000000 }, culture: 'en-US', runId: 'seed', recipe: moduleReplace(), acknowledgeSignature: true })).bytes;
+  const session = await settledSet([[original, 'a/original.xlsm'], [edited, 'b/edited.xlsm']]);
+  const source = session.index('f0001').modules.find((m) => m.name === 'Module1');
+  const recipe = recipeOf({ recipe: 'align', v: 1, align: { target: 'module', name: 'Module1', hash: source.hash } });
+  const pool = inProcessPool();
+  const loadAlignText = createVariantTextLoader({ pool, session, now: NOW, runId: 'r1' });
+  const out = await preview({ session, pool, recipe, loadAlignText }).promise;
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.rows.map((r) => [r.file, r.verdict, r.reason_code]), [['original.xlsm', 'unchanged', ''], ['edited.xlsm', 'changed', '']]);
+});
+
 async function planOfInject(bytes) {
   const { resolvePlan } = await import('../../src/batch/resolve/resolve.js');
   const index = await indexWorkbook(bytes, { id: 'f0001', name: 'x.xlsx', relPath: 'x.xlsx', size: bytes.length });
@@ -295,3 +311,26 @@ test('cancelling while the outputs are being built stops quietly: cancelled resu
   assert.equal(session.state, 'ready');
   assert.equal(session.move, null);
 });
+
+test('a preview keeps the text before and after each change for the diff and a run does not carry any', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx']]);
+  const pool = inProcessPool();
+  const recipe = injectReplace();
+  const previewed = await preview({ session, pool, recipe }).promise;
+  const [change] = previewed.perFile.get('f0001').changes;
+  assert.equal(typeof change.texts.before, 'string');
+  assert.equal(typeof change.texts.after, 'string');
+  assert.notEqual(change.texts.before, change.texts.after);
+  assert.deepEqual(pool.submitted.map((s) => s.type), ['apply']);
+  const ran = await startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r2', preview: previewed }).promise;
+  assert.equal('texts' in ran.perFile.get('f0001').changes[0], false);
+});
+
+test('a pattern that matches nothing in a file is a skipped row', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [noQuery(), 'b/none.xlsm']]);
+  const recipe = recipeOf({ recipe: 'inject', v: 1, inject: { target: 'query', op: 'replace', match: 'pattern', name: 'Student*', source: 'inline', text: NEW_M, refreshOnLoad: false } });
+  const out = await preview({ session, pool: inProcessPool(), recipe }).promise;
+  assert.deepEqual(out.rows.map((r) => [r.file, r.verdict, r.reason_code]), [['one.xlsx', 'changed', ''], ['none.xlsm', 'skipped', 'skip.notApplicable']]);
+  assert.deepEqual(out.counts, { changed: 1, unchanged: 0, skipped: 1, refused: 0, failed: 0, cancelled: 0, 'not-released': 0 });
+});
+

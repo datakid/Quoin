@@ -120,3 +120,22 @@ test('fable matrix: starting a new run clears the old table', async ({ page }) =
   });
   await expect(matrix(page)).toHaveCount(0);
 });
+
+test('fable matrix: dragging across cells extends the selection and releasing the button ends it', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate((rows) => {
+    window.__quoin.set.addFiles([{ name: 'a.xlsx', relPath: 'a.xlsx', size: 1, lastModified: 1, file: new Blob([new Uint8Array(1)]) }]);
+    window.__quoin.shell.showResult(rows, 'report');
+  }, fakeRows(20));
+  const cell = (r, c) => matrix(page).locator(`#gc-${r}-${c}`);
+  const from = await cell(0, 0).boundingBox();
+  await page.mouse.move(from.x + 5, from.y + 5);
+  await page.mouse.down();
+  const to = await cell(3, 1).boundingBox();
+  await page.mouse.move(to.x + 5, to.y + 5, { steps: 5 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.__quoin.shell.matrix.grid.sel)).toEqual({ r1: 0, r2: 3, c1: 0, c2: 1 });
+  expect(await page.evaluate(() => window.__quoin.shell.matrix.grid.drag)).toBe(false);
+  await page.mouse.move(from.x + 5, from.y + 5, { steps: 5 });
+  expect(await page.evaluate(() => window.__quoin.shell.matrix.grid.sel)).toEqual({ r1: 0, r2: 3, c1: 0, c2: 1 });
+});

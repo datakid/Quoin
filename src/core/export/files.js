@@ -10,6 +10,13 @@ export function queryFile(name, text) {
 }
 
 const CLASS_HEADER = 'VERSION 1.0 CLASS\r\nBEGIN\r\n  MultiUse = -1  \'True\r\nEND\r\n';
+const FORM_FOOTER = '\' Form layout not included.\r\n';
+
+export function moduleSourceOfFile(fileName, text) {
+  if (fileName.endsWith('.cls') && text.startsWith(CLASS_HEADER)) return text.slice(CLASS_HEADER.length);
+  if (fileName.endsWith('.frm') && text.endsWith(FORM_FOOTER)) return text.slice(0, text.length - FORM_FOOTER.length);
+  return text;
+}
 
 export function moduleFile(mod, text, codePage) {
   let ext = '.bas';
@@ -19,7 +26,7 @@ export function moduleFile(mod, text, codePage) {
     source = CLASS_HEADER + text;
   } else if (mod.kind === 'form') {
     ext = '.frm';
-    source = `${text}${text.endsWith('\n') ? '' : '\r\n'}' Form layout not included.\r\n`;
+    source = `${text}${text.endsWith('\n') ? '' : '\r\n'}${FORM_FOOTER}`;
   }
   const crlf = source.replace(/\r\n|\r|\n/g, '\r\n');
   return { name: sanitizeFileName(mod.name, ext), data: encodeText(codePage, crlf, null) };

@@ -3,6 +3,7 @@ import { S, errorMessage } from '../strings.js';
 import { ResultMatrix } from './result-matrix.js';
 import { VariantsPanel } from './variants.js';
 import { RecipePanel } from './recipe-panel.js';
+import { diffTable } from '../dialogs.js';
 
 const SETTLED = ['ready', 'done', 'doneWithFailures'];
 const BUSY = ['previewing', 'running'];
@@ -204,12 +205,36 @@ export class SetShell {
     this.variants.root.hidden = this.openId !== null;
   }
 
-  showResult(rows, mode = 'report') {
+  showResult(rows, mode = 'report', { detailFor = null } = {}) {
     this.clearResult();
-    this.matrix = new ResultMatrix(this.result, { mode });
+    this.detailFor = detailFor;
+    this.matrix = new ResultMatrix(this.result, { mode, onSelectRow: (i) => this.showDetail(i) });
     this.matrix.setRows(rows);
     this.resultMode = mode;
     this.result.dataset.matrix = 'true';
+    this.detail = h('div', { class: 'set-detail' });
+    this.result.append(this.detail);
+    this.showDetail(-1);
+  }
+
+  showDetail(index) {
+    if (!this.detail) return;
+    clear(this.detail);
+    this.detail.hidden = false;
+    if (!this.detailFor) {
+      this.detail.hidden = true;
+      return;
+    }
+    const d = index >= 0 ? this.detailFor(index) : null;
+    if (!d) {
+      this.detail.append(h('p', { class: 'row-diff-hint item-meta' }, S.rowDiffHint));
+      return;
+    }
+    const body = d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
+    this.detail.append(
+      h('div', { class: 'row-diff', role: 'region', 'aria-label': S.rowDiffLabel(d.target.name), tabindex: '0' },
+        h('p', { class: 'row-diff-title' }, S.rowDiffTitle(d.op, d.target.name, d.file)),
+        body));
   }
 
   setRecipeView(view) {
@@ -229,6 +254,9 @@ export class SetShell {
     if (!this.matrix) return;
     this.matrix.destroy();
     this.matrix = null;
+    if (this.detail) this.detail.remove();
+    this.detail = null;
+    this.detailFor = null;
     this.resultMode = null;
     delete this.result.dataset.matrix;
   }

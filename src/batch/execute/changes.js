@@ -33,6 +33,8 @@ export function reportRow(meta, action, recipe, values) {
   return Object.fromEntries(REPORT_COLUMNS.map((k) => [k, merged[k]]));
 }
 
+const withTexts = (change, before, after) => ({ ...change, texts: { before, after } });
+
 const skipped = (code) => ({ verdict: 'skipped', reason_code: code, old_hash: '', new_hash: '', change: null });
 const refused = (code, oldHash = '', newHash = '') => ({ verdict: 'refused', reason_code: code, old_hash: oldHash, new_hash: newHash, change: null });
 
@@ -60,7 +62,7 @@ async function removeQuery(wb, action, changeSet) {
   const problem = queryRemovalProblem(wb, name);
   if (problem) return { ...refused(problem.code, oldHash), reason: problem.detail };
   changeSet.queries.remove.add(name);
-  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: '', change: { op: 'remove', target: { type: 'query', name }, oldHash, newHash: null } };
+  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: '', change: withTexts({ op: 'remove', target: { type: 'query', name }, oldHash, newHash: null }, normalizeQueryText(query.original), '') };
 }
 
 async function addQuery(wb, action, recipe, changeSet) {
@@ -76,7 +78,7 @@ async function addQuery(wb, action, recipe, changeSet) {
     return refused('refused.exists', existing ? await sha256Text(normalizeQueryText(existing.original)) : '', newHash);
   }
   changeSet.queries.add.set(name, text);
-  const outcome = { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: { op: 'add', target: { type: 'query', name }, oldHash: null, newHash } };
+  const outcome = { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: withTexts({ op: 'add', target: { type: 'query', name }, oldHash: null, newHash }, '', text) };
   return recipe.inject.refreshOnLoad === true ? { ...outcome, warning: { code: 'refresh.notApplied', part: name } } : outcome;
 }
 
@@ -85,7 +87,7 @@ async function stageQuery(query, text, changeSet) {
   const newHash = await sha256Text(text);
   if (oldHash === newHash) return { verdict: 'unchanged', reason_code: '', old_hash: oldHash, new_hash: newHash, change: null };
   changeSet.queries.replace.set(query.name, text);
-  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: { op: 'replace', target: { type: 'query', name: query.name }, oldHash, newHash } };
+  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: withTexts({ op: 'replace', target: { type: 'query', name: query.name }, oldHash, newHash }, normalizeQueryText(query.original), text) };
 }
 
 async function replaceQuery(wb, action, recipe, changeSet) {
@@ -134,7 +136,7 @@ async function stageModule(wb, project, mod, text, changeSet, acknowledgeSignatu
   if (blocked) return blocked;
   changeSet.modules.replace.set(mod.name, text);
   if (wb.vba.signed) changeSet.acknowledgeSignature = true;
-  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: { op: 'replace', target: { type: 'module', name: mod.name }, oldHash, newHash } };
+  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: newHash, change: withTexts({ op: 'replace', target: { type: 'module', name: mod.name }, oldHash, newHash }, mod.model.visible, text) };
 }
 
 async function replaceModule(wb, action, recipe, changeSet, { acknowledgeSignature }) {
@@ -157,7 +159,7 @@ async function addModule(wb, action, recipe, changeSet, { acknowledgeSignature }
   if (blocked) return blocked;
   changeSet.modules.add.set(name, text);
   if (wb.vba.signed) changeSet.acknowledgeSignature = true;
-  return { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: { op: 'add', target: { type: 'module', name }, oldHash: null, newHash } };
+  return { verdict: 'changed', reason_code: '', old_hash: '', new_hash: newHash, change: withTexts({ op: 'add', target: { type: 'module', name }, oldHash: null, newHash }, '', text) };
 }
 
 async function removeModule(wb, action, changeSet, { acknowledgeSignature }) {
@@ -172,7 +174,7 @@ async function removeModule(wb, action, changeSet, { acknowledgeSignature }) {
   if (blocked) return blocked;
   changeSet.modules.remove.add(name);
   if (wb.vba.signed) changeSet.acknowledgeSignature = true;
-  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: '', change: { op: 'remove', target: { type: 'module', name }, oldHash, newHash: null } };
+  return { verdict: 'changed', reason_code: '', old_hash: oldHash, new_hash: '', change: withTexts({ op: 'remove', target: { type: 'module', name }, oldHash, newHash: null }, mod.model.visible, '') };
 }
 
 const CODE_KIND = { query: 'm', module: 'vba' };

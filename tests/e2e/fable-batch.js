@@ -48,5 +48,5 @@ export const indexOf = (page) => page.evaluate(async () => (await import('/src/a
 
 export const previewState = (page) => page.evaluate(() => {
   const p = window.__quoin.preview;
-  return p ? { rows: p.rows.map((r) => ({ file: r.file, folder: r.folder, unit: r.unit, action: r.action, verdict: r.verdict, code: r.reason_code, oldHash: r.old_hash, newHash: r.new_hash })), hashes: [...p.hashes].map(([id, h]) => [p.indexes.find((i) => i.id === id).relPath, h]), counts: p.counts, signedCount: p.signedCount } : null;
+  return p ? { rows: p.rows.map((r) => ({ file: r.file, folder: r.folder, unit: r.unit, action: r.action, verdict: r.verdict, code: r.reason_code, reason: r.reason, oldHash: r.old_hash, newHash: r.new_hash })), hashes: [...p.hashes].map(([id, h]) => [p.indexes.find((i) => i.id === id).relPath, h]), counts: p.counts, signedCount: p.signedCount } : null;
 });

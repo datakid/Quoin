@@ -558,3 +558,9 @@ export function errorMessage(code, values = {}) {
   if (ERRORS[code]) return fmt(ERRORS[code], values);
   return S.readFailed;
 }
+
+export function reasonWords({ verdict, reason_code: code, reason }) {
+  if (!code) return reason || '';
+  if (verdict === 'refused' && reason) return `${errorMessage(code)} (${reason})`;
+  return reason || errorMessage(code);
+}

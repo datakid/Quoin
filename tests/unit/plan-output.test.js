@@ -263,3 +263,11 @@ test('a file the rule did not match reads as skipped and a file that could not b
   assert.deepEqual(rows.map((r) => [r.file, r.verdict, r.reason_code]), [['a.xlsx', 'skipped', 'skip.notApplicable'], ['b.xlsx', 'refused', 'file.encrypted']]);
 });
 
+test('a refused row that carries a detail reads as the sentence followed by the detail in the report rows', () => {
+  const indexes = [{ id: 'f1', name: 'a.xlsx', relPath: 'x/a.xlsx' }];
+  const plan = { recipe: { recipe: 'inject' }, files: [{ fileId: 'f1', units: [{ name: 'a', index: 0 }], skipped: null }] };
+  const results = new Map([['f1', { rows: [{ run_id: 'r1', file: 'a.xlsx', folder: 'x/', unit: 'a', unit_index: 0, recipe: 'inject', action: 'remove', compute: '', verdict: 'refused', reason_code: 'refused.loaded', reason: 'Sheet1!Table1', old_hash: '', new_hash: '', output: '', verified: false, signature_removed: false, duration_ms: 0 }] }]]);
+  const rows = reportRows(plan, indexes, results, 'r1');
+  assert.equal(rows[0].reason, 'This query loads to the workbook, so it cannot be removed. Nothing was changed. (Sheet1!Table1)');
+});
+

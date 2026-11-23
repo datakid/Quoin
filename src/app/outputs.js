@@ -5,7 +5,7 @@ import { utf8Encode } from '../core/bytes.js';
 import { Package } from '../core/opc.js';
 import { readZip } from '../core/zip-read.js';
 import { REPORT_COLUMNS, zipClock } from '../batch/execute/collect.js';
-import { S, errorMessage } from '../ui/strings.js';
+import { S, reasonWords } from '../ui/strings.js';
 
 const GIB = 1024 * 1024 * 1024;
 const CLASSIC_ZIP_ENTRIES = 0xFFFE;
@@ -56,15 +56,13 @@ function indexTable(indexes) {
   return table(INDEX_COLUMNS, rows);
 }
 
-const reasonOf = (code) => (code ? errorMessage(code) : '');
-
 export function reportRows(plan, indexes, results, runId) {
   const byId = new Map(indexes.map((ix) => [ix.id, ix]));
   const rows = [];
   for (const fp of plan.files) {
     const ix = byId.get(fp.fileId);
     const base = { run_id: runId, file: ix.name, folder: ix.relPath.slice(0, ix.relPath.length - ix.name.length), unit: '', unit_index: 0, recipe: plan.recipe.recipe, action: plan.recipe.recipe, compute: '', verdict: 'unchanged', reason_code: '', reason: '', old_hash: '', new_hash: '', output: '', verified: false, signature_removed: false, duration_ms: 0 };
-    const fill = (r) => Object.fromEntries(REPORT_COLUMNS.map((k) => [k, k === 'reason' && !r.reason ? reasonOf(r.reason_code) : r[k]]));
+    const fill = (r) => Object.fromEntries(REPORT_COLUMNS.map((k) => [k, k === 'reason' ? reasonWords(r) : r[k]]));
     if (fp.skipped) rows.push(fill({ ...base, verdict: fp.skipped.code.startsWith('skip.') ? 'skipped' : 'refused', reason_code: fp.skipped.code }));
     else if (results.has(fp.fileId)) for (const r of results.get(fp.fileId).rows) rows.push(fill(r));
     else rows.push(fill({ ...base, unit: fp.units[0] ? fp.units[0].name : '', unit_index: fp.units[0] ? fp.units[0].index : 0, verdict: 'cancelled', reason_code: 'pool.cancelled' }));

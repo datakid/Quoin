@@ -69,6 +69,7 @@ for (const view of VIEWS) {
     await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await page.waitForSelector('[role=grid]');
     await page.getByRole('button', { name: 'Get', exact: true }).waitFor();
+    await page.evaluate(() => { document.querySelector('.set-shell').scrollTop = 0; });
     await settle(page);
     await expect(page).toHaveScreenshot(`fable-shell-recipe-preview-${view.size}-${view.theme}.png`, { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' });
     await ctx.close();

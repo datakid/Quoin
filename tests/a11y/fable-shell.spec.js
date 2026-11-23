@@ -129,3 +129,21 @@ for (const theme of ['light', 'dark']) {
     await audit(page, `${theme} preview diff`);
   });
 }
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations with a transform row selected and its output showing, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await dropTree(page, [{ name: 'books', children: [{ name: 'pq_simple.xlsx', data: readFileSync(ext('pq_simple.xlsx')).toString('base64') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output: { mode: 'newFile' } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'my.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.waitForSelector('[role=grid]');
+    await page.locator('.grid-row', { hasText: 'Yes' }).first().locator('.grid-cell:not(.grid-index)').first().click();
+    await page.locator('.set-detail [role=region]').waitFor();
+    await audit(page, `${theme} transform output`);
+  });
+}
+

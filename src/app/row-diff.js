@@ -8,6 +8,7 @@ export function rowDiff(result, index) {
   const ix = result.indexes.find((i) => i.relPath === path);
   const held = ix && result.perFile.get(ix.id);
   if (!held) return null;
+  if (row.action === 'transform') return row.output ? { file: path, target: { name: row.unit }, op: 'transform', writes: `${row.folder}${row.output}` } : null;
   const rowKey = keyOf(row.action, row.old_hash, row.new_hash);
   let nth = 0;
   for (let i = 0; i < index; i++) {

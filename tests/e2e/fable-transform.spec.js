@@ -40,6 +40,19 @@ test('fable transform: Preview lists a row for every unit with the file it would
   expect(problems).toEqual([]);
 });
 
+test('fable transform: picking a row says which file it would write', async ({ page }) => {
+  await previewed(page, [['pq_simple.xlsx', ext('pq_simple.xlsx')]], newFile);
+  const detail = page.locator('.set-detail');
+  await expect(detail).toContainText('Select a row to see what changes.');
+  await matrix(page).locator('.grid-row').first().locator('.grid-cell:not(.grid-index)').first().click();
+  const region = detail.getByRole('region');
+  await expect(region).toHaveAttribute('aria-label', 'Output for StudentNames');
+  await expect(region).toContainText('Transform · StudentNames · books/pq_simple.xlsx');
+  await expect(region).toContainText('Writes books/pq_simple__StudentNames.xlsx, a workbook with one sheet, Result, holding the values of StudentNames.');
+  await matrix(page).locator('.grid-row').nth(1).locator('.grid-cell:not(.grid-index)').first().click();
+  await expect(region).toContainText('Writes books/pq_simple__StudentResults.xlsx');
+});
+
 test('fable transform: Get downloads one workbook per unit and each is exactly what the preview hashed', async ({ page }) => {
   await previewed(page, books, newFile);
   const outputs = await outputsOf(page);

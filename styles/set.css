@@ -394,6 +394,42 @@
   display: none;
 }
 
+.set-detail {
+  flex: 0 0 auto;
+  max-height: 45%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.row-diff {
+  overflow: auto;
+  min-height: 0;
+}
+
+.row-diff .diff-scroll {
+  overflow: visible;
+  border-top: 0;
+}
+
+.row-diff-title,
+.row-diff-rename,
+.row-diff-hint {
+  margin: 0;
+  padding: var(--s-2) var(--s-4);
+}
+
+.row-diff-title {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.set-detail[hidden] {
+  display: none;
+}
+
 @media (min-width: 900px) {
   .set-shell:has(.set-result[data-matrix]):not([data-mode="file"]) {
     grid-template-columns: minmax(200px, 260px) minmax(0, 0.7fr) minmax(0, 2fr);

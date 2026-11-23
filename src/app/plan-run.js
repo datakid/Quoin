@@ -64,7 +64,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
       if (cancelled) return { cancelled: true };
     }
 
-    const options = { now: frozenNow, dryRun: mode === 'preview', limits: recipe.more.limits, culture: recipe.more.culture, runId, recipe, acknowledgeSignature: true, ...(alignText === undefined ? {} : { alignText }) };
+    const options = { now: frozenNow, dryRun: mode === 'preview', limits: recipe.more.limits, culture: recipe.more.culture, runId, recipe, acknowledgeSignature: true, includeTexts: mode === 'preview', ...(alignText === undefined ? {} : { alignText }) };
     const perFile = new Map();
     let finished = 0;
 

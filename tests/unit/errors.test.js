@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ERRORS, errorMessage, S } from '../../src/ui/strings.js';
+import { ERRORS, errorMessage, reasonWords, S } from '../../src/ui/strings.js';
 import { root } from './helpers.js';
 
 const sources = [];
@@ -39,3 +39,14 @@ test('T-E-11: placeholders in a message are filled from the values given', () =>
   assert.match(errorMessage('vba.encoding', { line: 3, col: 4, char: 'x', cp: 1252 }), /Line 3, column 4: x cannot be saved in code page 1252/);
   assert.equal(/\{/.test(errorMessage('m.timeout', { s: 30 })), false);
 });
+
+test('reasonWords gives the sentence for a code, adds the detail on a refused row, and keeps a failure\'s own reason', () => {
+  const loaded = errorMessage('refused.loaded');
+  assert.equal(reasonWords({ verdict: 'refused', reason_code: 'refused.loaded', reason: 'Sheet1!Table1' }), `${loaded} (Sheet1!Table1)`);
+  assert.equal(reasonWords({ verdict: 'refused', reason_code: 'refused.loaded', reason: '' }), loaded);
+  assert.equal(reasonWords({ verdict: 'skipped', reason_code: 'skip.notApplicable', reason: '' }), errorMessage('skip.notApplicable'));
+  assert.equal(reasonWords({ verdict: 'failed', reason_code: 'unit.error', reason: 'The query timed out after 30 seconds.' }), 'The query timed out after 30 seconds.');
+  assert.equal(reasonWords({ verdict: 'changed', reason_code: '', reason: '' }), '');
+  assert.equal(reasonWords({ verdict: 'unchanged', reason_code: '', reason: 'x' }), 'x');
+});
+

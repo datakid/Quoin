@@ -6,7 +6,9 @@ import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
 import { executeTransform } from './transform.js';
 
-export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, shouldStop = () => false, allowInPlace = false }) {
+const withoutTexts = ({ texts, ...rest }) => rest;
+
+export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, includeTexts = false, shouldStop = () => false, allowInPlace = false }) {
   if (recipe.recipe === 'transform') return executeTransform(wb, filePlan, recipe, { now, meta, runId, allowInPlace, apply: (changeSet) => applyChangeSet(wb, changeSet, { now: zipClock(now), refreshOnLoad: false, checkSection }) });
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
@@ -25,7 +27,7 @@ export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '',
       const o = outcomes[i];
       return reportRow(file, action, recipe, { run_id: runId, old_hash: o.old_hash, new_hash: o.new_hash, reason: o.reason || '', ...settle(o), duration_ms: Math.round(performance.now() - started) });
     });
-  const changes = outcomes.filter((o) => o.change).map((o) => o.change);
+  const changes = outcomes.filter((o) => o.change).map((o) => (includeTexts ? o.change : withoutTexts(o.change)));
   const none = { fileId: filePlan.fileId, bytes: null, sha256: null, changes: [], warnings };
   if (!changes.length) return { ...none, rows: rowsFor((o) => ({ verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'unchanged' })) };
   let written;

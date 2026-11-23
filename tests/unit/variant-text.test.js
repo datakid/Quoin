@@ -9,6 +9,7 @@ import { executeFilePlan } from '../../src/batch/execute/collect.js';
 import { appliedMessage } from '../../src/batch/protocol.js';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { queryFile } from '../../src/core/export/files.js';
+import { sha256Text } from '../../src/batch/index/hash.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
 const WB = new URL('../fixtures/workbooks/', import.meta.url);
@@ -55,6 +56,18 @@ test('the text of a module version is read the same way', async () => {
   const it = item(s, 'module', 'Module1');
   const text = await load(it, it.versions[0]);
   assert.match(text, /Attribute VB_Name = "Module1"|Sub |Option Explicit/);
+});
+
+test('the text read for a module hashes to the version it was read for, whether it is a standard, a document or a class module', async () => {
+  const s = await setWith(['a.xlsm']);
+  const load = createVariantTextLoader({ pool: pool(), session: s, now: NOW, runId: 'r1' });
+  const kinds = new Set();
+  for (const name of ['Module1', 'ThisWorkbook', 'Sheet1']) {
+    const it = item(s, 'module', name);
+    kinds.add(s.list()[0].index.modules.find((m) => m.name === name).kind);
+    assert.equal(await sha256Text(await load(it, it.versions[0])), it.versions[0].hash, name);
+  }
+  assert.equal(kinds.has('document'), true);
 });
 
 test('a version already read is not read again, and a second name from the same file reuses nothing it should not', async () => {

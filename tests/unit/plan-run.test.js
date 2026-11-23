@@ -259,6 +259,22 @@ test('align previews against the text of the chosen version read from its file',
   assert.deepEqual(out.rows.map((r) => [r.file, r.verdict]), [['original.xlsx', 'unchanged'], ['edited.xlsx', 'changed']]);
 });
 
+test('align previews a module against the text of the chosen version read from its file', async () => {
+  const original = noQuery();
+  const index = await indexWorkbook(original, { id: 'f0001', name: 'x.xlsm', relPath: 'x.xlsm', size: original.length });
+  const { resolvePlan } = await import('../../src/batch/resolve/resolve.js');
+  const plan = resolvePlan(moduleReplace(), [index], { now: NOW }).files[0];
+  const edited = (await runFilePlan(original, { id: 'f0001', name: 'x.xlsm', relPath: 'x.xlsm', size: original.length }, plan, { now: NOW, dryRun: false, limits: { timeoutMs: 30000, maxRows: 1000000 }, culture: 'en-US', runId: 'seed', recipe: moduleReplace(), acknowledgeSignature: true })).bytes;
+  const session = await settledSet([[original, 'a/original.xlsm'], [edited, 'b/edited.xlsm']]);
+  const source = session.index('f0001').modules.find((m) => m.name === 'Module1');
+  const recipe = recipeOf({ recipe: 'align', v: 1, align: { target: 'module', name: 'Module1', hash: source.hash } });
+  const pool = inProcessPool();
+  const loadAlignText = createVariantTextLoader({ pool, session, now: NOW, runId: 'r1' });
+  const out = await preview({ session, pool, recipe, loadAlignText }).promise;
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.rows.map((r) => [r.file, r.verdict, r.reason_code]), [['original.xlsm', 'unchanged', ''], ['edited.xlsm', 'changed', '']]);
+});
+
 async function planOfInject(bytes) {
   const { resolvePlan } = await import('../../src/batch/resolve/resolve.js');
   const index = await indexWorkbook(bytes, { id: 'f0001', name: 'x.xlsx', relPath: 'x.xlsx', size: bytes.length });

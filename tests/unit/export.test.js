@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { tableToDelimited } from '../../src/core/export/csv.js';
 import { tableToJson, valueToJson } from '../../src/core/export/json.js';
 import { tableToXlsx } from '../../src/core/export/xlsx.js';
-import { sanitizeFileName, zipFiles, queryFile, moduleFile } from '../../src/core/export/files.js';
+import { sanitizeFileName, zipFiles, queryFile, moduleFile, moduleSourceOfFile } from '../../src/core/export/files.js';
 import { sameCell, compareWithCache } from '../../src/core/compare/cache-compare.js';
 import { readZip } from '../../src/core/zip-read.js';
 import { openWorkbook } from '../../src/core/workbook.js';
@@ -104,3 +104,15 @@ test('cache comparison tolerates float noise and one-second time drift', () => {
   assert.equal(compareWithCache(t, { columns: ['A'], rows: [] }).reason, 'columns');
   assert.equal(compareWithCache(t, { columns: ['A', 'B'], rows: [] }).reason, 'rows');
 });
+
+test('moduleSourceOfFile undoes what moduleFile adds, for standard, class and form modules', () => {
+  const dec = (f) => new TextDecoder().decode(f.data);
+  const text = 'Attribute VB_Name = "M"\r\nSub A()\r\nEnd Sub\r\n';
+  for (const kind of ['standard', 'class', 'document', 'form']) {
+    const f = moduleFile({ name: 'M', kind }, text, 1252);
+    assert.equal(moduleSourceOfFile(f.name, dec(f)), text, kind);
+  }
+  assert.equal(moduleSourceOfFile('M.cls', 'Sub A()\r\n'), 'Sub A()\r\n');
+  assert.equal(moduleSourceOfFile('M.bas', 'VERSION 1.0 CLASS\r\n'), 'VERSION 1.0 CLASS\r\n');
+});
+

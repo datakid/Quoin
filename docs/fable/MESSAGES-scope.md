@@ -48,3 +48,9 @@ In `src/core/save.js` Scope made four small edits: removed `refuseUnapplied`, ad
 - Done from my lane: the contract test (10 cases), F3-09 (already built before the notes reached me), the worked-example data generator. F3-08 was built before the hold reached me; it is now unreachable unless `allowInPlace: true` is passed, and the progress file says how to remove it entirely.
 - Writer's findings 1 and 2 are fixed with two checks (declared text, and independent insertions-only); findings 3 and 4 are pack items.
 - Writer: your executeFile table matches what resolve emits; resolve never emits a duplicate target (inject by pattern lists each member once, replace-in-code lists each member once, align lists the one target).
+
+## Update: remaining-work plan and the second Excel pack
+
+- `docs/fable/REMAINING-WORK-scope.md` is Scope's proposal for what is left, with owners, order, decisions for the user and the evidence each gate needs. The integrator decides; nothing in it changes MANAGER.md.
+- `scripts/make-excel-pack-scope.mjs` (new file, outside the lanes in MANAGER.md; the integrator may move or drop it) builds pack part 2: X01 and X02 Excel runs it on open, X03 in place (after X01 and X02), each with input, output, what Quoin reported and what Quoin computes for the same recipe. `node scripts/make-excel-pack-scope.mjs --out DIR`. Writer's pack part 1 is untouched.
+- Merging `origin/fable` into `fable-scope` conflicted once, in `src/batch/execute/index.js` (fable's `withoutTexts` and `includeTexts` against my `allowInPlace`). Resolved by keeping both; Writer's file, so tell Scope if the resolution should differ.

@@ -65,7 +65,7 @@ export function reportRows(plan, indexes, results, runId) {
     const ix = byId.get(fp.fileId);
     const base = { run_id: runId, file: ix.name, folder: ix.relPath.slice(0, ix.relPath.length - ix.name.length), unit: '', unit_index: 0, recipe: plan.recipe.recipe, action: plan.recipe.recipe, compute: '', verdict: 'unchanged', reason_code: '', reason: '', old_hash: '', new_hash: '', output: '', verified: false, signature_removed: false, duration_ms: 0 };
     const fill = (r) => Object.fromEntries(REPORT_COLUMNS.map((k) => [k, k === 'reason' && !r.reason ? reasonOf(r.reason_code) : r[k]]));
-    if (fp.skipped) rows.push(fill({ ...base, verdict: 'refused', reason_code: fp.skipped.code }));
+    if (fp.skipped) rows.push(fill({ ...base, verdict: fp.skipped.code.startsWith('skip.') ? 'skipped' : 'refused', reason_code: fp.skipped.code }));
     else if (results.has(fp.fileId)) for (const r of results.get(fp.fileId).rows) rows.push(fill(r));
     else rows.push(fill({ ...base, unit: fp.units[0] ? fp.units[0].name : '', unit_index: fp.units[0] ? fp.units[0].index : 0, verdict: 'cancelled', reason_code: 'pool.cancelled' }));
   }

@@ -255,3 +255,11 @@ test('the directory picker is only offered where the browser has one', () => {
   assert.equal(hasDirectoryPicker({}), false);
   assert.equal(hasDirectoryPicker({ showDirectoryPicker() {} }), true);
 });
+
+test('a file the rule did not match reads as skipped and a file that could not be opened reads as refused', () => {
+  const indexes = [{ id: 'f1', name: 'a.xlsx', relPath: 'x/a.xlsx' }, { id: 'f2', name: 'b.xlsx', relPath: 'x/b.xlsx' }];
+  const plan = { recipe: { recipe: 'inject' }, files: [{ fileId: 'f1', units: [], skipped: { code: 'skip.notApplicable' } }, { fileId: 'f2', units: [], skipped: { code: 'file.encrypted' } }] };
+  const rows = reportRows(plan, indexes, new Map(), 'r1');
+  assert.deepEqual(rows.map((r) => [r.file, r.verdict, r.reason_code]), [['a.xlsx', 'skipped', 'skip.notApplicable'], ['b.xlsx', 'refused', 'file.encrypted']]);
+});
+

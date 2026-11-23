@@ -46,16 +46,16 @@ test('fable row diff: a preview asks for a row first, then shows exactly what ch
 
 test('fable row diff: moving through the rows with the arrow keys follows the selection', async ({ page }) => {
   await previewed(page, replaceCode, [['mixed.xlsm', fx('mixed.xlsm')], ['pq_simple.xlsx', ext('pq_simple.xlsx')]]);
-  const total = await page.evaluate(() => window.__quoin.shell.matrix.grid.rowCount);
-  const shown = [];
+  const verdicts = await page.evaluate(() => window.__quoin.preview.rows.map((r) => r.verdict));
+  expect(verdicts).toContain('changed');
+  expect(verdicts).toContain('unchanged');
   await firstCell(matrix(page).locator('.grid-row').first()).click();
-  for (let i = 0; i < total; i++) {
-    const label = (await diffRegion(page).count()) ? await diffRegion(page).getAttribute('aria-label') : 'hint';
-    shown.push(label);
+  await matrix(page).focus();
+  for (let i = 0; i < verdicts.length; i++) {
+    await expect.poll(() => page.evaluate(() => window.__quoin.shell.matrix.grid.active.r), { message: `active row before step ${i}` }).toBe(i);
+    await expect(diffRegion(page), `diff area for row ${i} (${verdicts[i]})`).toHaveCount(verdicts[i] === 'changed' ? 1 : 0);
     await page.keyboard.press('ArrowDown');
   }
-  expect(shown.some((s) => s.startsWith('Changes to '))).toBe(true);
-  expect(new Set(shown).size).toBeGreaterThan(1);
 });
 
 test('fable row diff: a row that does not change goes back to the hint', async ({ page }) => {

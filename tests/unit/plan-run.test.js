@@ -309,3 +309,12 @@ test('a preview keeps the text before and after each change for the diff and a r
   const ran = await startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r2', preview: previewed }).promise;
   assert.equal('texts' in ran.perFile.get('f0001').changes[0], false);
 });
+
+test('a pattern that matches nothing in a file is a skipped row', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [noQuery(), 'b/none.xlsm']]);
+  const recipe = recipeOf({ recipe: 'inject', v: 1, inject: { target: 'query', op: 'replace', match: 'pattern', name: 'Student*', source: 'inline', text: NEW_M, refreshOnLoad: false } });
+  const out = await preview({ session, pool: inProcessPool(), recipe }).promise;
+  assert.deepEqual(out.rows.map((r) => [r.file, r.verdict, r.reason_code]), [['one.xlsx', 'changed', ''], ['none.xlsm', 'skipped', 'skip.notApplicable']]);
+  assert.deepEqual(out.counts, { changed: 1, unchanged: 0, skipped: 1, refused: 0, failed: 0, cancelled: 0, 'not-released': 0 });
+});
+

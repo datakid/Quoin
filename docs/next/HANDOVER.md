@@ -69,7 +69,7 @@ Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md
 - WB-12 tabs and split: `src/core/wb/tabs-model.js` (unit tests), `src/ui/wb/tabs.js`, tab and group handling in `Workspace` (`select`, `present`, `applyTabState`, `addGroup`), the five tab commands, `tests/e2e/tabs.spec.js`.
 - WB-11 the navigator: `src/core/wb/nav-model.js` (unit tests) and `src/ui/wb/navigator.js` (virtualised tree, search with `code:` and `step:`, Group by, Sort by, chips, multi-select, selection bar, row menu), wired from `Workspace.renderRail`, with `tests/e2e/navigator.spec.js`. Deviations and changed expectations are in `PROGRESS.md`.
 
-Commits on `beta` from this series (newest first): `94e52b1` WB-14/15 part, `d6bace6` WB-16 first slice, `8d96afd` WB-10 part, `1772374` WB-12, `424b9de` WB-11. Nothing is uncommitted.
+Commits on `beta` from this series (newest first): `a9ebc40` WB-16 column header menu, `94e52b1` WB-14/15 part, `d6bace6` WB-16 first slice, `8d96afd` WB-10 part, `1772374` WB-12, `424b9de` WB-11. Nothing is uncommitted.
 
 Last verified: lint 0 findings; unit 1105 pass (5 skipped by design); browser suite 248 pass, 0 fail on the code as committed (excluding `T-P-14b`, `T-E-12`, `T-I-04`), then the spec for the column tools run again alone after its last edit (12 pass, one test swapped); visual baselines regenerated after each UI change and looked at. Not run: `T-E-12`, `T-P-14b`, the manual browser matrix in `05_TEST_PLAN.md` §4.
 

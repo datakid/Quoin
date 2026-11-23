@@ -35,5 +35,8 @@ await tamper('T2 workbook.xml: hide the first existing sheet', 'xl/workbook.xml'
 await tamper('T3 styles.xml: swap the first two cell formats', 'xl/styles.xml', (x) => { const m = x.match(/<cellXfs[^>]*>(<xf [^>]*?(?:\/>|>.*?<\/xf>))(<xf [^>]*?(?:\/>|>.*?<\/xf>))/s); return m ? x.replace(m[1] + m[2], m[2] + m[1]) : x; });
 await tamper('T4 [Content_Types].xml: drop the Override of an existing part', '[Content_Types].xml', (x) => x.replace(/<Override PartName="\/xl\/theme\/theme1.xml"[^>]*\/>/, ''));
 await tamper('T5 workbook.xml.rels: drop an existing relationship', 'xl/_rels/workbook.xml.rels', (x) => x.replace(/<Relationship Id="[^"]*" Type="[^"]*\/theme" Target="[^"]*"\/>/, ''));
+await tamper('T6 workbook.xml: hide the new sheet that was added', 'xl/workbook.xml', (x) => x.replace(/<sheet name="Clean"/, '<sheet state="hidden" name="Clean"'));
+await tamper('T7 workbook.xml: insert an extra defined name next to the new sheet', 'xl/workbook.xml', (x) => x.replace('</sheets>', '</sheets><definedNames><definedName name="Injected">1</definedName></definedNames>'));
+await tamper('T8 styles.xml: change only the count of the cell formats', 'xl/styles.xml', (x) => x.replace(/(<cellXfs[^>]*count=")(\d+)/, (m, a, n) => `${a}${Number(n) + 7}`));
 console.log(accepted ? `${accepted} tampered outputs were accepted: the gap is open` : 'every tampered output was rejected: the gap is closed');
 process.exitCode = accepted ? 1 : 0;

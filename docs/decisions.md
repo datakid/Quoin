@@ -135,3 +135,18 @@ These entries cover the Fable branch (`fable`, cut from `beta`). The plan is `do
 - The Versions panel groups names by content hash; its diff text comes from running a Collect on one file through the worker pool, so no parsing happens on the main thread and the worker protocol did not change.
 - "Read only" is tested: a run that spies on every file system write API sees no call, and the dropped files are byte-identical afterwards (`tests/e2e/fable-readonly.spec.js`).
 
+## 26. Fable Phase F2: Inject and Replace
+
+- A batch is three steps. The resolver turns a recipe and the set into a plan. The runner executes the plan. The report is read from the plan after the run. Preview and Get run the same executor with the same frozen time, so the bytes Preview describes are the bytes Get writes. A difference is `verify.planDrift`: that file is not released, its row reads not released, and the run is flagged.
+- Preview never keeps bytes and a run never keeps text. `apply` takes `includeTexts` only in a preview and returns the before and after text of each query and module change, which feeds the per-row diff. The diff reuses the line diff of the Versions panel.
+- Every output is verified before it is released: the rebuilt workbook is read back and compared with the original, and only the declared adds, replaces, renames, removes and the signature part may differ. Everything else must be byte-identical. A file that fails is reported and not written.
+- Folder output writes each file after it is verified and aborts the stream on error or stop. Zip output is built at the end from verified files only. Both write `report.csv` with a row for every file in the set. A source file is never opened for writing; a test spies on the write APIs to show it.
+- A stopped Get leaves only complete files. The preview table comes back and a note says how many workbooks went to which folder, or that nothing was written. A second run cannot start until the stopped one has finished the file it was writing.
+- Verdicts are changed, unchanged, skipped, refused, failed, cancelled and not released. A file the recipe does not apply to is skipped; a file the recipe applies to but must not change is refused with its reason in words, with the detail in brackets.
+- One confirmation per set names how many workbooks have a signed macro project, because editing removes the signature. The report marks each one. This rests on an earlier "approved" and is open to change once real Excel results are in.
+- Removing or renaming a query that Excel made, not Quoin, is refused for now. The same applies: it stays refused until the real-Excel pack has been checked.
+- Aligning a class or document module reads the collected file back through `moduleSourceOfFile`, which undoes the export header or footer that the index hash does not include. A module with characters outside ASCII is still refused at the align check, which is safe but not yet right.
+- The grid ended a drag only when the button came up inside it; a plain click left drag mode on and repainted forever once rows were re-created. A pointer entering a cell without the primary button down now ends the drag.
+- On a phone the set shell scrolls and every pane is as tall as its content. Before, the three rows were squeezed into the screen and the recipe's Versions list ran over the Result pane.
+- Real Excel has not opened any output. `node scripts/make-excel-pack.mjs` builds a zip of inputs, outputs and a checklist for a person to open in Excel; nothing in it is marked verified.
+

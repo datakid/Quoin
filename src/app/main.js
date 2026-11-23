@@ -545,6 +545,7 @@ export class App {
         this.showRecipe(this.recipeView({ error: this.planProblem(out) }));
       }
       this.shell.recipePanel.restoreFocus();
+      if (out.ok) this.shell.revealResult();
       return out;
     });
   }

@@ -217,6 +217,10 @@ export class SetShell {
     this.showDetail(-1);
   }
 
+  revealResult() {
+    this.result.scrollIntoView({ block: 'nearest' });
+  }
+
   showDetail(index) {
     if (!this.detail) return;
     clear(this.detail);

@@ -312,6 +312,26 @@ test('cancelling while the outputs are being built stops quietly: cancelled resu
   assert.equal(session.move, null);
 });
 
+test('a run stopped after some files were written says how many and where, and a stop with nothing written says nothing more', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [pq(), 'b/two.xlsx']]);
+  const pool = inProcessPool();
+  const recipe = injectReplace();
+  const previewed = await preview({ session, pool, recipe }).promise;
+  let handle = null;
+  const stopped = async (result) => {
+    handle.cancel();
+    return { ok: true, stopped: true, name: 'out', files: ['a/one.xlsx'], rows: result.rows };
+  };
+  handle = startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r1', preview: previewed, build: stopped });
+  assert.deepEqual(await handle.promise, { cancelled: true, written: 1, into: 'out' });
+  const none = async (result) => {
+    handle.cancel();
+    return { ok: true, stopped: true, name: 'out', files: [], rows: result.rows };
+  };
+  handle = startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r2', preview: previewed, build: none });
+  assert.deepEqual(await handle.promise, { cancelled: true });
+});
+
 test('a preview keeps the text before and after each change for the diff and a run does not carry any', async () => {
   const session = await settledSet([[pq(), 'a/one.xlsx']]);
   const pool = inProcessPool();

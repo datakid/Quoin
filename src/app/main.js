@@ -407,7 +407,6 @@ export class App {
   cancelSetRun() {
     if (!this.setRun) return;
     this.setRun.cancel();
-    this.setRun = null;
   }
 
   showRecipe(view) {
@@ -488,7 +487,14 @@ export class App {
     this.setRun = run;
     return run.promise.then((out) => {
       if (this.setRun === run) this.setRun = null;
-      if (!this.shell || out.cancelled) return out;
+      if (!this.shell) return out;
+      if (out.cancelled) {
+        if (this.preview === preview) {
+          this.shell.showResult(preview.rows, 'preview', { detailFor: (i) => rowDiff(preview, i) });
+          this.showRecipe(this.recipeView({ notes: [out.written ? S.recipeStopped(out.written, out.into) : S.recipeStoppedNone(folder)] }));
+        }
+        return out;
+      }
       if (!out.ok) {
         if (out.code === 'plan.stale' || out.code === 'plan.invalid') this.preview = null;
         this.showRecipe(this.recipeView({ error: this.planProblem(out) }));

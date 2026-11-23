@@ -25,6 +25,8 @@ const diverged = (plan, previewHashes, hashes, perFile) =>
       return hashes.get(id) !== previewHashes.get(id);
     });
 
+const stoppedResult = (out) => (out && out.stopped && out.files.length ? { cancelled: true, written: out.files.length, into: out.name } : { cancelled: true });
+
 export function startPlanRun({ session, pool, recipe, now, runId, mode, preview = null, confirmSignatures = false, loadAlignText = null, onProgress = () => {}, build = null }) {
   if (!WRITE_RECIPES.includes(recipe.recipe)) throw new Error(`${recipe.recipe} cannot be previewed yet`);
   if (mode !== 'preview' && mode !== 'run') throw new Error('mode must be preview or run');
@@ -111,7 +113,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
     }
     if (build) {
       const out = await build(result, { shouldStop: () => cancelled });
-      if (cancelled) return { cancelled: true };
+      if (cancelled) return stoppedResult(out);
       if (!out || out.ok === false) {
         session.abort();
         return refuse(out && out.code ? out.code : 'output.failed');
@@ -124,7 +126,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
   })();
 
   return {
-    promise: promise.then((r) => (cancelled ? { cancelled: true } : r)),
+    promise: promise.then((r) => (cancelled ? (r && r.cancelled ? r : { cancelled: true }) : r)),
     cancel() {
       if (cancelled) return;
       cancelled = true;

@@ -248,6 +248,7 @@ test('a stop request ends the folder output between files and writes no report',
   const root = new StubDir('out', log);
   const out = await buildFolderOutput(root, { ...s, now: NOW, runId: 'r1' }, { shouldStop: () => { const was = stop; stop = true; return was; } });
   assert.equal(out.stopped, true);
+  assert.equal(out.name, 'out');
   assert.deepEqual(log.filter((l) => l.startsWith('open')), ['open out/a/one.xlsx']);
 });
 

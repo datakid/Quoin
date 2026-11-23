@@ -50,7 +50,8 @@ const csvLines = (u8) => text(u8.slice(3)).split('\r\n').filter(Boolean);
 test('tablesToXlsx with one table is byte-compatible with tableToXlsx, and with more it gives one sheet each', async () => {
   const r = runOnce({ ...baseOptions, sectionText: 'section Section1;\r\n\r\nshared Q = #table({"Name","Qty"}, {{"x", 2.5}, {"<&>", -1}});', queryName: 'Q' });
   const t = r.value;
-  assert.deepEqual(await tablesToXlsx([t], 'en-US'), await tableToXlsx(t, 'en-US'));
+  const clock = { now: new Date(2026, 10, 14, 10, 0, 0) };
+  assert.deepEqual(await tablesToXlsx([t], 'en-US', clock), await tableToXlsx(t, 'en-US', clock));
   const many = await openWorkbook(await tablesToXlsx([t, t]), 'many.xlsx');
   assert.deepEqual(many.sheets.map((x) => x.name), ['Result', 'Result-2']);
 });

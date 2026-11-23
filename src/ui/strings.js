@@ -243,6 +243,8 @@ export const S = {
   recipeResult: (c) => [`${c.changed} changed`, c.unchanged ? `${c.unchanged} unchanged` : '', c.skipped ? `${c.skipped} skipped` : '', c.refused ? `${c.refused} refused` : '', c.failed ? `${c.failed} failed` : '', c['not-released'] ? `${c['not-released']} not released` : ''].filter(Boolean).join(' · '),
   folderUnavailable: 'The folder could not be opened. Nothing was written.',
   recipeGotZip: (name) => `Downloaded ${name}.`,
+  recipeStopped: (n, name) => `Stopped. ${n} ${n === 1 ? 'workbook was' : 'workbooks were'} written to ${name}. The rest were not.`,
+  recipeStoppedNone: (folder) => (folder ? 'Stopped. Nothing was written.' : 'Stopped. Nothing was downloaded.'),
   recipeGotFolder: (name, n) => `Wrote ${n} ${n === 1 ? 'workbook' : 'workbooks'} and report.csv to ${name}.`,
   runDefect: (n) => `${n} ${n === 1 ? 'file was' : 'files were'} not released because ${n === 1 ? 'its' : 'their'} output differs from the preview. The rest were released. Report this.`,
   recipeNone: 'No recipe loaded.',

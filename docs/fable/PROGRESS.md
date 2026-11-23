@@ -397,5 +397,10 @@ Defects these found and fixed:
 - A plain click on a grid cell left drag mode on and the grid repainted in a loop (see F2-10d).
 Known flaky tests, not ours: `T-WB-05` (30.4 ms against a 30 ms budget) and `T-WB-09` in `run-modes.spec.js` (one CI run saw "2 ran, 1 item edited" where it expected "Nothing to run"; 40 of 40 local runs pass).
 
+### F2-15 the real-Excel pack, version 1 (done by the integrator)
+`node scripts/make-excel-pack.mjs [out.zip]` writes `quoin-excel-pack.zip` (ignored by git; default in the current folder). It holds `CHECKLIST.md`, then `cases/NN-name/input/` and `cases/NN-name/output/` for 13 cases and 17 output workbooks: query replace, query add (a workbook with queries, and the Excel-made `ms_template_query.xlsx`), query remove and rename (on the workbook Quoin just added a query to), module replace, add and remove, a signed project (generated, and the real `xw_macro04.xlsm`), replace in code (VBA and M), and Scope's three output modes (new file per unit, new sheet in a copy, combined workbook). Every case lists what to open and what to look at in Excel; each has a pass box and a fail box. Nothing is marked verified; the person who runs Excel ticks the boxes. The checklist ends with the SHA-256 of every output, so a report can be tied to a file.
+The script calls the executor directly and fails loudly if a case changes nothing or refuses. `tests/unit/excel-pack.test.js` checks: 13 case folders each with an input and an output, 17 outputs that all open with Quoin and are listed with their hash, no ticked box, and the same bytes when made twice.
+Gaps: there is no password-protected macro project fixture, so writes to a protected project are not in the pack (Quoin refuses them). In place (F3-08) is not in the pack and stays unmerged until the three modes above have a human pass.
+
 ### Next
-F2-15 (Writer's real-Excel pack) is what the person needs to do the by-hand check; the F2-16 gate follows it. After that F3-05 to F3-07 (new file, new sheet, combined) wait on the real-Excel check.
+F2-16 gate, then F3-05 to F3-07 wiring in the app. Both wait on a person opening the pack in Excel.

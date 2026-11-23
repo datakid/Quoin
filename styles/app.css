@@ -2720,6 +2720,7 @@ dialog.graph {
 
 .result-actions {
   flex: none;
+  flex-wrap: wrap;
   justify-content: flex-end;
   padding-bottom: 0;
 }
@@ -2971,4 +2972,165 @@ dialog.graph {
 .step-insert-actions {
   display: flex;
   gap: var(--s-1);
+}
+
+.chip.view {
+  background: var(--ochre-soft);
+  color: var(--ochre-ink);
+  font-size: var(--t-sm);
+  line-height: var(--t-sm-lh);
+}
+
+dialog.colwork {
+  max-width: min(520px, calc(100vw - var(--s-5)));
+}
+
+dialog.colwork.wide {
+  max-width: min(640px, calc(100vw - var(--s-5)));
+}
+
+dialog.colwork.sheet {
+  margin-block: 0;
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+  height: 100%;
+  max-height: 100%;
+  border-radius: var(--r-4) 0 0 var(--r-4);
+  overflow: auto;
+}
+
+.colwork-modes {
+  display: flex;
+  gap: var(--s-4);
+  margin: var(--s-3) 0;
+}
+
+.colwork-pane {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.colwork-pane input[type="text"],
+.colwork-code,
+.colwork .form-grid input[type="text"] {
+  min-height: var(--h-ctl);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--raised);
+  color: var(--ink);
+  width: 100%;
+}
+
+.colwork-code {
+  padding: var(--s-2) var(--s-3);
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+  line-height: var(--t-code-lh);
+  resize: vertical;
+}
+
+.colwork-codelabel {
+  display: block;
+  margin: var(--s-4) 0 var(--s-2);
+  font-weight: 600;
+}
+
+.colwork-values {
+  display: grid;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  padding: var(--s-1) var(--s-2);
+}
+
+.colwork-value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--h-ctl-sm);
+}
+
+.colwork-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colwork-count {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.colwork-msg {
+  min-height: var(--s-4);
+  margin-top: var(--s-2);
+  color: var(--madder-ink);
+  font-size: var(--t-sm);
+}
+
+.colwork-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-1) var(--s-4);
+  margin: 0 0 var(--s-4);
+}
+
+.colwork-stats dt {
+  color: var(--ink-3);
+}
+
+.colwork-stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.colwork-profile h3 {
+  margin: var(--s-4) 0 var(--s-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.colwork-top,
+.colwork-kinds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-1);
+}
+
+.colwork-top li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px auto;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.colwork-pick {
+  justify-content: flex-start;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.colwork-barbox {
+  display: block;
+  height: var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--sunk);
+  overflow: hidden;
+}
+
+.colwork-bar {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--slate);
 }

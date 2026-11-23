@@ -1,6 +1,8 @@
 import { runQuery, serializeTableRows, serializeResult, evaluateSteps, evaluateMany } from '../core/m/engine.js';
 import { ResultStore } from '../core/wb/result-store.js';
-import { MTable } from '../core/m/values.js';
+import { applyView } from '../core/wb/view-ops.js';
+import { profileColumn } from '../core/wb/profile.js';
+import { MTable, T, typeName } from '../core/m/values.js';
 import { tableToDelimited } from '../core/export/csv.js';
 import { tableToJson, valueToJson } from '../core/export/json.js';
 import { tableToXlsx } from '../core/export/xlsx.js';
@@ -145,6 +147,72 @@ function lookup(m) {
   return id ? store.get(id) : undefined;
 }
 
+function viewOf(m) {
+  const entry = m.resultId ? store.get(m.resultId) : undefined;
+  if (!entry) {
+    post({ type: 'viewed', id: m.id, error: 'evicted' });
+    return;
+  }
+  const t = entry.value;
+  if (!(t instanceof MTable)) {
+    post({ type: 'viewed', id: m.id, error: 'not-table' });
+    return;
+  }
+  const out = applyView(t, m.view || {});
+  if (!out.ok) {
+    post({ type: 'viewed', id: m.id, error: 'invalid', message: out.message });
+    return;
+  }
+  const derived = new MTable(
+    out.columns.map((c) => t.columns[c]),
+    out.columns.map((c) => t.types[c]),
+    out.columns.map((c) => out.rows.map((r) => t.cols[c][r])),
+    out.rows.length,
+    []
+  );
+  const r = store.add({ value: derived, culture: entry.culture, member: entry.member, step: entry.step });
+  if (r.evicted.length) post({ type: 'evicted', resultIds: r.evicted });
+  const rows = serializeTableRows(derived, 0, m.previewRows || 200);
+  const columns = derived.columns.map((name, i) => ({ name, type: typeName(derived.types[i] || T.any), facet: (derived.types[i] && derived.types[i].facet) || null }));
+  post({ type: 'viewed', id: m.id, viewResultId: r.id, columns, rowCount: derived.rowCount, rows, sourceRows: t.rowCount });
+}
+
+const PROFILE_CHUNK = 4096;
+
+function profileOf(m) {
+  const entry = m.resultId ? store.get(m.resultId) : undefined;
+  if (!entry) {
+    post({ type: 'profiled', id: m.id, error: 'evicted' });
+    return;
+  }
+  const t = entry.value;
+  if (!(t instanceof MTable)) {
+    post({ type: 'profiled', id: m.id, error: 'not-table' });
+    return;
+  }
+  const c = t.columnIndex(m.column);
+  if (c < 0) {
+    post({ type: 'profiled', id: m.id, error: 'column' });
+    return;
+  }
+  const one = new MTable([t.columns[c]], [t.types[c]], [t.cols[c]], t.rowCount, []);
+  let start = -1;
+  let chunk = [];
+  const at = (r) => {
+    if (r < start || r >= start + chunk.length) {
+      start = r - (r % PROFILE_CHUNK);
+      chunk = serializeTableRows(one, start, PROFILE_CHUNK);
+    }
+    return chunk[r - start][0];
+  };
+  try {
+    const p = profileColumn({ count: t.rowCount, at, top: m.top || undefined });
+    post({ type: 'profiled', id: m.id, column: m.column, profile: p });
+  } catch (e) {
+    post({ type: 'profiled', id: m.id, error: 'failed', message: String(e && e.message) });
+  }
+}
+
 async function exportResult(m) {
   const last = lookup(m);
   if (!last) {
@@ -186,6 +254,8 @@ self.onmessage = (ev) => {
   else if (m.type === 'run-many') runMany(m);
   else if (m.type === 'pin') post({ type: 'pinned', id: m.id, ok: store.pin(m.resultId, m.pinned !== false) });
   else if (m.type === 'release') post({ type: 'released', id: m.id, ok: store.release(m.resultId) });
+  else if (m.type === 'view') viewOf(m);
+  else if (m.type === 'profile') profileOf(m);
   else if (m.type === 'binding') {
     const resolve = waiting.get(`${m.id}:${m.key}`);
     if (resolve) {

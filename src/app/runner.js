@@ -116,6 +116,14 @@ export class Runner {
     return this.request({ type: 'release', resultId }).then((m) => !!m.ok);
   }
 
+  view(resultId, view, previewRows = 200) {
+    return this.request({ type: 'view', resultId, view, previewRows });
+  }
+
+  profile(resultId, column, top) {
+    return this.request({ type: 'profile', resultId, column, top });
+  }
+
   stop(result) {
     this.generation++;
     if (this.worker) this.worker.terminate();

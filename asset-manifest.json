@@ -1,5 +1,5 @@
 {
-  "version": "806824b140e06b78",
+  "version": "aabf8d99c9706cc7",
   "files": [
     "./",
     "index.html",
@@ -106,6 +106,7 @@
     "src/core/wb/m-gen.js",
     "src/core/wb/nav-model.js",
     "src/core/wb/problems.js",
+    "src/core/wb/profile.js",
     "src/core/wb/result-store.js",
     "src/core/wb/run-plan.js",
     "src/core/wb/sources.js",
@@ -114,6 +115,7 @@
     "src/core/wb/step-kinds.js",
     "src/core/wb/steps.js",
     "src/core/wb/tabs-model.js",
+    "src/core/wb/view-ops.js",
     "src/core/workbook.js",
     "src/core/xml.js",
     "src/core/zip-read.js",
@@ -128,6 +130,7 @@
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
     "src/ui/strings.js",
+    "src/ui/wb/column-tools.js",
     "src/ui/wb/deps-panel.js",
     "src/ui/wb/dock-views.js",
     "src/ui/wb/dock.js",

@@ -85,6 +85,7 @@ export class Grid {
   constructor(host, { onDrill = null, onError = null } = {}) {
     this.onDrill = onDrill;
     this.onError = onError;
+    this.columnTools = null;
     this.columns = [];
     this.rowCount = 0;
     this.diffs = null;
@@ -465,10 +466,18 @@ export class Grid {
       this.closeMenu();
       fn();
     } }, label);
+    const tools = this.columnTools;
+    const toolItems = tools ? [
+      item(S.colTools.menuFilter, () => tools.filter(col, c)),
+      item(S.colTools.menuHide, () => tools.hide(col, c), this.columns.length < 2),
+      item(S.colTools.menuProfile, () => tools.profile(col, c)),
+      tools.canAddStep() ? item(S.colTools.menuAddStep, () => tools.addStep(col, c)) : null
+    ] : [];
     const menu = h('div', { class: 'menu', role: 'menu' },
       item(S.sortAscending, () => this.sortBy(c, 1), tooLarge),
       item(S.sortDescending, () => this.sortBy(c, -1), tooLarge),
       tooLarge ? h('div', { class: 'menu-label', role: 'presentation' }, S.sortTooLarge(this.integerFormat.format(this.rowCount))) : null,
+      ...toolItems,
       item(S.copyColumnName, () => navigator.clipboard && navigator.clipboard.writeText(col.name)));
     placeBelow(menu, anchor);
     this.menu = menu;

@@ -390,7 +390,7 @@
 
 #### Not done in WB-16
 - The result header line (`928 rows · 6 cols · 41 ms · step 5 of 7`) and the Excel verdict chip in the Result tab; Export per result id from the dock.
-- The column header menu (sort, filter, profile, hide, Add as a step), `view` and `profile` worker messages, `profile.js` and the column profile sheet, the viewOnly chip.
+- (Built since, see "WB-16: the column header menu" below: filter, hide, profile, Add as a step, the `view` and `profile` worker messages, `profile.js`, the profile sheet and the view-only chip.)
 - Side by side grids with synchronised scroll in Compare, comparing a step with the previous run, quoin against Excel.
 - The Changes tab (WB-17).
 
@@ -408,4 +408,25 @@
 
 #### Not done in WB-15
 - The operation history with Undo in the status region and the History popover, the multi-step preview popover with Apply and Cancel, and Auto-run steps after structural edits. The text of the editor still undoes with the editor's own undo.
+
+### WB-16: the column header menu
+- The column header menu of a stored table result now has Filter, Hide in view, Profile column and, for a query written as `let`, Add as a step, beside the existing Sort ascending, Sort descending and Copy column name. They appear only when the grid shows a result held by the worker (`grid.columnTools`, set by `Workspace.attachColumnTools`); drill-ins, lists and records keep the old menu.
+- `src/core/wb/profile.js` (pure, over a cell accessor): count, nulls, errors, distinct (capped at 10 000 and then shown as `10,000+`, with the top values marked approximate), minimum, maximum and mean of the finite numbers, earliest and latest for dates and date-times, text length range, the top values with count and share, and the kinds of value present (a column of mixed kinds is flagged). 10 unit tests, including a million rows under a second.
+- `src/core/wb/view-ops.js` (pure): view-only filter, sort and hide over an `MTable`. It uses `valuesEqual` and `compareValues` from `values.js`, so a view filter keeps the rows the matching `Table.SelectRows` keeps (a null on either side of `<`, `>`, `<=`, `>=` drops the row; comparing unlike kinds fails with the engine's message). 32 unit tests; every filter operator, null handling, ignore case, dates and the sort variants are compared against the result of the step `m-gen.js` generates, run through the engine on the same `#table`.
+- Worker and runner: `view` (builds a derived table from the stored result, stores it as a new result id, returns the first 200 rows, the columns and the row counts) and `profile` (chunks of 4 096 rows through `serializeTableRows` on a one-column table; `top` sets how many values come back). `Runner.view` and `Runner.profile`. Nothing in `engine.js`, `lexer.js`, `parser.js`, `values.js` or `library/` changed.
+- Filter dialog: by values (search box, ticks kept while searching, the 200 most common values and a null entry, with a note when there are more) or by condition (operator and value, ignore case for text; numbers and dates are checked before they are sent). Applying a filter on a column replaces that column's earlier view filter. The view-only chip beside Pin says `View only · 3 of 6 rows · 1 filter · 1 column hidden`, with Clear view; the query text is never touched, and a re-run, another query or a non-table result drops the view and releases its stored result.
+- Profile sheet: a side sheet with the figures above, the top values with bars (each is a button that filters the view to it) and the kinds of value; mixed columns are called out.
+- Add as a step: a dialog with the action (sort ascending or descending, filter rows, remove this column, keep only this column, rename, change type to text, number, whole number, date or true/false, remove duplicates), its parameters, the step name and the exact M in an editable box (editing it stops regeneration until Use the generated code). Insert puts the step after the step whose result is shown (the last step when the final result is shown), rewires the next step, moves the caret to the new step, and runs the steps up to it. A name that exists, or text that does not parse, is refused in the dialog with the reason.
+- Tests: `tests/e2e/column-tools.spec.js` (12 tests: filter by condition, two filters and replacement, values list with search, empty and invalid input, hide, profile figures of a number and a text column, Add as a step with the new step equal to the earlier view, an edited expression and a refused duplicate name, rename and change type M, the menu on a plain expression, Enter and Escape on a header) and the two unit files above. The fixtures are inline `#table` queries typed into `pq_simple.xlsx`'s query, with fixed expected figures; `wide.xlsx` from the plan does not exist.
+
+#### Deviations
+- The Sort entries in the column menu are still the grid's display sort (it keeps the original row numbers and works to 200 000 rows). The worker `view` accepts a `sort` and it is unit tested, but no menu item uses it, so the view-only chip covers filters and hidden columns, not sort.
+- `Alt+Down` on a focused header was tried and removed: it is already the global "next item" command (`app-commands.js`), and the two fired together, which moved to the next query and hid the grid. Enter and Space open the header menu, and Escape returns focus to the header (tested).
+- Filtering by the values list is limited to the 200 most common values; filters on time, duration and date-time-zone columns offer only the null checks in practice (other operators compare as text and fail with the engine's message, which the view reports in the status line).
+- Text length counts UTF-16 units.
+- "Add as a step from a view filter" is a menu action on the column, not a button on the chip: the chip's filters are not turned into steps in one click.
+
+#### Not done in WB-16 (still)
+- The result header line and the Excel verdict chip, Export per result id, side by side Compare, the Changes tab.
+- A view sort in the menu, and filtering a view by a cell's value from the cell menu.
 

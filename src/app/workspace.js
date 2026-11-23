@@ -16,6 +16,7 @@ import { mountProblems } from '../ui/wb/problems-view.js';
 import { Dock } from '../ui/wb/dock.js';
 import { renderPinned, renderQueue, renderCompare, pinLabel } from '../ui/wb/dock-views.js';
 import { openFind } from '../ui/wb/find-dialog.js';
+import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
@@ -193,7 +194,11 @@ export class Workspace {
     this.sources = h('div', { class: 'crumbs', hidden: true });
     this.dock = new Dock({ onShow: (id) => this.onDockShow(id) });
     this.pinBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.pinCurrent() }, S.dock.pin);
-    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.pinBtn), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
+    this.view = null;
+    this.viewChip = h('span', { class: 'chip view', hidden: true });
+    this.viewClear = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.clearView() }, S.colTools.viewClear);
+    this.viewNote = h('span', { class: 'sr-only', 'aria-live': 'polite' });
+    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.pinBtn, this.viewChip, this.viewClear, this.viewNote), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
     this.resultPanel = h('div', { class: 'result-panel' }, this.dock.tabs, this.dock.body);
     this.codeBtn = h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setRegion('code') }, S.code);
     this.stepsBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('steps') }, S.stepsPanel.toggle);
@@ -1473,6 +1478,7 @@ export class Workspace {
   }
 
   clearResult() {
+    this.resetView();
     this.grid.el.hidden = true;
     this.crumbs.hidden = true;
     this.diffLabel.hidden = true;
@@ -1600,6 +1606,7 @@ export class Workspace {
     this.lastResult = res;
     this.currentResult = null;
     this.pinBtn.hidden = true;
+    this.resetView();
     if (res.status === 'cancelled') return;
     if (res.status === 'ok' && res.steps && res.steps.length) {
       this.steps.append(h('span', null, S.stepsLabel));
@@ -1649,6 +1656,7 @@ export class Workspace {
       if (resultId) {
         this.currentResult = { id: resultId, query: this.item.name, step: isStep ? this.lastStep : null, columns: t.columns, rowCount: t.rowCount, at: Date.now() };
         this.pinBtn.hidden = false;
+        this.attachColumnTools(resultId);
       }
       this.status.set({ run: { rows: t.rowCount, secs }, compare: isStep ? null : res.compare, flags: res.flags });
       this.pendingDiffs = res.compare && res.compare.diffs ? new Set(res.compare.diffs.map(([row, col]) => `${row}:${col}`)) : null;
@@ -1658,6 +1666,137 @@ export class Workspace {
       return;
     }
     this.showValue(r.value, r.kind, secs, res.flags);
+  }
+
+  resetView() {
+    const v = this.view;
+    this.view = null;
+    if (v && v.viewId) this.runner.release(v.viewId);
+    this.grid.columnTools = null;
+    this.viewChip.hidden = true;
+    this.viewClear.hidden = true;
+  }
+
+  attachColumnTools(resultId) {
+    this.view = { baseId: resultId, viewId: null, filters: [], hidden: [] };
+    this.grid.columnTools = {
+      filter: (col) => this.openViewFilter(col),
+      hide: (col) => this.view && this.applyView({ filters: this.view.filters, hidden: [...this.view.hidden, col.name] }),
+      profile: (col) => this.openProfile(col),
+      canAddStep: () => this.addStepTarget() !== null,
+      addStep: (col) => this.openAddStep(col)
+    };
+  }
+
+  shownResultId() {
+    return this.view ? this.view.viewId || this.view.baseId : null;
+  }
+
+  withFilter(spec) {
+    return { filters: [...this.view.filters.filter((f) => f.column !== spec.column), spec], hidden: this.view.hidden };
+  }
+
+  openViewFilter(col) {
+    const id = this.shownResultId();
+    if (!id) return;
+    filterDialog({
+      column: col.name,
+      type: col.type,
+      loadValues: () => this.runner.profile(id, col.name, 200),
+      onApply: (spec) => this.view && this.applyView(this.withFilter(spec))
+    });
+  }
+
+  async applyView(next) {
+    const v = this.view;
+    if (!v) return;
+    if (!next.filters.length && !next.hidden.length) {
+      this.clearView();
+      return;
+    }
+    const res = await this.runner.view(v.baseId, next, 200);
+    if (this.view !== v) {
+      if (res.viewResultId) this.runner.release(res.viewResultId);
+      return;
+    }
+    if (res.error) {
+      this.status.set({ note: res.error === 'evicted' ? S.colTools.gone : res.message || S.colTools.viewFailed });
+      return;
+    }
+    const old = v.viewId;
+    v.viewId = res.viewResultId;
+    v.filters = next.filters;
+    v.hidden = next.hidden;
+    this.showTable({ columns: res.columns, rowCount: res.rowCount, rows: res.rows, truncated: false }, true, res.viewResultId);
+    if (old) this.runner.release(old);
+    const f = formatsFor(this.settings.culture).integer;
+    const parts = [S.colTools.viewOnly, S.colTools.viewRows(f.format(res.rowCount), f.format(res.sourceRows))];
+    if (v.filters.length) parts.push(S.colTools.viewFilters(v.filters.length));
+    if (v.hidden.length) parts.push(S.colTools.viewHidden(v.hidden.length));
+    this.viewChip.textContent = parts.join(' · ');
+    this.viewChip.hidden = false;
+    this.viewClear.hidden = false;
+    this.viewNote.textContent = S.colTools.viewApplied(f.format(res.rowCount), f.format(res.sourceRows));
+  }
+
+  clearView() {
+    const v = this.view;
+    if (!v) return;
+    if (v.viewId) this.runner.release(v.viewId);
+    v.viewId = null;
+    v.filters = [];
+    v.hidden = [];
+    this.viewChip.hidden = true;
+    this.viewClear.hidden = true;
+    const r = this.lastResult;
+    if (r && r.status === 'ok' && r.result && r.result.value) this.showTable(r.result.value, true, v.baseId);
+    this.viewNote.textContent = S.colTools.viewCleared;
+  }
+
+  openProfile(col) {
+    const id = this.shownResultId();
+    if (!id) return;
+    profileSheet({
+      column: col.name,
+      columnType: col.type,
+      load: () => this.runner.profile(id, col.name),
+      formats: formatsFor(this.settings.culture),
+      onFilter: (spec) => this.view && this.applyView(this.withFilter(spec))
+    });
+  }
+
+  addStepTarget() {
+    if (!this.hasSteps() || !this.currentResult || !this.view) return null;
+    if (this.currentResult.query !== this.item.name) return null;
+    const steps = this.stepsModel.steps;
+    let name = null;
+    for (const [n, r] of this.stepResults) if (r && r.resultId === this.view.baseId) name = n;
+    return (name ? steps.find((x) => x.name === name) : steps[steps.length - 1]) || null;
+  }
+
+  openAddStep(col) {
+    const st = this.addStepTarget();
+    if (!st) {
+      this.status.set({ note: S.colTools.stepNoPlace });
+      return;
+    }
+    stepDialog({
+      column: col.name,
+      type: col.type,
+      prevName: st.name,
+      existing: this.stepsModel.steps.map((x) => x.name),
+      onInsert: ({ name, expr }) => {
+        const t = this.editor.getText();
+        const wired = insertStepAfter(t, st.index, name, expr, { rewire: true });
+        const res = wired.ok ? wired : insertStepAfter(t, st.index, name, expr);
+        if (!res.ok) return { ok: false, reason: res.reason };
+        if (!this.applySteps(res, S.colTools.stepInserted(name), name)) return { ok: false, reason: S.colTools.viewFailed };
+        const added = this.stepsModel.steps.find((x) => x.name === name);
+        if (added) this.editor.goto(this.lineOfOffset(this.editor.getText(), added.parts.coreStart), 1);
+        this.runSteps(name);
+        return { ok: true };
+      }
+    });
   }
 
   async showDifferences() {
@@ -1702,6 +1841,7 @@ export class Workspace {
 
   showTable(t, remote, resultId = null) {
     this.clearMessage();
+    if (!remote) this.grid.columnTools = null;
     this.grid.el.hidden = false;
     this.grid.setCulture(this.settings.culture);
     this.grid.setData({ columns: t.columns, rowCount: t.rowCount, rows: t.rows, loader: remote && t.rowCount > t.rows.length ? (start, count) => this.runner.rows(start, count, { resultId }) : null });

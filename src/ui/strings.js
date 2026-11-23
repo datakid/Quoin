@@ -253,6 +253,8 @@ export const S = {
   recipeTooLarge: 'This recipe file is larger than 256 KB and was not opened.',
   recipeUnreadable: 'This recipe file could not be read.',
   recipeNotPreviewable: 'This kind of recipe cannot be previewed here yet.',
+  recipeComputeNotYet: 'A recipe that Excel computes on open cannot be previewed here yet.',
+  recipeOutputNotYet: (mode) => `A recipe that writes ${{ newSheet: 'a new sheet in a copy', combined: 'one combined workbook', inPlace: 'the result in place' }[mode] || 'this kind of output'} cannot be previewed here yet. Only a new file for each unit can.`,
   recipeWarning: (path) => `Unknown field ${path} was ignored.`,
   recipeIgnoredBlock: (path) => `The ${path} section does not belong to this recipe and was ignored.`,
   recipeWarnings: 'Notes on this recipe',

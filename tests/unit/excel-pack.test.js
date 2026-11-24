@@ -42,7 +42,7 @@ test('every output opens with Quoin and appears in the checklist with its SHA-25
   const { files } = await built();
   const list = new TextDecoder().decode(files.get('CHECKLIST.md'));
   const outputs = [...files.keys()].filter((n) => n.includes('/output/'));
-  assert.equal(outputs.length, 17);
+  assert.equal(outputs.length, 18);
   for (const name of outputs) {
     const wb = await openWorkbook(files.get(name), name.split('/').pop());
     assert.ok(wb.sheets.length > 0, name);
@@ -90,5 +90,23 @@ test('the new-file outputs in the pack are byte for byte what the app writes for
   assert.equal(inPack.length, 2);
   assert.equal(written.length, 2);
   for (const o of written) assert.deepEqual(Array.from(files.get(inPack.find((n) => n.endsWith(`/${o.name}`)))), Array.from(o.bytes), o.name);
+});
+
+test('the no-bindings variant of case 01 differs from output.xlsx only in the permission bindings of its query data', async () => {
+  const { files } = await built();
+  const a = await openWorkbook(files.get('cases/01-query-replace/output/output.xlsx'), 'a.xlsx');
+  const b = await openWorkbook(files.get('cases/01-query-replace/output/output-no-bindings.xlsx'), 'b.xlsx');
+  assert.ok(a.mashup.model.permissionBindings.length > 0);
+  assert.equal(b.mashup.model.permissionBindings.length, 0);
+  assert.deepEqual(Array.from(b.mashup.model.packageBytes), Array.from(a.mashup.model.packageBytes));
+  assert.deepEqual(Array.from(b.mashup.model.raw.permissions), Array.from(a.mashup.model.raw.permissions));
+  assert.deepEqual(Array.from(b.mashup.model.raw.metadata), Array.from(a.mashup.model.raw.metadata));
+  const changed = [];
+  for (const name of a.pkg.names ? await a.pkg.names() : []) {
+    const x = await a.pkg.bytes(name);
+    const y = await b.pkg.bytes(name);
+    if (x.length !== y.length || x.some((v, i) => v !== y[i])) changed.push(name);
+  }
+  assert.deepEqual(changed, ['customXml/item1.xml']);
 });
 

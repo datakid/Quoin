@@ -432,5 +432,14 @@ Changed expectations (two existing unit tests assumed Transform was unwired): `p
 Flaky test fixed on the way: CI at `5d2e601` failed `outputs.test.js` "tablesToXlsx with one table is byte-compatible with tableToXlsx" (not related to this change). It compared two workbooks built without a fixed clock, and the zip stores seconds, so the two calls differing by a second made the bytes differ. The test now passes the same fixed clock to both; what it asserts is unchanged.
 Real Excel: not checked. The pack's `new-file` case is the one to open first.
 
+### Verified without Excel, and what only Excel can settle (integrator)
+Why: the person has no Excel today, so every output in the pack was checked with tools that are not Quoin.
+- Checked and passing: all 14 pack inputs and all 18 outputs against an independent structural checker (zip entries, content types per part and per relationship, relationship targets, worksheet element order, shared strings, table parts, DataMashup framing). The checker was calibrated on inputs Excel itself wrote (it must pass them) and on mutated outputs (it must fail them); one mutation was missed until the per-relationship content-type check was added.
+- openpyxl loads every input and output.
+- LibreOffice converts every output, and the values match the sources: new-file StudentNames is Name and Age with Alice 30, Bob 25, Charlie 35; StudentResults adds a real date in `DateTimeGenerated`; the new-sheet output has `Result` and `Result-2`; the combined output has three sheets.
+- DataMashup parsed a second time outside Quoin (MS-QDEFF framing): version 0, package, permissions, metadata and bindings lengths add up with nothing left over, and the package bytes of an output equal its input's when the recipe does not change them.
+- Added: `output-no-bindings.xlsx` in case 01. It is `output.xlsx` with `PermissionBindingsLength = 0` and differs in `customXml/item1.xml` only (a test and the independent parse both say so). If Excel shows a repair message on `output.xlsx`, this file says whether the stored bindings are the cause (QUOIN_SPEC MX-3 names this as the fallback).
+- Not settled and not claimable from here: that Excel opens any output with no repair message; that Excel accepts the unchanged PermissionBindings after an M edit; that a refresh runs; the new-sheet, combined and in-place modes in Excel; whether Excel shows a trust prompt for an injected query. Those are the checklist rows.
+
 ### Next
 Real-Excel check of the pack (a person). Then F3-06 (new sheet in a copy) is wired the same way, then F3-07 (combined, which also needs a combined step across files in the run), each after its own check. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged.

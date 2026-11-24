@@ -1,5 +1,5 @@
 {
-  "version": "c721583333648616",
+  "version": "d1290a78063dfa53",
   "files": [
     "./",
     "index.html",
@@ -112,6 +112,7 @@
     "src/core/wb/run-plan.js",
     "src/core/wb/sources.js",
     "src/core/wb/status.js",
+    "src/core/wb/step-delta.js",
     "src/core/wb/step-diff.js",
     "src/core/wb/step-kinds.js",
     "src/core/wb/steps.js",

@@ -1,7 +1,27 @@
-import { h, clear } from '../dom.js';
+import { h, clear, placeBelow } from '../dom.js';
 import { S, fmt } from '../strings.js';
 import { menu, popover } from '../dialogs.js';
 import { matches } from '../../app/commands.js';
+import { shapeOf, stepDelta, rowsCountable } from '../../core/wb/step-delta.js';
+
+export function deltaParts(d) {
+  if (!d) return [];
+  if (d.type === 'rows') return [d.rows === null ? S.stepsPanel.rowsNotCounted : S.stepsPanel.rows(d.rows)];
+  if (d.type === 'same') return [S.stepsPanel.d.same];
+  if (d.type === 'kind') return [d.kind === 'list' ? S.stepsPanel.d.list(d.count) : S.stepsPanel.d.kinds[d.kind] || d.kind];
+  return d.parts.map((p) => S.stepsPanel.d[p.k](p.n));
+}
+
+const PEEK_DELAY = 400;
+const PEEK_ROWS = 5;
+
+function peekText(c) {
+  if (c === null || c === undefined) return S.colTools.nullLabel;
+  if (typeof c === 'string') return c;
+  if (typeof c === 'number' || typeof c === 'boolean') return String(c);
+  if (c.k === 'number') return c.special;
+  return c.text !== undefined ? c.text : c.k || '';
+}
 
 const KEYS = { rename: 'F2', del: 'Delete', bypass: 'b', up: 'Alt+Shift+ArrowUp', down: 'Alt+Shift+ArrowDown', runTo: 'Mod+F10', dup: 'Mod+D', insert: 'Insert' };
 
@@ -27,6 +47,20 @@ export class StepsPanel {
     this.list.addEventListener('keydown', (ev) => this.onKey(ev));
     this.dropNote = h('p', { class: 'panel-note item-meta step-drop-note', hidden: true, role: 'status' });
     host.append(this.dropNote);
+    this.countOptions = { countRows: true, limit: 2000000 };
+    this.peekEl = null;
+    this.peekTimer = null;
+    this.peekFor = null;
+    this.list.addEventListener('mouseover', (ev) => this.schedulePeek(ev.target.closest && ev.target.closest('.step-row')));
+    this.list.addEventListener('focusin', (ev) => this.schedulePeek(ev.target.closest && ev.target.closest('.step-row')));
+    this.list.addEventListener('mouseleave', () => this.hidePeek());
+    this.list.addEventListener('focusout', (ev) => {
+      if (!this.list.contains(ev.relatedTarget)) this.hidePeek();
+    });
+    this.list.addEventListener('click', () => this.hidePeek());
+    this.list.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') this.hidePeek();
+    });
     this.drag = null;
     this.dropTo = null;
     this.list.addEventListener('dragover', (ev) => this.onDragOver(ev));
@@ -34,6 +68,51 @@ export class StepsPanel {
     this.list.addEventListener('dragleave', (ev) => {
       if (!this.list.contains(ev.relatedTarget)) this.clearDrop();
     });
+  }
+
+  setCountOptions(o) {
+    this.countOptions = { countRows: o.countRows !== false, limit: o.limit };
+  }
+
+  schedulePeek(row) {
+    if (!row || !this.model) {
+      this.hidePeek();
+      return;
+    }
+    const st = this.stepAt(row);
+    if (this.peekFor === st.name && this.peekEl) return;
+    this.hidePeek();
+    this.peekFor = st.name;
+    this.peekTimer = setTimeout(() => this.showPeek(row, st), PEEK_DELAY);
+  }
+
+  showPeek(row, st) {
+    const r = this.results.get(st.name);
+    if (!r || r.status !== 'ok' || !r.result || r.result.kind !== 'table' || !row.isConnected) return;
+    const t = r.result.value;
+    const shown = t.rows.slice(0, PEEK_ROWS);
+    const more = t.rowCount - shown.length;
+    const id = `peek-${Date.now()}`;
+    const table = h('table', { class: 'peek-table' },
+      h('thead', null, h('tr', null, ...t.columns.map((c) => h('th', { scope: 'col' }, c.name, h('span', { class: 'peek-type' }, c.type))))),
+      h('tbody', null, ...shown.map((cells) => h('tr', null, ...cells.map((c) => h('td', null, peekText(c)))))));
+    this.peekEl = h('div', { class: 'step-peek', role: 'tooltip', id },
+      h('div', { class: 'peek-title' }, S.stepsPanel.peekTitle(st.name)),
+      shown.length ? table : h('p', { class: 'item-meta' }, S.stepsPanel.peekNoRows),
+      more > 0 ? h('p', { class: 'item-meta' }, S.stepsPanel.peekMore(more)) : null);
+    placeBelow(this.peekEl, row, 'right');
+    row.setAttribute('aria-describedby', id);
+    this.peekRow = row;
+  }
+
+  hidePeek() {
+    clearTimeout(this.peekTimer);
+    this.peekTimer = null;
+    this.peekFor = null;
+    if (this.peekRow) this.peekRow.removeAttribute('aria-describedby');
+    this.peekRow = null;
+    if (this.peekEl) this.peekEl.remove();
+    this.peekEl = null;
   }
 
   showUndo(label, ms = 10000) {
@@ -89,6 +168,7 @@ export class StepsPanel {
   render(model, caretName = null) {
     this.model = model;
     this.caret = caretName;
+    this.hidePeek();
     clear(this.list);
     const shape = model ? model.shape : 'invalid';
     this.runBtn.hidden = shape !== 'let';
@@ -104,10 +184,17 @@ export class StepsPanel {
     }
     const editable = shape === 'let';
     let prevRows = null;
+    let prevShape = null;
     model.steps.forEach((st, i) => {
       const r = this.results.get(st.name);
       const bead = h('span', { class: `bead bead-${r ? r.status : 'never'}`, role: 'img', 'aria-label': S.stepsPanel.status[r ? r.status : 'never'] });
-      const delta = r && r.status === 'ok' && r.rowCount !== undefined ? (prevRows !== null && prevRows !== r.rowCount ? S.stepsPanel.delta(r.rowCount - prevRows) : S.stepsPanel.rows(r.rowCount)) : null;
+      const shape = r && r.status === 'ok' ? shapeOf(r.result) : null;
+      if (shape && shape.kind === 'table' && !rowsCountable(shape.rows, this.countOptions)) shape.rows = null;
+      let all = [];
+      if (shape) all = deltaParts(stepDelta(prevShape, shape));
+      else if (r && r.status === 'ok' && r.rowCount !== undefined && rowsCountable(r.rowCount, this.countOptions)) all = [prevRows !== null && prevRows !== r.rowCount ? S.stepsPanel.delta(r.rowCount - prevRows) : S.stepsPanel.rows(r.rowCount)];
+      const delta = all.length ? all.slice(0, 2).join(' \u00b7 ') : null;
+      if (shape && shape.kind === 'table') prevShape = shape;
       if (r && r.status === 'ok' && r.rowCount !== undefined) prevRows = r.rowCount;
       const warn = st.forward.length ? h('span', { class: 'step-warn', title: S.stepsPanel.forward(st.forward[0]) }, '!') : null;
       const row = h('button', { class: `step-row${st.bypassed ? ' is-bypassed' : ''}${st.name === caretName ? ' is-current' : ''}`, type: 'button', 'data-index': String(i), tabindex: st.name === (this.focusName || caretName || model.steps[0].name) ? '0' : '-1', 'aria-current': st.name === caretName ? 'true' : null, onclick: () => this.actions.go(st) },
@@ -115,7 +202,7 @@ export class StepsPanel {
         h('span', { class: 'step-name' }, st.name),
         st.bypassed ? h('span', { class: 'step-tag' }, S.stepsPanel.bypassed) : null,
         h('span', { class: 'step-kind' }, S.stepKind[st.kind] || S.stepKind.custom),
-        delta ? h('span', { class: 'step-delta item-meta' }, delta) : null,
+        delta ? h('span', { class: 'step-delta item-meta', title: all.length > 2 ? all.join(' \u00b7 ') : null }, delta) : null,
         warn);
       const more = editable ? h('button', { class: 'btn btn-quiet step-more', type: 'button', 'aria-label': `${S.stepsPanel.menu} ${st.name}`, 'aria-haspopup': 'menu', onclick: (ev) => this.openMenu(ev.currentTarget, st) }, '\u22ef') : null;
       const grip = editable ? h('span', { class: 'step-grip', 'aria-hidden': 'true', title: S.stepsPanel.grip }, '\u22ee\u22ee') : null;
@@ -317,6 +404,11 @@ export class StepsPanel {
     input.addEventListener('blur', () => finish(true));
   }
 
+  pinnable(st) {
+    const r = this.results.get(st.name);
+    return !!(r && r.status === 'ok' && r.resultId && r.result && r.result.kind === 'table');
+  }
+
   openMenu(anchor, st) {
     const n = this.model.steps.length;
     const entries = [
@@ -327,6 +419,7 @@ export class StepsPanel {
       { label: S.stepsPanel.duplicate, run: () => this.actions.duplicate(st) },
       { label: st.bypassed ? S.stepsPanel.restore : S.stepsPanel.bypass, run: () => this.actions.bypass(st), disabled: st.index === 0 },
       { label: S.stepsPanel.runTo, run: () => this.actions.runTo(st) },
+      { label: S.stepsPanel.pin, run: () => this.actions.pin(st), disabled: !this.pinnable(st) },
       { label: S.stepsPanel.del, run: () => this.actions.del(st), disabled: n === 1 }
     ];
     menu(anchor, entries, () => anchor.focus());

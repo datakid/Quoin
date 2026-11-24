@@ -20,6 +20,7 @@ import { openFind } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
 import { insertViewSteps } from '../core/wb/view-steps.js';
 import { OpHistory } from '../core/wb/op-history.js';
+import { DEFAULT_LIMITS } from '../core/limits.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
@@ -373,7 +374,20 @@ export class Workspace {
   }
 
   async pinCurrent() {
-    const c = this.currentResult;
+    await this.pinEntry(this.currentResult);
+  }
+
+  async pinStep(st) {
+    const r = this.stepResults.get(st.name);
+    if (!r || r.status !== 'ok' || !r.resultId || !r.result || r.result.kind !== 'table') {
+      this.status.set({ note: S.dock.pinNone });
+      return;
+    }
+    const t = r.result.value;
+    await this.pinEntry({ id: r.resultId, query: this.item.name, step: st.name, columns: t.columns, rowCount: t.rowCount, at: Date.now() });
+  }
+
+  async pinEntry(c) {
     if (!c || !c.id) {
       this.status.set({ note: S.dock.pinNone });
       return;
@@ -535,6 +549,7 @@ export class Workspace {
     this.stepsPanel.setHistorySize(this.item && this.item.type === 'query' ? this.history().size : 0);
     const model = stepsOf(this.editor.getText(), 0, { members: new Set(this.session.queries.map((q) => q.name)) });
     this.stepsModel = model;
+    this.stepsPanel.setCountOptions({ countRows: this.settings.countRows, limit: DEFAULT_LIMITS.stepCountRows });
     this.stepsPanel.setResults(this.stepResults);
     this.stepsPanel.setRefreshedBy(this.item && this.item.type === 'query' ? this.refreshedByFor(this.item.name) : []);
     this.stepsPanel.render(model, this.caretStep(model));
@@ -695,7 +710,7 @@ export class Workspace {
     if (name !== this.stepsPanel.caret) this.stepsPanel.render(this.stepsModel, name);
   }
 
-  applySteps(res, done, focusName) {
+  applySteps(res, done, focusName, rerun = true) {
     if (!res.ok) {
       this.stepsPanel.announce(res.reason);
       this.status.set({ note: res.reason });
@@ -711,7 +726,13 @@ export class Workspace {
       this.stepsPanel.showUndo(done);
       this.stepsPanel.setHistorySize(this.history().size);
     }
+    if (rerun) this.autoRunSteps();
     return true;
+  }
+
+  autoRunSteps() {
+    if (!this.settings.autoRunSteps || this.runner.running || !this.stepsModel || this.stepsModel.shape !== 'let') return;
+    this.runSteps(null);
   }
 
   historyKey() {
@@ -739,6 +760,7 @@ export class Workspace {
     this.stepsPanel.hideUndo();
     this.stepsPanel.setHistorySize(hist.size);
     this.stepsPanel.announce(S.stepsPanel.undone(op.label));
+    this.autoRunSteps();
     return true;
   }
 
@@ -752,6 +774,7 @@ export class Workspace {
     this.stepsPanel.hideUndo();
     this.stepsPanel.setHistorySize(this.history().size);
     this.stepsPanel.announce(label);
+    this.autoRunSteps();
   }
 
   stepActions() {
@@ -789,6 +812,7 @@ export class Workspace {
       bypass: (st) => this.applySteps(st.bypassed ? unbypassStep(text(), st.index) : bypassStep(text(), st.index), (st.bypassed ? S.stepsPanel.done.restore : S.stepsPanel.done.bypass)(st.name), st.name),
       duplicate: (st) => this.applySteps(duplicateStep(text(), st.index), S.stepsPanel.done.duplicate(st.name), st.name),
       runTo: (st) => this.runSteps(st.name),
+      pin: (st) => this.pinStep(st),
       runSteps: () => this.runSteps(null),
       can: (st, to) => {
         const c = canMove(stepsOf(text(), 0), st.index, to);
@@ -1951,7 +1975,7 @@ export class Workspace {
     if (!v || !st || (!v.filters.length && !v.hidden.length)) return;
     const res = insertViewSteps(this.editor.getText(), st.index, { filters: v.filters, hidden: v.hidden }, { prevName: st.name, existing: this.stepsModel.steps.map((x) => x.name), names: S.stepNames });
     const last = res.ok ? res.added[res.added.length - 1] : null;
-    if (!this.applySteps(res, S.colTools.viewStepsAdded(res.ok ? res.added.length : 0), last)) return;
+    if (!this.applySteps(res, S.colTools.viewStepsAdded(res.ok ? res.added.length : 0), last, false)) return;
     const added = this.stepsModel.steps.find((x) => x.name === last);
     if (added) this.editor.goto(this.lineOfOffset(this.editor.getText(), added.parts.coreStart), 1);
     this.runSteps(last);
@@ -1973,7 +1997,7 @@ export class Workspace {
         const wired = insertStepAfter(t, st.index, name, expr, { rewire: true });
         const res = wired.ok ? wired : insertStepAfter(t, st.index, name, expr);
         if (!res.ok) return { ok: false, reason: res.reason };
-        if (!this.applySteps(res, S.colTools.stepInserted(name), name)) return { ok: false, reason: S.colTools.viewFailed };
+        if (!this.applySteps(res, S.colTools.stepInserted(name), name, false)) return { ok: false, reason: S.colTools.viewFailed };
         const added = this.stepsModel.steps.find((x) => x.name === name);
         if (added) this.editor.goto(this.lineOfOffset(this.editor.getText(), added.parts.coreStart), 1);
         this.runSteps(name);

@@ -50,6 +50,8 @@ export function settingsDialog(settings, onChange) {
   const rows = h('input', { id: 'set-rows', type: 'number', min: '1000', max: '5000000', step: '1000', value: String(settings.rowCap) });
   const guard = h('input', { id: 'set-guard', type: 'checkbox', checked: settings.csvGuard });
   const upstream = h('input', { id: 'set-upstream', type: 'checkbox', checked: settings.useUpstream });
+  const countRows = h('input', { id: 'set-count', type: 'checkbox', checked: settings.countRows !== false });
+  const autoRun = h('input', { id: 'set-autorun', type: 'checkbox', checked: !!settings.autoRunSteps });
   const dlg = h(
     'dialog',
     { 'aria-labelledby': 'set-title' },
@@ -61,12 +63,14 @@ export function settingsDialog(settings, onChange) {
       h('label', { for: 'set-timeout' }, S.timeoutLabel), timeout,
       h('label', { for: 'set-rows' }, S.rowCapLabel), rows,
       h('label', { class: 'check', for: 'set-guard' }, guard, S.csvGuardLabel), h('span'),
-      h('label', { class: 'check', for: 'set-upstream' }, upstream, S.upstreamLabel), h('span')),
+      h('label', { class: 'check', for: 'set-upstream' }, upstream, S.upstreamLabel), h('span'),
+      h('label', { class: 'check', for: 'set-count' }, countRows, S.countRowsLabel), h('span'),
+      h('label', { class: 'check', for: 'set-autorun' }, autoRun, S.autoRunLabel), h('span')),
     h('p', { class: 'item-meta' }, S.settingsNote),
     h('div', { class: 'dialog-actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: () => {
       const t = Math.max(1, Math.min(300, Number(timeout.value) || 30));
       const r = Math.max(1000, Math.min(5000000, Number(rows.value) || 1000000));
-      onChange({ theme: theme.value, density: density.value, culture: culture.value, timeoutS: t, rowCap: r, csvGuard: guard.checked, useUpstream: upstream.checked });
+      onChange({ theme: theme.value, density: density.value, culture: culture.value, timeoutS: t, rowCap: r, csvGuard: guard.checked, useUpstream: upstream.checked, countRows: countRows.checked, autoRunSteps: autoRun.checked });
       dlg.close();
     } }, S.save), h('button', { class: 'btn', type: 'button', onclick: () => dlg.close() }, S.close))
   );

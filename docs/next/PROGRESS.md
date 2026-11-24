@@ -460,3 +460,19 @@
 #### Not done in WB-14 and WB-15 (still)
 - Peek, pin a step, Invoke for function queries, delta chips beyond row counts, the Count rows setting, the multi-step preview popover, Auto-run steps after structural edits, the editor gutter band.
 
+### WB-14, WB-15: delta chips, peek, Pin a step, Count rows and Auto-run settings
+- `src/core/wb/step-delta.js` (pure): `shapeOf` takes a step's preview result, `stepDelta(prev, cur)` compares it with the previous table step, `schemaChange` counts added, removed and renamed columns (a rename is a column that changed name in place) and changed types, `rowsCountable` applies the setting and `limits.stepCountRows` (2 000 000, new in `limits.js`). 9 unit tests.
+- Steps panel chips: the first table step shows its row count; each later step shows what it changed, rows first (`−312 rows`), then `+1 col`, `−2 cols`, `renamed 2`, `3 types`, at most two on the chip and all of them in its title; `schema same` when nothing changed; a list shows `list 14`, other values their kind. A step that did not run shows nothing.
+- Peek: hovering or focusing a step for 400 ms shows a tooltip (not interactive, `aria-describedby` on the row, closed by leaving, Escape, a click or a re-render) with the step's column names and types and its first five rows, and `N more rows`. It reads the preview the step already carries, so it asks the worker for nothing and never moves the cursor. Lists and other values have no peek.
+- Pin a step: the step's actions menu has Pin this result (disabled unless the step ran and its result is a table). It pins that step's own result id, whichever result is shown, and pinning the same one twice does nothing. `pinCurrent` and `pinStep` share `pinEntry`.
+- Settings dialog: Count rows for every step (default on; off, or a step over the limit, shows `rows not counted` and reports only schema changes) and Run the steps again after structural edits (default off; every `applySteps` operation, Undo and a restore from History then run the steps; Add as a step and Add as steps already run to the new step themselves, so they skip it). A settings change refreshes the steps panel at once.
+- Tests: `tests/e2e/step-delta.spec.js` (9: the full chip sequence on a seven step query, two changes at once with the title, hover and focus peek, no peek for a list, Pin this result and its dedupe, disabled for a list, Count rows off, Auto-run off and on) and `tests/unit/wb-step-delta.test.js`. The four `09-settings-dialog` baselines were regenerated after looking at them (two new checkboxes).
+
+#### Deviations
+- Row counts are known without any extra work in this engine (a table is materialised), so Count rows only decides what is shown; it does not skip any work.
+- Only the first two parts of a chip are shown on the row, to keep it short.
+- Like the other settings, these two are not remembered between sessions (the dialog already says only the theme is).
+
+#### Not done in WB-14 and WB-15 (still)
+- Invoke for function queries, the multi-step preview popover (Apply and Cancel), the editor gutter band.
+

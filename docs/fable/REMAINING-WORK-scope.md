@@ -14,9 +14,9 @@ Sixty cards. Three states, because "built" is not "finished":
 
 So 22 cards are finished, 21 are built but unproven, 17 are open. For F3-05 to F3-09 and F2-04 to F2-09 the card itself names a browser test; those specs do not exist, so they cannot count as finished.
 
-Browser specs the plan names and the repository does not have: `fable-cancel`, `fable-failures`, `fable-batch50`, `fable-transform` (F3-05 to F3-09), `fable-worked-example`, `fable-recipes`, `fable-privacy`, `fable-memory`.
+Browser specs the plan names and the repository does not have, as of `fable` 9ce0278: `fable-worked-example`, `fable-recipes`, `fable-privacy`, `fable-memory`. (`fable-failures` and `fable-transform` have since been added by the integrator.)
 
-Transform recipes are not reachable from the app yet: `PREVIEWABLE` in `src/app/main.js` lists inject, replace and align only, and nothing in the worker or the output step handles `outputs` or `sheetParts`.
+Transform: a new file per unit (F3-05) is wired in the app, Preview and Get work. New sheet, Combined and Excel compute are not wired, and in place is held; all of them wait for the real-Excel check.
 
 ## 2. The critical path
 

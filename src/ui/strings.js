@@ -527,6 +527,16 @@ export const S = {
     stepPrev: 'Go to the previous step',
     runSelected: 'Run the selected queries'
   },
+  resultHead: {
+    label: 'Result details',
+    rows: (n, nText) => `${nText} ${n === 1 ? 'row' : 'rows'}`,
+    cols: (n) => `${n} ${n === 1 ? 'column' : 'columns'}`,
+    ms: (n) => `${n} ms`,
+    step: (i, n) => `step ${i} of ${n}`,
+    export: 'Get a file',
+    exportView: 'This exports the view you see, not the whole result.',
+    exportFailed: 'The result could not be exported.'
+  },
   colTools: {
     menuFilter: 'Filter…',
     menuHide: 'Hide in view',
@@ -603,7 +613,7 @@ export const S = {
   },
   dock: {
     label: 'Result dock',
-    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', problems: 'Problems', queue: 'Queue', graph: 'Graph' },
+    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', problems: 'Problems', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
     pin: 'Pin this result',
     unpin: 'Unpin',
     show: 'Show',
@@ -615,6 +625,7 @@ export const S = {
     pinnedEmpty: 'Nothing is pinned. Pin a result to keep it while you change the query.',
     stale: 'Out of date',
     shape: (r, c) => `${r} ${r === 1 ? 'row' : 'rows'} \u00d7 ${c} ${c === 1 ? 'column' : 'columns'}`,
+    changesEmpty: 'Nothing has changed since the workbook was opened.',
     queueEmpty: 'No batch has run yet. Run all, run stale or run the selected queries to fill this list.',
     queueHead: { name: 'Query', status: 'Status', rows: 'Rows', time: 'Time' },
     queueSummary: (n, ms) => `${n} ${n === 1 ? 'query' : 'queries'}, ${ms} ms in total`,
@@ -623,6 +634,8 @@ export const S = {
     compareNeed: 'Pin a result and keep a second one on screen, or pin two, to compare them.',
     compareA: 'First result',
     compareB: 'Second result',
+    sideBySide: 'Show side by side',
+    sideNote: 'Scrolling one result scrolls the other. Cells that differ in the rows compared are marked in both.',
     compareSame: 'Choose two different results.',
     comparing: 'Comparing.',
     schema: 'Columns',

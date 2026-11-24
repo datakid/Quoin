@@ -64,6 +64,7 @@ Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md
 - WB-13 palette and command registry. WB-14 Steps panel (partial). WB-17 dependency lists and graph. WB-18 Problems (dialog and counter). WB-19 sources inventory (no UI). WB-21 find and replace. WB-22 macro outline and per-procedure revert. WB-23 structure checks (no UI). WB-24 call graph (no UI). WB-25 macro to query links with "Run these queries". WB-26 step-level change summary. WB-27 budgets for what exists, with `many-queries.xlsx`.
 - WB-14/15 (part): F10 step cursor, drag reorder, Insert step after and the narrow Steps sheet in `steps-panel.js` and `Workspace`, `tests/e2e/step-ops.spec.js`.
 - WB-16 (first slice): `src/ui/wb/dock.js`, `dock-views.js`, `problems-view.js`, `graph-view.js` (`mountGraph`), `src/core/wb/compare-results.js`, pin and tab handling in `Workspace`, `tests/e2e/dock.spec.js`.
+- WB-16 (third slice): result header line, verdict chip, `Get a file` per result id, Changes tab (`changesBody` shared with the dialog), side by side compare; `tests/e2e/result-head.spec.js`, `tests/e2e/changes-tab.spec.js`.
 - WB-16 (second slice, the column header menu): `src/core/wb/profile.js`, `src/core/wb/view-ops.js`, `view` and `profile` worker messages, `src/ui/wb/column-tools.js` (filter dialog, Add as a step dialog, profile sheet), `grid.columnTools`, view state in `Workspace`, `tests/e2e/column-tools.spec.js`.
 - WB-10 (part): `src/ui/wb/panes.js`, collapse rails, inspector resizer, F6, the 390 px bottom bar and Steps sheet, the run menu, `tests/e2e/layout.spec.js`.
 - WB-12 tabs and split: `src/core/wb/tabs-model.js` (unit tests), `src/ui/wb/tabs.js`, tab and group handling in `Workspace` (`select`, `present`, `applyTabState`, `addGroup`), the five tab commands, `tests/e2e/tabs.spec.js`.
@@ -71,12 +72,12 @@ Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md
 
 Commits on `beta` from this series (newest first): `a9ebc40` WB-16 column header menu, `94e52b1` WB-14/15 part, `d6bace6` WB-16 first slice, `8d96afd` WB-10 part, `1772374` WB-12, `424b9de` WB-11. Nothing is uncommitted.
 
-Last verified: lint 0 findings; unit 1105 pass (5 skipped by design); browser suite 248 pass, 0 fail on the code as committed (excluding `T-P-14b`, `T-E-12`, `T-I-04`), then the spec for the column tools run again alone after its last edit (12 pass, one test swapped); visual baselines regenerated after each UI change and looked at. Not run: `T-E-12`, `T-P-14b`, the manual browser matrix in `05_TEST_PLAN.md` §4.
+Last verified: lint 0 findings; unit 1105 pass (5 skipped by design); browser suite 258 pass, 0 fail on the code as committed (excluding `T-P-14b`, `T-E-12`, `T-I-04`); the visual spec run alone, 40 pass; visual baselines regenerated after each UI change and looked at. Not run: `T-E-12`, `T-P-14b`, the manual browser matrix in `05_TEST_PLAN.md` §4.
 
 ## What is left, in the order to do it
 
 1. **WB-10 remainder**: Run as the one filled button in the top bar, the Changes split button, layout presets (Write, Debug, Review), the top bar overflow menu. Collapse, resize, F6 and the mobile bottom bar are done (see `PROGRESS.md`).
-2. **WB-16 remainder**: the result header line and Excel verdict chip, Export per result id, side by side compare, the Changes tab, a view sort in the column menu. Tabs, Pin, Pinned, Compare (schema, rows, cells), Queue, Problems, Graph and the column header menu (filter, hide, profile, Add as a step) are done (see `PROGRESS.md`).
+2. **WB-16 remainder**: a view sort in the column menu, and turning the chip's view filters into steps in one click. Everything else in WB-16 is done: tabs, Pin, Pinned, Compare (schema, rows, cells, side by side), Queue, Problems, Graph, Changes, the column header menu, the result header line and verdict chip, Get a file (see `PROGRESS.md`).
 3. **WB-14 and WB-15 remainder**: peek, pin a step, Invoke for function queries, delta chips beyond row counts, the Count rows setting, turning the chip's view filters into steps in one click, the operation history with Undo and the History popover, the multi-step preview popover, Auto-run steps after structural edits, the editor gutter band. F10 cursor, drag with per-gap checks, Insert step after and the 640 to 1099 px sheet are done (see `PROGRESS.md`).
 4. **WB-19 UI**: Sources list in the top bar menu, binding up front, and the check before Run all.
 5. **WB-20 editor intelligence**: completion (library names from `lib-names.js`, steps, queries, VBA), signature help, go to definition and find references (`refs.js` for VBA, `deps.js` for queries), the "no callers" note. Show `structure.js` problems as gutter markers and in the Download tooltip.
@@ -88,7 +89,7 @@ Definition of done: every item above built, `npm test` green (excluding what can
 ## How to start in a fresh chat (about ten minutes)
 
 1. Clone `beta` only: `git -c http.extraHeader=... clone --single-branch --branch beta https://github.com/datakid/power-query-manager.git quoin`, set the local identity, `npm install`, `git checkout package-lock.json`.
-2. Write `/home/claude/pw.local.config.js` (above). `npm run test:lint`, `npm run test:unit`, then one detached browser run to see the baseline: about 249 pass (a long detached run can vanish; start it again).
+2. Write `/home/claude/pw.local.config.js` (above). `npm run test:lint`, `npm run test:unit`, then one detached browser run to see the baseline: 258 pass (a long detached run can vanish; start it again).
 3. Read `PROGRESS.md` from the bottom up (newest sections first) to learn what each module is called and where the tests are, then `06_WORKBENCH.md` for the item you take.
 4. Suggested order: the rest of WB-16, WB-14 and WB-15, WB-10 remainder, WB-19, WB-20, WB-27, WB-28.
 5. Each item: build, unit tests for the pure part, an e2e spec, lint, build the manifest, regenerate baselines if the UI changed, full browser run, document in `PROGRESS.md` (changed expectations, deviations, not done), commit with explicit paths, push `beta`, one line to the owner.

@@ -430,3 +430,18 @@
 - The result header line and the Excel verdict chip, Export per result id, side by side Compare, the Changes tab.
 - A view sort in the menu, and filtering a view by a cell's value from the cell menu.
 
+### WB-16: result header line, verdict chip, per-result export, Changes tab, side by side compare
+- Result tab: the Pin row now carries a header line (`6 rows · 3 columns · 12 ms · step 2 of 2`; the step part appears for `let` queries and follows the step cursor, and a plain run counts as the last step), the Excel verdict chip beside it (matches, differs in N cells, row count differs, columns differ, or not compared for time dependent and random queries; none for a step result), and a `Get a file` menu (CSV, CSV with BOM, TSV, JSON, XLSX) that exports exactly the result shown by result id. With a view on, the menu says it exports the view, and a hidden column is left out of the file. The top bar Export is unchanged and still exports the last run result.
+- Dock: Changes is the seventh tab (Result, Pinned, Compare, Problems, Queue, Graph, Changes) with a count badge. `changesBody` in `dialogs.js` is shared by the Changes dialog and the tab (same diffs, summaries and problems); the tab adds Revert all behind the same confirmation and refreshes 250 ms after an edit while it is open.
+- Compare: a Show side by side option puts the two chosen results in two grids that scroll together (both directions, no feedback loop because a scroll position is only copied when it differs). Cells that differ in the rows compared (the first 1 000, marks capped at 200, as before) are marked in both.
+- Tests: `tests/e2e/result-head.spec.js` (5: line and step, a non-let query and a list, verdict match and differ on `pq_vba_complex.xlsm`, export of the whole result and of a filtered view as TSV, hidden column left out), `tests/e2e/changes-tab.spec.js` (3: empty state then diff, Revert all with cancel then confirm, the dialog from Download), `dock.spec.js` (tab list now has Changes; side by side with two 300 row results differing in one cell, scrolled both ways). Visual baselines `05-result-10000-rows` (four) and `06-result-differs` at 390 wide (two) regenerated after looking at them; the visual spec is run on its own (`tests/e2e/visual.spec.js`, 40 pass) because the full run excludes `T-I-04`.
+
+#### Deviations and things to know
+- The Result tab button is called Get a file, not Export: two buttons named Export made the existing export tests ambiguous, and Save and Download are taken the same way.
+- The header line first sat on its own row; that made the grid one row shorter and broke `T-B-11` (PageDown moved 5 rows, not more) and `T-B-13` (a header click in a 380 px high window). It now shares the Pin row, stays on one line above 700 px wide (the verdict chip is cut with an ellipsis and its title holds the full text) and wraps below that.
+- On a phone width the seven dock tabs scroll sideways, so Graph and Changes are off screen until the strip is scrolled. The Changes dialog is still reachable from Download.
+- The verdict is also still in the status bar; the two read from the same result.
+
+#### Not done in WB-16 (still)
+- A view sort in the column menu, and turning the view filters on the chip into steps in one click.
+

@@ -3134,3 +3134,75 @@ dialog.colwork.sheet {
   border-radius: var(--r-pill);
   background: var(--slate);
 }
+
+.result-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  margin-inline-end: auto;
+  min-width: 0;
+  font-size: var(--t-sm);
+  line-height: var(--t-sm-lh);
+  color: var(--ink-3);
+}
+
+.result-line {
+  font-variant-numeric: tabular-nums;
+}
+
+.result-head .chip {
+  height: auto;
+  min-height: var(--s-5);
+  padding-block: var(--s-0);
+}
+
+.compare-toggle {
+  align-self: end;
+}
+
+.compare-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.compare-pane {
+  display: grid;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.compare-pane .grid {
+  height: 18rem;
+  min-height: 0;
+}
+
+@media (max-width: 700px) {
+  .compare-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 701px) {
+  .result-actions {
+    flex-wrap: nowrap;
+  }
+
+  .result-head {
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  .result-line {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .result-head .chip {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

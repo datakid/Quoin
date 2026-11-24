@@ -1,6 +1,7 @@
 import { h, clear } from '../dom.js';
 import { S } from '../strings.js';
 import { schemaDiff, rowDelta, diffCells } from '../../core/wb/compare-results.js';
+import { changesBody } from '../dialogs.js';
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -29,6 +30,17 @@ export function renderPinned(host, pins, { isStale, onShow, onUnpin, onCompare }
   host.append(list);
 }
 
+export function renderChanges(host, changes, { summaries, problems, onRevertAll }) {
+  clear(host);
+  if (!changes.count) {
+    host.append(h('p', { class: 'dock-empty' }, S.dock.changesEmpty));
+    return;
+  }
+  host.append(h('div', { class: 'changes-tab' },
+    ...changesBody(changes, { summaries, problems }),
+    h('div', { class: 'dialog-actions' }, h('button', { class: 'btn', type: 'button', onclick: onRevertAll }, S.revertAll))));
+}
+
 export function renderQueue(host, rows, summary) {
   clear(host);
   if (!rows.length) {
@@ -45,7 +57,7 @@ export function renderQueue(host, rows, summary) {
   host.append(h('p', { class: 'item-meta queue-summary' }, summary), h('div', { class: 'queue-scroll' }, table));
 }
 
-export function renderCompare(host, options, state, fetchRows, onChange) {
+export function renderCompare(host, options, state, fetchRows, onChange, makeGrid = null) {
   clear(host);
   if (options.length < 2) {
     host.append(h('p', { class: 'dock-empty' }, S.dock.compareNeed));
@@ -62,7 +74,12 @@ export function renderCompare(host, options, state, fetchRows, onChange) {
     return h('label', { class: 'nav-field' }, h('span', { class: 'nav-field-label' }, label), sel);
   };
   const out = h('div', { class: 'compare-out', role: 'status', 'aria-live': 'polite' });
-  host.append(h('div', { class: 'compare-pick' }, pick(S.dock.compareA, 'a'), pick(S.dock.compareB, 'b')), out);
+  const sideBox = h('input', { type: 'checkbox', id: 'cmp-side', checked: !!state.side, onchange: () => {
+    state.side = sideBox.checked;
+    onChange();
+  } });
+  const side = makeGrid ? h('label', { class: 'check compare-toggle', for: 'cmp-side' }, sideBox, S.dock.sideBySide) : null;
+  host.append(h('div', { class: 'compare-pick' }, pick(S.dock.compareA, 'a'), pick(S.dock.compareB, 'b'), side), out);
   const a = options.find((o) => o.id === state.a);
   const b = options.find((o) => o.id === state.b);
   if (a.id === b.id) {
@@ -94,6 +111,22 @@ export function renderCompare(host, options, state, fetchRows, onChange) {
         h('tbody', null, ...d.cells.map((c) => h('tr', null, h('td', { class: 'num' }, String(c.row + 1)), h('td', null, (a.columns[c.col] || {}).name || String(c.col + 1)), h('td', null, show(c.a)), h('td', null, show(c.b)))))))
       : h('p', null, S.dock.cellsSame(d.scanned));
     out.append(sec(S.dock.cellsHead, d.total ? h('p', { class: 'item-meta' }, S.dock.cellsCount(d.total, d.cells.length, d.scanned)) : null, cells));
+    if (state.side && makeGrid) {
+      const paneA = h('div', { class: 'compare-pane' }, h('div', { class: 'nav-field-label' }, a.label));
+      const paneB = h('div', { class: 'compare-pane' }, h('div', { class: 'nav-field-label' }, b.label));
+      out.append(sec(S.dock.sideBySide, h('p', { class: 'item-meta' }, S.dock.sideNote), h('div', { class: 'compare-side' }, paneA, paneB)));
+      const ga = makeGrid(a, paneA);
+      const gb = makeGrid(b, paneB);
+      const marks = new Set(d.cells.map((c) => `${c.row}:${c.col}`));
+      ga.setDiffs(marks);
+      gb.setDiffs(marks);
+      const link = (from, to) => from.el.addEventListener('scroll', () => {
+        if (to.el.scrollTop !== from.el.scrollTop) to.el.scrollTop = from.el.scrollTop;
+        if (to.el.scrollLeft !== from.el.scrollLeft) to.el.scrollLeft = from.el.scrollLeft;
+      });
+      link(ga, gb);
+      link(gb, ga);
+    }
   });
 }
 

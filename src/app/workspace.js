@@ -14,7 +14,8 @@ import { pqLinksOfModule, resolveLinks, runPlanOf, refreshedBy } from '../core/v
 import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
 import { mountProblems } from '../ui/wb/problems-view.js';
 import { Dock } from '../ui/wb/dock.js';
-import { renderPinned, renderQueue, renderCompare, pinLabel } from '../ui/wb/dock-views.js';
+import { renderPinned, renderQueue, renderCompare, renderChanges, pinLabel } from '../ui/wb/dock-views.js';
+import { summariesFor } from './change-summary.js';
 import { openFind } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
@@ -29,6 +30,7 @@ import { canMove, moveStep, renameStep, deleteStep, bypassStep, unbypassStep, du
 import { parseExpressionText, MParseError } from '../core/m/parser.js';
 import { readTable } from '../core/cells.js';
 import { formatsFor } from '../ui/formats.js';
+import { sanitizeFileName } from '../core/export/files.js';
 import { Runner } from './runner.js';
 import { Orchestrator, previewFor } from './orchestrator.js';
 
@@ -51,7 +53,7 @@ export class Workspace {
     this.pins = [];
     this.currentResult = null;
     this.lastStep = null;
-    this.compareState = { a: null, b: null };
+    this.compareState = { a: null, b: null, side: false };
     this.rail = h('nav', { class: 'rail', id: 'rail', 'aria-label': S.itemsAria });
     this.railOpen = false;
     this.main = h('section', { class: 'main', 'data-pane': 'code' });
@@ -115,6 +117,7 @@ export class Workspace {
     this.cachedCompare = new Map();
     this.runToken = 0;
     this.onEditCallbacks = [];
+    this.onEdit(() => this.syncChangesTab());
     this.resizer();
   }
 
@@ -198,7 +201,12 @@ export class Workspace {
     this.viewChip = h('span', { class: 'chip view', hidden: true });
     this.viewClear = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.clearView() }, S.colTools.viewClear);
     this.viewNote = h('span', { class: 'sr-only', 'aria-live': 'polite' });
-    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.pinBtn, this.viewChip, this.viewClear, this.viewNote), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
+    this.headLine = h('span', { class: 'result-line' });
+    this.verdict = h('span', { class: 'chip', hidden: true });
+    this.exportBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: () => this.openResultExport() }, S.resultHead.export);
+    this.resultHead = h('span', { class: 'result-head', hidden: true, role: 'group', 'aria-label': S.resultHead.label }, this.headLine, this.verdict);
+    this.onSave = null;
+    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.resultHead, this.viewChip, this.viewClear, this.pinBtn, this.exportBtn, this.viewNote), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
     this.resultPanel = h('div', { class: 'result-panel' }, this.dock.tabs, this.dock.body);
     this.codeBtn = h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setRegion('code') }, S.code);
     this.stepsBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('steps') }, S.stepsPanel.toggle);
@@ -326,6 +334,33 @@ export class Workspace {
     else if (id === 'queue') this.paintQueue();
     else if (id === 'compare') this.paintCompare();
     else if (id === 'graph') this.mountGraphPanel();
+    else if (id === 'changes') this.paintChanges();
+  }
+
+  paintChanges() {
+    const changes = this.session.changes();
+    const names = new Set([...changes.queries.keys(), ...changes.modules.keys()]);
+    const moduleKind = (n) => {
+      const m = this.session.module(n);
+      return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
+    };
+    const problems = (this.problemRows || []).filter((p) => names.has(p.item.name) && (p.severity === 'error' || p.severity === 'warning'));
+    renderChanges(this.dock.panel('changes'), changes, { summaries: summariesFor(changes, moduleKind), problems, onRevertAll: () => this.revertAllConfirmed() });
+  }
+
+  syncChangesTab() {
+    this.dock.badge('changes', this.session.editCount || null);
+    if (this.dock.current !== 'changes') return;
+    clearTimeout(this.changesTimer);
+    this.changesTimer = setTimeout(() => this.paintChanges(), 250);
+  }
+
+  async revertAllConfirmed() {
+    const n = this.session.editCount;
+    const ok = await confirmDialog({ title: S.revertAllTitle, body: S.revertAllBody(n), confirmLabel: S.revertAll });
+    if (!ok) return;
+    this.revertAll();
+    this.status.set({ note: S.revertedAll });
   }
 
   pinStale(p) {
@@ -389,7 +424,15 @@ export class Workspace {
   }
 
   paintCompare() {
-    renderCompare(this.dock.panel('compare'), this.compareOptions(), this.compareState, (o) => this.runner.rowsOf(o.id, 0, 1000), () => this.paintCompare());
+    renderCompare(this.dock.panel('compare'), this.compareOptions(), this.compareState, (o) => this.runner.rowsOf(o.id, 0, 1000), () => this.paintCompare(), (o, host) => this.sideGrid(o, host));
+  }
+
+  sideGrid(o, host) {
+    const g = new Grid(host, { onDrill: () => {}, onError: () => {} });
+    g.setCulture(this.settings.culture);
+    g.setData({ columns: o.columns, rowCount: o.rowCount, rows: null, loader: (start, count) => this.runner.rows(start, count, { resultId: o.id }) });
+    g.el.setAttribute('aria-label', o.label);
+    return g;
   }
 
   paintQueue() {
@@ -1479,6 +1522,8 @@ export class Workspace {
 
   clearResult() {
     this.resetView();
+    this.resultHead.hidden = true;
+    this.exportBtn.hidden = true;
     this.grid.el.hidden = true;
     this.crumbs.hidden = true;
     this.diffLabel.hidden = true;
@@ -1606,7 +1651,9 @@ export class Workspace {
     this.lastResult = res;
     this.currentResult = null;
     this.pinBtn.hidden = true;
+    this.exportBtn.hidden = true;
     this.resetView();
+    this.resultHead.hidden = true;
     if (res.status === 'cancelled') return;
     if (res.status === 'ok' && res.steps && res.steps.length) {
       this.steps.append(h('span', null, S.stepsLabel));
@@ -1658,6 +1705,7 @@ export class Workspace {
         this.pinBtn.hidden = false;
         this.attachColumnTools(resultId);
       }
+      this.showResultHead(t, res, isStep, resultId);
       this.status.set({ run: { rows: t.rowCount, secs }, compare: isStep ? null : res.compare, flags: res.flags });
       this.pendingDiffs = res.compare && res.compare.diffs ? new Set(res.compare.diffs.map(([row, col]) => `${row}:${col}`)) : null;
       this.diffLabel.hidden = !(res.compare && res.compare.count > 0);
@@ -1666,6 +1714,70 @@ export class Workspace {
       return;
     }
     this.showValue(r.value, r.kind, secs, res.flags);
+  }
+
+  stepOfResult(resultId) {
+    const model = this.stepsModel;
+    if (!this.hasSteps() || !model || !model.steps.length) return null;
+    let name = null;
+    if (resultId) for (const [n, r] of this.stepResults) if (r && r.resultId === resultId) name = n;
+    const at = name ? model.steps.findIndex((x) => x.name === name) : model.steps.length - 1;
+    return at < 0 ? null : { index: at + 1, total: model.steps.length };
+  }
+
+  showResultHead(t, res, isStep, resultId) {
+    const f = formatsFor(this.settings.culture);
+    const parts = [S.resultHead.rows(t.rowCount, f.integer.format(t.rowCount)), S.resultHead.cols(t.columns.length)];
+    if (res.durationMs !== undefined && res.durationMs !== null) parts.push(S.resultHead.ms(f.integer.format(Math.round(res.durationMs))));
+    const at = this.stepOfResult(resultId);
+    if (at) parts.push(S.resultHead.step(at.index, at.total));
+    this.headLine.textContent = parts.join(' · ');
+    const c = isStep ? null : res.compare;
+    let text = '';
+    let kind = '';
+    if (c) {
+      if (c.disabled) text = c.disabled === 'time' ? S.compareTime : S.compareRandom;
+      else if (c.reason === 'columns') text = S.compareColumns;
+      else if (c.matches) {
+        text = S.matchesCache;
+        kind = 'ok';
+      } else {
+        text = c.reason === 'rows' ? S.rowCountDiffers(f.integer.format(c.got), f.integer.format(c.expected)) : S.cellsDiffer(f.integer.format(c.count));
+        kind = 'diff';
+      }
+    }
+    this.verdict.className = kind ? `chip ${kind}` : 'chip';
+    this.verdict.textContent = text;
+    this.verdict.title = text;
+    this.verdict.hidden = !text;
+    this.exportBtn.hidden = !resultId;
+    this.resultHead.hidden = false;
+  }
+
+  openResultExport() {
+    const id = this.shownResultId();
+    if (!id) return;
+    const viewing = !!(this.view && this.view.viewId);
+    const entries = [
+      viewing ? { heading: true, label: S.resultHead.exportView } : { heading: true, label: S.exportResult },
+      { label: S.exportCsv, run: () => this.exportShown('csv', '.csv') },
+      { label: S.exportCsvBom, run: () => this.exportShown('csvbom', '.csv') },
+      { label: S.exportTsv, run: () => this.exportShown('tsv', '.tsv') },
+      { label: S.exportJson, run: () => this.exportShown('json', '.json') },
+      { label: S.exportXlsx, run: () => this.exportShown('xlsx', '.xlsx') }
+    ];
+    menu(this.exportBtn, entries);
+  }
+
+  async exportShown(format, ext) {
+    const id = this.shownResultId();
+    if (!id || !this.onSave || !this.item) return;
+    const res = await this.runner.export(format, { guard: this.settings.csvGuard }, id);
+    if (res.error || !res.bytes) {
+      this.status.set({ note: S.resultHead.exportFailed });
+      return;
+    }
+    this.onSave(res.bytes, sanitizeFileName(this.item.name, ext), res.mime);
   }
 
   resetView() {

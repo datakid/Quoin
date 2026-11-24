@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, loadFile, ext } from './helpers.js';
+import { openApp, loadFile, ext, editor as editorOf } from './helpers.js';
 
 const item = (page, name) => page.locator(`.nav-list [role=treeitem][data-name="${name}"]`);
 const tab = (page, name) => page.getByRole('tab', { name: new RegExp(`^${name}`) });
@@ -17,12 +17,12 @@ async function runItem(page, name) {
   await expect(page.locator('.dock-panel[data-panel=result] .grid, .dock-panel[data-panel=result] [role=grid]').first()).toBeVisible();
 }
 
-test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Problems, Queue and Graph that the arrows walk', async ({ page }) => {
+test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Problems, Queue, Graph and Changes that the arrows walk', async ({ page }) => {
   await open(page);
   const list = page.locator('.dock-tabs');
   await expect(list).toHaveAttribute('role', 'tablist');
   const names = await list.getByRole('tab').evaluateAll((els) => els.map((e) => e.dataset.tab));
-  expect(names).toEqual(['result', 'pinned', 'compare', 'problems', 'queue', 'graph']);
+  expect(names).toEqual(['result', 'pinned', 'compare', 'problems', 'queue', 'graph', 'changes']);
   await expect(tab(page, 'Result')).toHaveAttribute('aria-selected', 'true');
   await tab(page, 'Result').focus();
   await page.keyboard.press('ArrowRight');
@@ -31,7 +31,7 @@ test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Problems, Que
   await expect(page.locator('.dock-panel[data-panel=pinned]')).toBeVisible();
   await expect(page.locator('.dock-panel[data-panel=result]')).toBeHidden();
   await page.keyboard.press('End');
-  await expect(tab(page, 'Graph')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab(page, 'Changes')).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Home');
   await expect(tab(page, 'Result')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.dock-tab[tabindex="0"]')).toHaveCount(1);
@@ -123,4 +123,37 @@ test('T-WB-16: the dock opens for a macro so Problems stays reachable, and hides
   await expect(page.locator('.problems-panel')).toBeVisible();
   await tab(page, 'Result').click();
   await expect(page.locator('.result-panel')).toBeHidden();
+});
+
+test('T-WB-16: compare can show the two results side by side, marks the differing cell in both and scrolls them together', async ({ page }) => {
+  await open(page);
+  await item(page, 'RawInput').click();
+  const editor = editorOf(page);
+  const make = (zero) => `Table.FromRecords(List.Transform({1..300}, each [N = _, V = if _ = ${zero} then 0 else _ * 2]))`;
+  await editor.fill(make(-1));
+  await page.getByRole('button', { name: /^Run/ }).first().click();
+  await expect(page.locator('.dock-panel[data-panel=result] [role=grid]').first()).toHaveAttribute('aria-rowcount', '301');
+  await page.getByRole('button', { name: 'Pin this result' }).click();
+  await editor.fill(make(5));
+  await page.getByRole('button', { name: /^Run/ }).first().click();
+  await expect(page.locator('.dock-panel[data-panel=result] [role=grid]').first()).toHaveAttribute('aria-rowcount', '301');
+  await tab(page, 'Compare').click();
+  await expect(page.locator('.compare-out')).toContainText('Cells that differ');
+  await expect(page.locator('.compare-side')).toHaveCount(0);
+  await page.getByLabel('Show side by side').check();
+  const grids = page.locator('.compare-side [role=grid]');
+  await expect(grids).toHaveCount(2);
+  await expect(grids.nth(0).locator('.grid-cell').first()).toBeVisible();
+  await expect(grids.nth(1).locator('.grid-cell').first()).toBeVisible();
+  await expect(page.locator('.compare-side .grid-cell.diff')).toHaveCount(2);
+  await grids.nth(0).evaluate((el) => {
+    el.scrollTop = 900;
+  });
+  await expect.poll(() => grids.nth(1).evaluate((el) => el.scrollTop)).toBe(900);
+  await grids.nth(1).evaluate((el) => {
+    el.scrollTop = 300;
+  });
+  await expect.poll(() => grids.nth(0).evaluate((el) => el.scrollTop)).toBe(300);
+  await page.getByLabel('Show side by side').uncheck();
+  await expect(page.locator('.compare-side')).toHaveCount(0);
 });

@@ -36,7 +36,7 @@ Owners follow MANAGER.md: the integrator owns shared files (`src/app`, workers, 
 | P3 | Browser specs for F2-04 to F2-09 (query remove and rename, module replace, replace in code, align) | integrator with Writer | nothing | one spec per card as the plan names them |
 | P4 | Transform in the app: allow transform in `PREVIEWABLE`; worker returns `outputs`, `sheetParts`, `rows`; run `NameBook.file` over the whole zip for New file names; one `combineOutputs` call at the end of a Combined run, results in plan order; show Quoin compute versus Excel compute on every row; strings for Scope's codes (list in section 6) | integrator, Scope reviews | nothing | Preview equals run for a transform recipe; `fable-transform` spec per mode |
 | P5 | Preview and report for transform: show units, output names and the planning errors (`output.*`, `scope.*`) before run; hide `unchanged` rows by default with a count | integrator | P4 | spec and axe pass |
-| P6 | F3-10: `fable-worked-example.spec.js` using `tests/fixtures/generators/worked-example.js`, every number of Fable section 9 asserted | integrator, Scope | P4 and decision D3 | spec passes |
+| P6 | F3-10: `fable-worked-example.spec.js` using `tests/fixtures/generators/worked-example.js`, every number of Fable section 9 asserted (13 units, 10 workbooks, 11 changed, 2 skipped) | integrator, Scope | P4 | spec passes |
 | P7 | F3-08 in place: release by passing `allowInPlace` from the worker; browser spec | integrator | P0 results for New file, New sheet, Combined and X01, X02 | spec passes, X03 passed in Excel |
 | P8 | F4-01 and F4-03: recipe file save and load (256 KB cap, refuse binary and typed arrays), `quoin.recipes` and `quoin.recent` (names only), allowlist and README changed in the same commit | integrator (pure modules can be done by any agent) | nothing | `fable-recipes`, `fable-privacy` |
 | P9 | F4-02 recipe plus folder in one action; F4-04 tokens offered in the Recipe region, unknown tokens flagged in Preview | integrator | P4, P8 | specs and axe pass |
@@ -46,18 +46,18 @@ Owners follow MANAGER.md: the integrator owns shared files (`src/app`, workers, 
 
 Order: P0 starts now and runs beside everything. Then P1, P3 and P4 can run in parallel, because they touch different files. P2 follows P1. P5 and P6 follow P4. P7 waits only for the Excel results. P8 can start at any time and is independent of F2 and F3. P9 follows P4 and P8. P10 and P11 come last, P12 closes each phase. Phases stay in order for gates, as the plan says; the work above may overlap, the gates may not.
 
-## 4. Decisions only the user can make
+## 4. Decisions the user has made
 
-Recommended answers are given so a plain "yes" settles each.
+The user answered "yes" to the whole list, which takes the recommendation for each. Status of each:
 
-| Id | Question | Recommendation |
+| Id | Decision | What it means and where it stands |
 |---|---|---|
-| D1 | Should tokens such as `{file.name}` work in injected query text and in the replace `with` text? Today only transform queries and output names take tokens. | Yes for inject text, because one injected query that adapts per file is the point of tokens; no for replace `with`. Needs a small change in Writer's execute code. |
-| D2 | Hide rows with the verdict `unchanged` by default in Preview and the report? | Yes, with the count shown and a filter to see them. A replace over 50 files with 100 queries each otherwise lists thousands of rows that mean nothing. |
-| D3 | Fable section 9 step 4: two units warn that the query names a column the sheet does not have, and their files "fall back to inject only". No card builds this. | Treat it as a run-time outcome: a unit whose query fails on a missing column is `skipped / skip.missingColumn`, the other units still land, and drop the "fall back to inject only" sentence from the example. A static check needs column names the index does not hold. |
-| D4 | Keep in-place output in this version? | Keep it held until X03 has passed in Excel; if the results are bad, move it to the next version. |
-| D5 | If Firefox and WebKit cannot run in the build environment, is CI evidence enough? | Yes. |
-| D6 | Who runs the Excel packs, and when? | You, now, in one sitting. Part 1 has its own `CHECKLIST.md`; part 2 has three cases, each an input, an output and a short list of things to look at. |
+| D1 | Tokens work in injected query and module text; not in the replace `with` text | Built by Scope: `withInjectTokens` in `src/batch/resolve/tokens.js`, one line in `executeFile` (Writer's file, flagged), a planning error `recipe.token` for an unknown token, and tests. The unit for these tokens is the workbook: `{unit.name}` is the file name without extension and `{unit.index}` is 1. |
+| D2 | Hide `unchanged` rows by default, with a count and a filter | Integrator, work package P5. Not started. |
+| D3 | A unit whose query names a missing column or field is a skipped unit, the other units still land; the "fall back to inject only" sentence of section 9 is dropped | Built by Scope: row verdict `skipped`, reason `skip.missingColumn`, the message names the column; the worked-example data now has two such units and the test asserts 11 changed and 2 skipped. A query that reads a missing field of any record is treated the same way, and the row shows the message, so it is never silent. |
+| D4 | In place stays held until X03 passes in Excel; if it fails it moves to the next version | No code change: already unreachable without `allowInPlace`. |
+| D5 | CI is enough evidence for Firefox and WebKit if they cannot run in the build environment | Integrator, P10. |
+| D6 | The user runs both Excel packs now, in one sitting, and reports what they saw | Waiting on the user. Results go to the integrator, who tells Writer and Scope what to rework. |
 
 ## 5. What could go wrong, and how it is covered
 
@@ -71,9 +71,9 @@ Recommended answers are given so a plain "yes" settles each.
 
 Planning errors: `scope.headerOnSheets`, `scope.needsInspect`, `scope.pattern`, `recipe.patternAdd`, `align.noSource`, `output.rangeRequired`, `output.range`, `output.inPlaceScope`, `output.overlap`, `output.nameRequired`, `output.excelMode`.
 
-Skips: `skip.noMatchingUnit`, `skip.notApplicable`.
+Skips: `skip.noMatchingUnit`, `skip.notApplicable`, `skip.missingColumn` (the row reason is the engine's message, which names the column).
 
-Row reasons for a unit: `unit.parse` (with line and column), `unit.error`, `unit.notTable`, `unit.binding`, `unit.nameCollision`, `unit.missing`, `recipe.token`, `m.rows`, `m.timeout`, `m.depth`.
+Row reasons for a unit: `unit.parse` (with line and column), `unit.error`, `unit.missingColumn` (inside a run result; the report row says `skip.missingColumn`), `unit.notTable`, `unit.binding`, `unit.nameCollision`, `unit.missing`, `recipe.token`, `m.rows`, `m.timeout`, `m.depth`.
 
 Row reasons for an output: `refused.tooLarge`, `refused.cellTooLong`, `verify.readBack`, `refused.noSheet`, `refused.empty`, `refused.outOfSheet`, `refused.overlapsTable`, `refused.overlapsMerge`, `refused.overlapsFormula`, `refused.unsupportedSheet`, `refused.rangeTooSmall`, `refused.overlap`, `refused.inPlaceHeld`.
 

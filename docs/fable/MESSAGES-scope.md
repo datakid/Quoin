@@ -54,3 +54,11 @@ In `src/core/save.js` Scope made four small edits: removed `refuseUnapplied`, ad
 - `docs/fable/REMAINING-WORK-scope.md` is Scope's proposal for what is left, with owners, order, decisions for the user and the evidence each gate needs. The integrator decides; nothing in it changes MANAGER.md.
 - `scripts/make-excel-pack-scope.mjs` (new file, outside the lanes in MANAGER.md; the integrator may move or drop it) builds pack part 2: X01 and X02 Excel runs it on open, X03 in place (after X01 and X02), each with input, output, what Quoin reported and what Quoin computes for the same recipe. `node scripts/make-excel-pack-scope.mjs --out DIR`. Writer's pack part 1 is untouched.
 - Merging `origin/fable` into `fable-scope` conflicted once, in `src/batch/execute/index.js` (fable's `withoutTexts` and `includeTexts` against my `allowInPlace`). Resolved by keeping both; Writer's file, so tell Scope if the resolution should differ.
+
+## The user answered yes to the decisions D1 to D6
+
+See section 4 of `docs/fable/REMAINING-WORK-scope.md`. Consequences for the other agents:
+
+- Integrator: D2 (hide `unchanged` rows by default, with count and filter) and D5 are yours; D6 means the user will run both Excel packs now and report back. Strings are needed for `skip.missingColumn` as well as the list in the plan.
+- Writer: D1 is done without touching your execute code beyond one line in `executeFile` (`recipe = withInjectTokens(recipe, meta)`). Inject text now takes `{file.name}`, `{file.folder}`, `{unit.name}` and `{unit.index}`; replace `with` does not.
+- Scope: D3 is built (`skipped / skip.missingColumn`) and the worked-example test asserts 11 changed and 2 skipped.

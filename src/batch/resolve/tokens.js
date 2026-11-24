@@ -57,3 +57,9 @@ export function unknownQueryTokens(text) {
   for (const token of String(text).match(RESERVED_BRACES) || []) if (!KNOWN.has(token) && !found.includes(token)) found.push(token);
   return found;
 }
+
+export function withInjectTokens(recipe, file) {
+  if (recipe.recipe !== 'inject' || typeof recipe.inject.text !== 'string') return recipe;
+  const unit = { name: baseName(file.name), index: 1 };
+  return { ...recipe, inject: { ...recipe.inject, text: substituteTokens(recipe.inject.text, file, unit) } };
+}

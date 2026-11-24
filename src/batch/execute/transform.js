@@ -152,6 +152,10 @@ export async function executeTransform(wb, filePlan, recipe, { now, meta, runId 
   const items = [];
   for (const run of runs) {
     const action = filePlan.actions.find((a) => a.unit.index === run.unit.index);
+    if (run.status === 'skipped') {
+      early.set(run, { verdict: 'skipped', reason_code: 'skip.missingColumn', reason: run.error.message, verified: false });
+      continue;
+    }
     if (run.status !== 'ok') {
       failures.push({ unit: run.unit, m: run.m, error: run.error });
       early.set(run, { verdict: 'failed', reason_code: run.error.code, reason: failureReason(run.error), verified: false });

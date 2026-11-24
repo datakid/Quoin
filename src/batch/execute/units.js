@@ -16,6 +16,8 @@ export function prepareQuery(m, file, unit) {
   return { ok: true, text, error: null };
 }
 
+const MISSING = /^The (?:column|field) '(.*)' of the (?:table|record) wasn't found\.$/;
+
 const failed = (unit, m, error, status = 'error') => ({ unit, status, m, table: null, outputName: null, error, flags: [], durationMs: 0 });
 
 function describe(unit, m, r) {
@@ -25,8 +27,11 @@ function describe(unit, m, r) {
       return { unit, status: 'ok', m, table: r.value, outputName: null, error: null, flags: r.flags, durationMs: r.durationMs };
     case 'parse-error':
       return failed(unit, m, { code: 'unit.parse', message: r.error.message, line: Math.max(1, r.error.line - HEAD_LINES), col: r.error.col });
-    case 'error':
+    case 'error': {
+      const missing = r.error.reason === 'Expression.Error' ? MISSING.exec(r.error.message) : null;
+      if (missing) return { ...failed(unit, m, { code: 'unit.missingColumn', message: r.error.message, detail: missing[1] }, 'skipped'), flags: r.flags || [] };
       return { ...failed(unit, m, { code: 'unit.error', reason: r.error.reason, message: r.error.message, detail: r.error.detail }), flags: r.flags || [] };
+    }
     case 'stopped':
       return failed(unit, m, { code: r.code, detail: r.detail === undefined ? null : r.detail }, 'stopped');
     default:

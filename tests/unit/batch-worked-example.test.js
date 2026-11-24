@@ -37,7 +37,7 @@ test('twelve files, two that cannot be opened, seven pinned to Data and three on
   assert.deepEqual([plan.errors, plan.orphanPins], [[], []]);
 });
 
-test('running the ten files gives ten workbooks and thirteen rows, each verified, with the originals untouched', async () => {
+test('running the ten files gives ten workbooks and thirteen rows, eleven changed and two skipped for a missing column, with the originals untouched', async () => {
   const files = await twelve();
   const indexes = await indexAll(files);
   const pins = indexes.filter((ix) => ix.name.startsWith('region')).map((ix) => ({ file: ix.name, path: ix.relPath, units: ['Data'] }));
@@ -56,14 +56,16 @@ test('running the ten files gives ten workbooks and thirteen rows, each verified
   }
   assert.equal(outputs.length, 10);
   assert.equal(rows.length, 13);
-  assert.deepEqual([...new Set(rows.map((x) => x.verdict))], ['changed']);
-  assert.equal(rows.every((x) => x.verified === true && x.compute === 'quoin' && x.action === 'transform'), true);
+  assert.deepEqual([rows.filter((x) => x.verdict === 'changed').length, rows.filter((x) => x.verdict === 'skipped').length], [11, 2]);
+  assert.deepEqual(rows.filter((x) => x.verdict === 'skipped').map((x) => [x.file, x.unit, x.reason_code, x.reason]), [['branch1.xlsx', 'Extra', 'skip.missingColumn', "The field 'Qty' of the record wasn't found."], ['branch2.xlsx', 'Extra', 'skip.missingColumn', "The field 'Qty' of the record wasn't found."]]);
+  assert.equal(rows.filter((x) => x.verdict === 'changed').every((x) => x.verified === true), true);
+  assert.equal(rows.every((x) => x.compute === 'quoin' && x.action === 'transform'), true);
   assert.deepEqual(await Promise.all(files.map((f) => sha256Bytes(f.bytes))), before);
   for (const { file, result } of outputs) {
     const back = await openWorkbook(result.outputs[0].bytes, file.name);
     const original = await openWorkbook(file.bytes, file.name);
     const added = back.sheets.map((s) => s.name).slice(original.sheets.length);
-    assert.deepEqual(added, file.name.startsWith('region') ? ['Clean'] : ['Clean', 'Clean-2']);
+    assert.deepEqual(added, file.name === 'branch3.xlsx' ? ['Clean', 'Clean-2'] : ['Clean']);
     const grid = await readUsedGrid(back, 'Clean');
     assert.deepEqual(grid.map((row) => row.map((c) => c && c.v)), [['Item', 'Qty'], ['a', 1], ['c', 3]]);
     if (added.length === 2) assert.deepEqual((await readUsedGrid(back, 'Clean-2')).map((row) => row.map((c) => c && c.v)), [['Item', 'Qty'], ['x', 7], ['y', 8]]);

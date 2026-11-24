@@ -301,3 +301,14 @@ test('in place is held back until the real-Excel check: without the explicit fla
   assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'refused', 'refused.inPlaceHeld', false], ['StudentResults', 'refused', 'refused.inPlaceHeld', false]]);
   assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
 });
+
+test('a unit whose query names a column it does not have is a skipped row with the column and nothing is written for it', async () => {
+  const m = 'let T = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content] in Table.SelectColumns(T, {"Age"})';
+  const { result } = await run('pq_simple.xlsx', recipeOf(m, { mode: 'newFile' }));
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'changed', '', true], ['StudentResults', 'changed', '', true]]);
+  const bad = 'let T = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content] in Table.SelectColumns(T, {"DateTimeGenerated"})';
+  const second = await run('pq_simple.xlsx', recipeOf(bad, { mode: 'newFile' }));
+  assert.deepEqual(second.result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.reason]), [['StudentNames', 'skipped', 'skip.missingColumn', "The column 'DateTimeGenerated' of the table wasn't found."], ['StudentResults', 'changed', '', '']]);
+  assert.deepEqual(second.result.outputs.map((o) => o.name), ['pq_simple__StudentResults.xlsx']);
+  assert.deepEqual(second.result.failures, []);
+});

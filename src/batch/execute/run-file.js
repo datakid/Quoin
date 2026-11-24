@@ -4,13 +4,18 @@ import { DEFAULT_LIMITS } from '../../core/limits.js';
 import { executeFilePlan } from './collect.js';
 import { executeFile, failedResult } from './index.js';
 
-const WRITE_KINDS = ['inject', 'replace', 'align'];
+const WRITE_KINDS = ['inject', 'replace', 'align', 'transform'];
 const FALLBACK_TIMEOUT_MS = 30000;
 
 function deadlineFor(limits) {
   const ms = limits && Number.isFinite(limits.timeoutMs) ? limits.timeoutMs : FALLBACK_TIMEOUT_MS;
   const end = performance.now() + ms;
   return () => performance.now() > end;
+}
+
+function transformReply(result, dryRun) {
+  const outputs = result.outputs.map((o) => ({ unit: o.unit, name: o.name, bytes: dryRun ? null : o.bytes, sha256: o.sha256 }));
+  return { fileId: result.fileId, bytes: dryRun ? null : result.bytes, sha256: dryRun ? null : result.sha256, changes: [], warnings: result.warnings, rows: result.rows, outputs, sheetParts: dryRun ? [] : result.sheetParts };
 }
 
 export async function runFilePlan(bytes, meta, filePlan, options) {
@@ -28,7 +33,8 @@ export async function runFilePlan(bytes, meta, filePlan, options) {
     throw e;
   }
   try {
-    return await executeFile(wb, filePlan, { now: options.now, recipe, meta, runId, acknowledgeSignature: options.acknowledgeSignature === true, alignText: options.alignText, shouldStop });
+    const result = await executeFile(wb, filePlan, { now: options.now, recipe, meta, runId, acknowledgeSignature: options.acknowledgeSignature === true, alignText: options.alignText, includeTexts: options.includeTexts === true, shouldStop });
+    return recipe.recipe === 'transform' ? transformReply(result, options.dryRun === true) : result;
   } catch (e) {
     return fail(e && typeof e.code === 'string' ? e.code : 'internal');
   }

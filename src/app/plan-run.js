@@ -3,8 +3,17 @@ import { resolvePlan, alignSourceFor } from '../batch/resolve/resolve.js';
 import { failedResult } from '../batch/execute/index.js';
 import { reportRows } from './outputs.js';
 import { indexesOf } from './set-indexes.js';
+import { sha256Text } from '../batch/index/hash.js';
 
 const WRITE_RECIPES = ['inject', 'replace', 'align'];
+
+export function previewSupport(recipe) {
+  if (WRITE_RECIPES.includes(recipe.recipe)) return { ok: true };
+  if (recipe.recipe !== 'transform') return { ok: false, why: 'kind' };
+  if (recipe.compute === 'excel') return { ok: false, why: 'compute' };
+  if (recipe.output && recipe.output.mode === 'newFile') return { ok: true };
+  return { ok: false, why: 'output', mode: recipe.output ? recipe.output.mode : '' };
+}
 const VERDICTS = ['changed', 'unchanged', 'skipped', 'refused', 'failed', 'cancelled', 'not-released'];
 
 const countRows = (rows) => {
@@ -25,8 +34,12 @@ const diverged = (plan, previewHashes, hashes, perFile) =>
       return hashes.get(id) !== previewHashes.get(id);
     });
 
+const outputsDigest = (outputs) => sha256Text(outputs.map((o) => `${o.name}\t${o.sha256}`).join('\n'));
+
+const stoppedResult = (out) => (out && out.stopped && out.files.length ? { cancelled: true, written: out.files.length, into: out.name } : { cancelled: true });
+
 export function startPlanRun({ session, pool, recipe, now, runId, mode, preview = null, confirmSignatures = false, loadAlignText = null, onProgress = () => {}, build = null }) {
-  if (!WRITE_RECIPES.includes(recipe.recipe)) throw new Error(`${recipe.recipe} cannot be previewed yet`);
+  if (!previewSupport(recipe).ok) throw new Error(`${recipe.recipe} cannot be previewed yet`);
   if (mode !== 'preview' && mode !== 'run') throw new Error('mode must be preview or run');
   if (mode === 'run' && !preview) throw new Error('a run needs the preview it was planned from');
 
@@ -64,7 +77,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
       if (cancelled) return { cancelled: true };
     }
 
-    const options = { now: frozenNow, dryRun: mode === 'preview', limits: recipe.more.limits, culture: recipe.more.culture, runId, recipe, acknowledgeSignature: true, ...(alignText === undefined ? {} : { alignText }) };
+    const options = { now: frozenNow, dryRun: mode === 'preview', limits: recipe.more.limits, culture: recipe.more.culture, runId, recipe, acknowledgeSignature: true, includeTexts: mode === 'preview', ...(alignText === undefined ? {} : { alignText }) };
     const perFile = new Map();
     let finished = 0;
 
@@ -79,7 +92,9 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
       else if (reply.status === 'done') result = fail(reply.message.code);
       else if (reply.status === 'failed') result = fail('pool.failed');
       if (result) {
-        perFile.set(filePlan.fileId, { rows: result.rows, changes: result.changes, warnings: result.warnings, sha256: result.sha256, bytes: mode === 'run' ? result.bytes : null });
+        const outputs = Array.isArray(result.outputs) ? result.outputs : [];
+        const sha256 = outputs.length ? await outputsDigest(outputs) : result.sha256;
+        perFile.set(filePlan.fileId, { rows: result.rows, changes: result.changes, warnings: result.warnings, sha256, bytes: mode === 'run' ? result.bytes : null, outputs: mode === 'run' ? outputs : outputs.map(({ bytes, ...rest }) => rest) });
         if (mode === 'run') {
           const failed = result.rows.find((r) => r.verdict === 'failed');
           if (failed) session.markFailed(filePlan.fileId, failed.reason_code);
@@ -98,7 +113,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
     const split = mode === 'run' ? diverged(plan, preview.hashes, hashes, perFile) : [];
     for (const id of split) {
       const held = perFile.get(id);
-      perFile.set(id, { ...held, bytes: null, sha256: null, rows: held.rows.map((r) => ({ ...r, verdict: 'not-released', reason_code: 'verify.planDrift', verified: false })) });
+      perFile.set(id, { ...held, bytes: null, sha256: null, outputs: [], rows: held.rows.map((r) => ({ ...r, verdict: 'not-released', reason_code: 'verify.planDrift', verified: false, output: '' })) });
       session.markFailed(id, 'verify.planDrift');
     }
     if (split.length) hashes = new Map([...hashes].filter(([id]) => !split.includes(id)));
@@ -111,7 +126,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
     }
     if (build) {
       const out = await build(result, { shouldStop: () => cancelled });
-      if (cancelled) return { cancelled: true };
+      if (cancelled) return stoppedResult(out);
       if (!out || out.ok === false) {
         session.abort();
         return refuse(out && out.code ? out.code : 'output.failed');
@@ -124,7 +139,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
   })();
 
   return {
-    promise: promise.then((r) => (cancelled ? { cancelled: true } : r)),
+    promise: promise.then((r) => (cancelled ? (r && r.cancelled ? r : { cancelled: true }) : r)),
     cancel() {
       if (cancelled) return;
       cancelled = true;

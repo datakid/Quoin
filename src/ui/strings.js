@@ -103,6 +103,8 @@ export const S = {
   diffCaption: (name) => `Changes in ${name}`,
   diffOld: 'Old line',
   diffNew: 'New line',
+  diffMarkHead: 'Change',
+  diffTextHead: 'Line text',
   revertAll: 'Revert all',
   revertAllTitle: 'Revert all changes',
   revertAllBody: (n) => `This discards ${n} ${n === 1 ? 'change' : 'changes'} and restores the original text of every item.`,
@@ -228,6 +230,13 @@ export const S = {
   recipeClear: 'Remove recipe',
   recipePreview: 'Preview',
   recipeGet: 'Get',
+  rowDiffHint: 'Select a row to see what changes.',
+  rowDiffLabel: (name) => `Changes to ${name}`,
+  rowDiffOps: { replace: 'Replace', replaceText: 'Replace text', add: 'Add', remove: 'Remove', rename: 'Rename', align: 'Align', transform: 'Transform' },
+  rowDiffTitle: (op, name, file) => `${S.rowDiffOps[op] || op} · ${name} · ${file}`,
+  rowDiffRename: (from, to) => `Renamed from ${from} to ${to}.`,
+  rowWritesLabel: (name) => `Output for ${name}`,
+  rowWrites: (path, unit) => `Writes ${path}, a workbook with one sheet, Result, holding the values of ${unit}.`,
   recipeGetFolder: 'Get into a folder',
   signedTitle: 'Remove signatures?',
   signedBody: (n) => `${n} ${n === 1 ? 'workbook has' : 'workbooks have'} a signed macro project. Editing removes ${n === 1 ? 'its' : 'their'} signature, so Excel will treat the macros as unsigned. The report marks ${n === 1 ? 'it' : 'them'}.`,
@@ -236,6 +245,8 @@ export const S = {
   recipeResult: (c) => [`${c.changed} changed`, c.unchanged ? `${c.unchanged} unchanged` : '', c.skipped ? `${c.skipped} skipped` : '', c.refused ? `${c.refused} refused` : '', c.failed ? `${c.failed} failed` : '', c['not-released'] ? `${c['not-released']} not released` : ''].filter(Boolean).join(' · '),
   folderUnavailable: 'The folder could not be opened. Nothing was written.',
   recipeGotZip: (name) => `Downloaded ${name}.`,
+  recipeStopped: (n, name) => `Stopped. ${n} ${n === 1 ? 'workbook was' : 'workbooks were'} written to ${name}. The rest were not.`,
+  recipeStoppedNone: (folder) => (folder ? 'Stopped. Nothing was written.' : 'Stopped. Nothing was downloaded.'),
   recipeGotFolder: (name, n) => `Wrote ${n} ${n === 1 ? 'workbook' : 'workbooks'} and report.csv to ${name}.`,
   runDefect: (n) => `${n} ${n === 1 ? 'file was' : 'files were'} not released because ${n === 1 ? 'its' : 'their'} output differs from the preview. The rest were released. Report this.`,
   recipeNone: 'No recipe loaded.',
@@ -244,6 +255,8 @@ export const S = {
   recipeTooLarge: 'This recipe file is larger than 256 KB and was not opened.',
   recipeUnreadable: 'This recipe file could not be read.',
   recipeNotPreviewable: 'This kind of recipe cannot be previewed here yet.',
+  recipeComputeNotYet: 'A recipe that Excel computes on open cannot be previewed here yet.',
+  recipeOutputNotYet: (mode) => `A recipe that writes ${{ newSheet: 'a new sheet in a copy', combined: 'one combined workbook', inPlace: 'the result in place' }[mode] || 'this kind of output'} cannot be previewed here yet. Only a new file for each unit can.`,
   recipeWarning: (path) => `Unknown field ${path} was ignored.`,
   recipeIgnoredBlock: (path) => `The ${path} section does not belong to this recipe and was ignored.`,
   recipeWarnings: 'Notes on this recipe',
@@ -550,4 +563,10 @@ export const ERRORS = {
 export function errorMessage(code, values = {}) {
   if (ERRORS[code]) return fmt(ERRORS[code], values);
   return S.readFailed;
+}
+
+export function reasonWords({ verdict, reason_code: code, reason }) {
+  if (!code) return reason || '';
+  if (verdict === 'refused' && reason) return `${errorMessage(code)} (${reason})`;
+  return reason || errorMessage(code);
 }

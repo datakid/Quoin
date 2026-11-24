@@ -82,10 +82,11 @@ function compareKeys(a, b) {
 }
 
 export class Grid {
-  constructor(host, { onDrill = null, onError = null, cellClass = null } = {}) {
+  constructor(host, { onDrill = null, onError = null, onActive = null, cellClass = null } = {}) {
     this.cellClass = cellClass;
     this.onDrill = onDrill;
     this.onError = onError;
+    this.onActive = onActive;
     this.columns = [];
     this.rowCount = 0;
     this.diffs = null;
@@ -319,8 +320,13 @@ export class Grid {
       cell.style.width = `${this.widths[c]}px`;
       cell.style.position = 'absolute';
       cell.addEventListener('pointerdown', (ev) => this.onCellDown(ev, i, c, v, cell));
-      cell.addEventListener('pointerenter', () => {
-        if (this.drag) this.extend(i, c);
+      cell.addEventListener('pointerenter', (ev) => {
+        if (!this.drag) return;
+        if (ev.buttons !== 1) {
+          this.drag = false;
+          return;
+        }
+        this.extend(i, c);
       });
       row.append(cell);
     }
@@ -353,8 +359,11 @@ export class Grid {
 
   extend(r, c) {
     const a = this.anchor || this.active || { r, c };
+    const sel = { r1: Math.min(a.r, r), r2: Math.max(a.r, r), c1: Math.min(a.c, c), c2: Math.max(a.c, c) };
+    const same = this.active && this.active.r === r && this.active.c === c && this.sel && ['r1', 'r2', 'c1', 'c2'].every((k) => this.sel[k] === sel[k]);
+    if (same) return;
     this.active = { r, c };
-    this.sel = { r1: Math.min(a.r, r), r2: Math.max(a.r, r), c1: Math.min(a.c, c), c2: Math.max(a.c, c) };
+    this.sel = sel;
     this.repaintAll();
   }
 
@@ -363,6 +372,7 @@ export class Grid {
     this.rowEls = new Map();
     this.paint();
     if (this.active) this.el.setAttribute('aria-activedescendant', `gc-${this.active.r}-${this.active.c}`);
+    if (this.active && this.onActive) this.onActive(this.active.r, this.active.c);
     this.preloadSelection();
   }
 

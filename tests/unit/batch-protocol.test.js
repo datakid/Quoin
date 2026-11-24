@@ -90,6 +90,9 @@ test('apply may carry the recipe, the set-wide signature confirmation and the te
   assert.equal(m({ recipe, alignText: 5 }).ok, false);
   assert.match(m({ recipe: 'inject' }).reason, /recipe/);
   assert.match(m({ recipe, acknowledgeSignature: 1 }).reason, /acknowledgeSignature/);
+  assert.equal(m({ recipe, includeTexts: true }).ok, true);
+  assert.equal(m({ recipe, includeTexts: 'yes' }).ok, false);
+  assert.match(m({ recipe, includeTexts: 1 }).reason, /includeTexts/);
   assert.match(m({ recipe, alignText: 5 }).reason, /alignText/);
 });
 
@@ -156,3 +159,30 @@ test('transferring the listed buffer detaches it and keeps the message readable'
   assert.equal(bytes.byteLength, 0);
   assert.deepEqual([...copy.result.bytes], [1, 2, 3]);
 });
+
+const output = (over = {}) => ({ unit: null, name: 'a__T.xlsx', bytes: new Uint8Array([1, 2, 3]), sha256: hash, ...over });
+const withOutputs = (outputs) => appliedMessage('f0007', { ...result(null), outputs });
+
+test('an applied message may carry one workbook per unit, each with a name, a hash and bytes that are null or own their buffer', () => {
+  assert.equal(validateMessage(withOutputs([output(), output({ name: 'b__T.xlsx' })])).ok, true);
+  assert.equal(validateMessage(withOutputs([output({ bytes: null })])).ok, true);
+  assert.equal(validateMessage(withOutputs([])).ok, true);
+  assert.equal(validateMessage(withOutputs('x')).ok, false);
+  assert.equal(validateMessage(withOutputs([output({ name: '' })])).ok, false);
+  assert.equal(validateMessage(withOutputs([output({ sha256: 'ABC' })])).ok, false);
+  assert.equal(validateMessage(withOutputs([output({ bytes: [1, 2] })])).ok, false);
+  assert.equal(validateMessage(withOutputs([output({ bytes: new Uint8Array(new ArrayBuffer(8), 2, 3) })])).ok, false);
+});
+
+test('every output buffer is transferred once, and a buffer shared by the result and an output is not listed twice', () => {
+  const a = output();
+  const b = output({ name: 'b__T.xlsx' });
+  const m = appliedMessage('f0007', { ...result(null), outputs: [a, b, output({ name: 'c.xlsx', bytes: null })] });
+  assert.deepEqual(transferListFor(m), [a.bytes.buffer, b.bytes.buffer]);
+  const shared = new Uint8Array([9, 9]);
+  const both = appliedMessage('f0007', { ...result(shared), outputs: [output({ bytes: shared })] });
+  assert.deepEqual(transferListFor(both), [shared.buffer]);
+  const copy = structuredClone(both, { transfer: transferListFor(both) });
+  assert.equal(copy.result.outputs[0].bytes, copy.result.bytes);
+});
+

@@ -67,3 +67,13 @@ test('the replace with-text does not take tokens', async () => {
   const { back } = await run(recipe, 'pq_simple.xlsx', 'x/file one.xlsx');
   assert.match(back.queries[0].original, /\{file\.name\}/);
 });
+
+test('without file metadata the tokens use the name of the workbook itself and the call does not fail', async () => {
+  const bytes = fixture('pq_simple.xlsx');
+  const index = await indexWorkbook(bytes, { id: 'f1', name: 'pq_simple.xlsx', relPath: 'pq_simple.xlsx', size: bytes.length });
+  const recipe = inject({ text: 'let Source = "{file.name}" in Source' });
+  const plan = resolvePlan(recipe, [index], { now: NOW });
+  const result = await executeFile(await openWorkbook(bytes, 'pq_simple.xlsx'), plan.files[0], { now: NOW, recipe, runId: 'r1' });
+  const back = await openWorkbook(result.bytes, 'pq_simple.xlsx');
+  assert.equal(normalizeQueryText(back.queries.find((q) => q.name === 'Where').original), 'let Source = "pq_simple" in Source');
+});

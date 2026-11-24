@@ -10,7 +10,7 @@ import { withInjectTokens } from '../resolve/tokens.js';
 const withoutTexts = ({ texts, ...rest }) => rest;
 
 export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, includeTexts = false, shouldStop = () => false, allowInPlace = false }) {
-  recipe = withInjectTokens(recipe, meta);
+  recipe = withInjectTokens(recipe, meta || { name: wb.fileName, relPath: wb.fileName });
   if (recipe.recipe === 'transform') return executeTransform(wb, filePlan, recipe, { now, meta, runId, allowInPlace, apply: (changeSet) => applyChangeSet(wb, changeSet, { now: zipClock(now), refreshOnLoad: false, checkSection }) });
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };

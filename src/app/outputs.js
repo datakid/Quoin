@@ -91,24 +91,28 @@ function releasedItems(result) {
   return result.bytes ? [{ output: '', data: result.bytes }] : [];
 }
 
-export function releasedFiles({ indexes, perFile }) {
+export function releasedFiles({ indexes, perFile, combined = null }) {
   const seen = new Set();
   const out = [];
+  const claim = (folders, wanted) => {
+    const base = wanted.ext ? wanted.stem.slice(0, wanted.stem.length - wanted.ext.length) : wanted.stem;
+    let name = wanted.stem;
+    let n = 2;
+    while (seen.has([...folders, name].join('/').toLowerCase())) name = `${base}-${n++}${wanted.ext}`;
+    const path = [...folders, name].join('/');
+    seen.add(path.toLowerCase());
+    return path;
+  };
   for (const ix of indexes) {
     const result = perFile.get(ix.id);
     if (!result) continue;
     const { folders, stem, ext } = outputParts(ix.relPath);
     for (const item of releasedItems(result)) {
-      const wanted = item.output ? outputParts(item.output) : { stem, ext };
-      const base = wanted.ext ? wanted.stem.slice(0, wanted.stem.length - wanted.ext.length) : wanted.stem;
-      let name = wanted.stem;
-      let n = 2;
-      while (seen.has([...folders, name].join('/').toLowerCase())) name = `${base}-${n++}${wanted.ext}`;
-      const path = [...folders, name].join('/');
-      seen.add(path.toLowerCase());
+      const path = claim(folders, item.output ? outputParts(item.output) : { stem, ext });
       out.push({ fileId: ix.id, key: outputKey(ix.id, item.output), path, data: item.data });
     }
   }
+  if (combined && combined.bytes) out.push({ fileId: '', key: outputKey('', combined.name), path: claim([], outputParts(combined.name)), data: combined.bytes });
   return out;
 }
 
@@ -141,7 +145,7 @@ function pathForRow(pathOf, id, output) {
   const direct = pathOf.get(outputKey(id, output));
   if (direct) return direct;
   const split = splitSheetOutput(output);
-  const file = split && pathOf.get(outputKey(id, split.file));
+  const file = split && (pathOf.get(outputKey(id, split.file)) || pathOf.get(outputKey('', split.file)));
   return file ? sheetOutput(file, split.sheet) : pathOf.get(id);
 }
 
@@ -154,8 +158,8 @@ export function fillOutputs(rows, indexes, pathOf) {
   });
 }
 
-export async function buildPlanOutput({ plan, indexes, perFile, rows, now, ceilingBytes = GIB, maxEntries = CLASSIC_ZIP_ENTRIES }) {
-  const files = releasedFiles({ indexes, perFile });
+export async function buildPlanOutput({ plan, indexes, perFile, rows, now, combined = null, ceilingBytes = GIB, maxEntries = CLASSIC_ZIP_ENTRIES }) {
+  const files = releasedFiles({ indexes, perFile, combined });
   const filled = fillOutputs(rows, indexes, new Map(files.map((f) => [f.key, f.path])));
   const reportBytes = reportCsvBytes(filled);
   const compressed = files.reduce((n, f) => n + f.data.length, 0);

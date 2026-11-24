@@ -29,12 +29,23 @@ function patch(results, parts, change) {
   return results.map((r, i) => ({ ...r, rows: touched.get(i) || r.rows }));
 }
 
-export async function combineOutputs(results, { now, name = 'Combined.xlsx' } = {}) {
+export const COMBINED_NAME = 'Combined.xlsx';
+
+function partsOf(results) {
   const book = new NameBook();
   const parts = [];
   results.forEach((result, resultIndex) => {
     for (const part of result.sheetParts) parts.push({ resultIndex, part, name: book.sheet(part.name) });
   });
+  return parts;
+}
+
+export function labelCombined(results, name = COMBINED_NAME) {
+  return patch(results, partsOf(results), (p) => ({ output: sheetOutput(name, p.name) }));
+}
+
+export async function combineOutputs(results, { now, name = COMBINED_NAME } = {}) {
+  const parts = partsOf(results);
   if (!parts.length) return { bytes: null, sha256: null, name, sheetNames: [], results };
   const bytes = await workbookFromSheets(parts.map((p) => ({ name: p.name, xml: p.part.xml })), { now });
   if (!(await readsBackAs(bytes, name, parts))) {

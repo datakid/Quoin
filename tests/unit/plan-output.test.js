@@ -9,6 +9,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { resolvePlan } from '../../src/batch/resolve/resolve.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 import { runFilePlan } from '../../src/batch/execute/run-file.js';
+import { combineOutputs } from '../../src/batch/execute/combine.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
 const WB = new URL('../fixtures/workbooks/', import.meta.url);
@@ -36,7 +37,7 @@ async function runSet(specs, json) {
     if (!fp.units.length) continue;
     const { bytes, meta } = sources.get(fp.fileId);
     const res = await runFilePlan(bytes, meta, fp, { now: NOW, dryRun: false, limits: recipe.more.limits, culture: recipe.more.culture, runId: 'r1', recipe, acknowledgeSignature: true });
-    perFile.set(fp.fileId, { rows: res.rows, changes: res.changes, warnings: res.warnings, sha256: res.sha256, bytes: res.bytes, outputs: res.outputs });
+    perFile.set(fp.fileId, { rows: res.rows, changes: res.changes, warnings: res.warnings, sha256: res.sha256, bytes: res.bytes, outputs: res.outputs, sheetParts: res.sheetParts });
   }
   const rows = reportRows(plan, indexes, new Map([...perFile].map(([id, v]) => [id, { rows: v.rows }])), 'r1');
   return { plan, indexes, perFile, rows, sources };
@@ -344,5 +345,44 @@ test('new-sheet copies whose names differ only by case get -2 and their rows fol
   assert.deepEqual(releasedFiles(s).map((f) => f.path), ['x/Book (edited).xlsx', 'x/book (edited)-2.xlsx']);
   const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
   assert.deepEqual(out.rows.map((r) => r.output), ['x/Book (edited).xlsx [Result]', 'x/Book (edited).xlsx [Result-2]', 'x/book (edited)-2.xlsx [Result]', 'x/book (edited)-2.xlsx [Result-2]']);
+});
+
+const transformCombined = { ...transformNewFile, output: { mode: 'combined' } };
+
+async function runCombined(specs) {
+  const s = await runSet(specs, transformCombined);
+  const results = s.plan.files.filter((fp) => s.perFile.has(fp.fileId)).map((fp) => s.perFile.get(fp.fileId));
+  const made = await combineOutputs(results.map((r) => ({ rows: r.rows, sheetParts: r.sheetParts })), { now: new Date(2026, 10, 14, 10, 0, 0) });
+  const ids = s.plan.files.filter((fp) => s.perFile.has(fp.fileId)).map((fp) => fp.fileId);
+  ids.forEach((id, i) => s.perFile.set(id, { ...s.perFile.get(id), rows: made.results[i].rows, sheetParts: [] }));
+  const rows = reportRows(s.plan, s.indexes, new Map([...s.perFile].map(([id, v]) => [id, { rows: v.rows }])), 'r1');
+  return { ...s, rows, combined: { name: made.name, bytes: made.bytes, sha256: made.sha256, sheetNames: made.sheetNames } };
+}
+
+test('a combined zip holds report.csv and one Combined.xlsx at its root, and each row names it and its sheet', async () => {
+  const s = await runCombined([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx'], [EXT, 'pq_simple.xlsx', 'west/pq_simple.xlsx']]);
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  assert.equal(out.ok, true);
+  const all = await entries(out.bytes);
+  assert.deepEqual([...all.keys()], ['report.csv', 'Combined.xlsx']);
+  assert.deepEqual(Array.from(all.get('Combined.xlsx')), Array.from(s.combined.bytes));
+  assert.deepEqual(out.rows.map((r) => r.output), s.combined.sheetNames.map((n) => `Combined.xlsx [${n}]`));
+  assert.equal(s.combined.sheetNames.length, 4);
+});
+
+test('a combined folder output writes Combined.xlsx at the root of the chosen folder, then report.csv', async () => {
+  const s = await runCombined([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']]);
+  const log = [];
+  const out = await buildFolderOutput(new StubDir('out', log), { ...s, now: NOW, runId: 'r1' }, { shouldStop: () => false });
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.files, ['Combined.xlsx']);
+  assert.deepEqual(log.filter((l) => l.startsWith('open')), ['open out/Combined.xlsx', 'open out/report.csv']);
+  assert.deepEqual(out.rows.map((r) => r.output), s.combined.sheetNames.map((n) => `Combined.xlsx [${n}]`));
+});
+
+test('with no combined workbook the zip holds report.csv alone', async () => {
+  const s = await runCombined([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']]);
+  const out = await buildPlanOutput({ ...s, combined: null, now: NOW, runId: 'r1' });
+  assert.deepEqual([...(await entries(out.bytes)).keys()], ['report.csv']);
 });
 

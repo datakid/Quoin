@@ -9,6 +9,10 @@ import { runFilePlan } from '../../src/batch/execute/run-file.js';
 import { appliedMessage, refusedMessage } from '../../src/batch/protocol.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 import { openWorkbook } from '../../src/core/workbook.js';
+import { readUsedGrid } from '../../src/core/cells.js';
+import { combineOutputs } from '../../src/batch/execute/combine.js';
+import { executeFile } from '../../src/batch/execute/index.js';
+import { resolvePlan } from '../../src/batch/resolve/resolve.js';
 import { fixture, generated } from './helpers.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
@@ -213,9 +217,9 @@ test('a run needs a preview', () => {
 
 const transformOf = (output, extra = {}) => recipeOf({ recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output, ...extra });
 
-test('only inject, replace, align and a transform that writes a new file per unit or a new sheet in a copy can be previewed, and the mode must be known', () => {
+test('only inject, replace, align and a transform that writes a new file per unit, a new sheet in a copy or one combined workbook can be previewed, and the mode must be known', () => {
   const session = new SetSession();
-  for (const [recipe, why] of [[transformOf({ mode: 'combined' }), /transform/], [transformOf({ mode: 'inPlace', range: 'A1' }), /transform/], [transformOf({ mode: 'newFile' }, { compute: 'excel' }), /transform/]]) {
+  for (const [recipe, why] of [[transformOf({ mode: 'inPlace', range: 'A1' }), /transform/], [transformOf({ mode: 'newFile' }, { compute: 'excel' }), /transform/]]) {
     assert.throws(() => startPlanRun({ mode: 'preview', session, pool: inProcessPool(), recipe, now: NOW, runId: 'r1' }), why);
   }
   assert.throws(() => startPlanRun({ mode: 'dry', session, pool: inProcessPool(), recipe: injectReplace(), now: NOW, runId: 'r1' }), /mode/);
@@ -225,7 +229,8 @@ test('previewSupport says why a recipe cannot be previewed', () => {
   assert.deepEqual(previewSupport(injectReplace()), { ok: true });
   assert.deepEqual(previewSupport(transformOf({ mode: 'newFile' })), { ok: true });
   assert.deepEqual(previewSupport(transformOf({ mode: 'newSheet' })), { ok: true });
-  assert.deepEqual(previewSupport(transformOf({ mode: 'combined' })), { ok: false, why: 'output', mode: 'combined' });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'combined' })), { ok: true });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'inPlace', range: 'A1' })), { ok: false, why: 'output', mode: 'inPlace' });
   assert.deepEqual(previewSupport(transformOf({ mode: 'newFile' }, { compute: 'excel' })), { ok: false, why: 'compute' });
   assert.deepEqual(previewSupport(recipeOf({ recipe: 'collect', v: 1 })), { ok: false, why: 'kind' });
 });
@@ -469,5 +474,75 @@ test('a new-sheet copy that differs from its preview is not released and its row
   assert.deepEqual(run.diverged, ['f0002']);
   assert.deepEqual(run.output.files, ['a/one (edited).xlsx']);
   assert.deepEqual(run.output.rows.map((r) => [r.verdict, r.output]), [['changed', 'a/one (edited).xlsx [Result]'], ['changed', 'a/one (edited).xlsx [Result-2]'], ['not-released', ''], ['not-released', '']]);
+});
+
+async function combinedPair(mutate = null) {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [noQuery(), 'c/none.xlsm']]);
+  const recipe = transformOf({ mode: 'combined' });
+  const previewed = await preview({ session, pool: inProcessPool(), recipe }).promise;
+  const run = await startPlanRun({ mode: 'run', session, pool: inProcessPool({ mutate }), recipe, now: NOW, runId: 'r2', preview: previewed, build: (result) => buildPlanOutput(result) }).promise;
+  return { session, recipe, previewed, run };
+}
+
+test('a combined preview names the shared workbook and the sheet of every unit, keeps a hash per file, and holds no sheet xml', async () => {
+  const { previewed } = await combinedPair();
+  assert.equal(previewed.ok, true);
+  assert.deepEqual(previewed.rows.map((r) => [r.file, r.unit, r.verdict, r.output, r.new_hash]), [
+    ['one.xlsx', 'StudentNames', 'changed', 'Combined.xlsx [one__StudentNames]', ''],
+    ['one.xlsx', 'StudentResults', 'changed', 'Combined.xlsx [one__StudentResults]', ''],
+    ['none.xlsm', 'FinalTable', 'changed', 'Combined.xlsx [none__FinalTable]', ''],
+    ['none.xlsm', 'RawInput', 'changed', 'Combined.xlsx [none__RawInput]', '']
+  ]);
+  assert.equal(previewed.combined, null);
+  for (const [id, held] of previewed.perFile) {
+    assert.match(previewed.hashes.get(id), /^[0-9a-f]{64}$/);
+    assert.deepEqual([held.bytes, held.outputs, held.sheetParts], [null, [], []]);
+  }
+});
+
+test('a combined run releases one workbook with a sheet per unit in plan order, and each row names it, its sheet and its hash', async () => {
+  const { previewed, run } = await combinedPair();
+  assert.equal(run.ok, true);
+  assert.equal(run.defect, false);
+  for (const [id] of run.perFile) assert.equal(run.hashes.get(id), previewed.hashes.get(id));
+  assert.deepEqual(run.output.files, ['Combined.xlsx']);
+  assert.deepEqual(run.combined.sheetNames, ['one__StudentNames', 'one__StudentResults', 'none__FinalTable', 'none__RawInput']);
+  const wb = await openWorkbook(run.combined.bytes, 'Combined.xlsx');
+  assert.deepEqual(wb.sheets.map((x) => x.name), run.combined.sheetNames);
+  assert.deepEqual((await readUsedGrid(wb, 'one__StudentNames')).map((row) => row.map((c) => c.v)), [['Name', 'Age'], ['Alice', 30], ['Bob', 25], ['Charlie', 35]]);
+  assert.deepEqual(run.output.rows.map((r) => [r.verdict, r.output, r.verified, r.new_hash === run.combined.sha256]), run.combined.sheetNames.map((n) => ['changed', `Combined.xlsx [${n}]`, true, true]));
+  for (const held of run.perFile.values()) assert.deepEqual(held.sheetParts, []);
+});
+
+test('a combined run is byte for byte what combineOutputs makes from the same files in plan order', async () => {
+  const { session, recipe, run } = await combinedPair();
+  const plan = resolvePlan(recipe, [...session.list()].map((f) => session.file(f.id).index), { now: NOW });
+  const results = [];
+  for (const [bytes, name] of [[pq(), 'one.xlsx'], [noQuery(), 'none.xlsm']]) {
+    const f = session.list().find((x) => x.name === name);
+    const filePlan = plan.files.find((p) => p.fileId === f.id);
+    results.push(await executeFile(await openWorkbook(bytes, name), filePlan, { now: NOW, recipe, meta: { id: f.id, name: f.name, relPath: f.relPath, size: f.size }, runId: 'r2' }));
+  }
+  const expected = await combineOutputs(results, { now: new Date(2026, 10, 14, 10, 0, 0) });
+  assert.deepEqual(Array.from(run.combined.bytes), Array.from(expected.bytes));
+});
+
+test('a file whose sheets differ from its preview is left out of the combined workbook and its rows are not released', async () => {
+  const flip = (result) => (result.fileId === 'f0002' ? { ...result, sheetParts: result.sheetParts.map((p) => ({ ...p, digest: 'f'.repeat(64) })) } : result);
+  const { run } = await combinedPair(flip);
+  assert.equal(run.defect, true);
+  assert.deepEqual(run.diverged, ['f0002']);
+  assert.deepEqual(run.combined.sheetNames, ['one__StudentNames', 'one__StudentResults']);
+  assert.deepEqual(run.output.rows.map((r) => [r.verdict, r.output]), [['changed', 'Combined.xlsx [one__StudentNames]'], ['changed', 'Combined.xlsx [one__StudentResults]'], ['not-released', ''], ['not-released', '']]);
+});
+
+test('when no unit gives a table there is no combined workbook', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx']]);
+  const recipe = transformOf({ mode: 'combined' }, { query: { source: 'inline', m: 'error "boom"' } });
+  const previewed = await preview({ session, pool: inProcessPool(), recipe }).promise;
+  const run = await startPlanRun({ mode: 'run', session, pool: inProcessPool(), recipe, now: NOW, runId: 'r2', preview: previewed, build: (result) => buildPlanOutput(result) }).promise;
+  assert.equal(run.combined, null);
+  assert.deepEqual(run.output.files, []);
+  assert.ok(run.output.rows.every((r) => r.verdict === 'failed' && r.output === ''));
 });
 

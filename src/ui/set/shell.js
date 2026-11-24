@@ -235,7 +235,7 @@ export class SetShell {
       return;
     }
     const writes = d.writes !== undefined;
-    const body = writes ? h('p', { class: 'row-diff-rename' }, S.rowWrites(d.writes, d.target.name, d.sheet)) : d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
+    const body = writes ? h('p', { class: 'row-diff-rename' }, S.rowWrites(d.writes, d.target.name, d.sheet, d.kind)) : d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
     this.detail.append(
       h('div', { class: 'row-diff', role: 'region', 'aria-label': writes ? S.rowWritesLabel(d.target.name) : S.rowDiffLabel(d.target.name), tabindex: '0' },
         h('p', { class: 'row-diff-title' }, S.rowDiffTitle(d.op, d.target.name, d.file)),

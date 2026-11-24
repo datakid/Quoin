@@ -121,6 +121,12 @@ test('a changed transform row says which file it would write, beside its source,
   assert.equal(rowDiff(p, 1).writes, 'east/pq_simple__StudentResults.xlsx');
 });
 
+test('a new-sheet row says which copy it would write and which new sheet holds its unit', async () => {
+  const p = await previewOf([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']], { ...transformNewFile, output: { mode: 'newSheet' } });
+  assert.deepEqual(rowDiff(p, 0), { file: 'east/pq_simple.xlsx', target: { name: 'StudentNames' }, op: 'transform', writes: 'east/pq_simple (edited).xlsx', sheet: 'Result' });
+  assert.deepEqual([rowDiff(p, 1).writes, rowDiff(p, 1).sheet], ['east/pq_simple (edited).xlsx', 'Result-2']);
+});
+
 test('a transform row that failed or was skipped has no detail', async () => {
   const broken = { ...transformNewFile, query: { source: 'inline', m: 'error "boom"' } };
   const p = await previewOf([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx'], [WB, 'mixed.xlsm', 'north/mixed.xlsm']], broken);

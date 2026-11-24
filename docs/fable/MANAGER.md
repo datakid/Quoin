@@ -9,7 +9,7 @@ Written 2026-11-21 by the integrator (Claude on `fable`). The user has told all 
 | F0 Set | Done on `fable` (F0-00 to F0-16) |
 | F1 Collect and Variants | Done on `fable`, gate recorded (F1-08) |
 | F2 Inject and Replace | Done on `fable`, gate recorded (F2-16) except the real-Excel check, which only the user can do |
-| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit) is wired in the app: Preview and Get work. F3-06, F3-07 and F3-09 are not wired and F3-08 is on hold, all waiting for the real-Excel check |
+| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit) and F3-06 (a new sheet in a copy) are wired in the app: Preview and Get work. F3-07 (combined) is next. F3-08 (in place) and F3-09 (Excel computes on open) are held: no real-Excel case exists for them |
 | F4 Recipes, F5 Trust | Not started |
 
 The merge of `fable-writer` and then `fable-scope` into `fable` is done. The only conflict was the first line of `executeFile` in `src/batch/execute/index.js`; both sides were kept (Writer's `shouldStop`, Scope's transform dispatch). `asset-manifest.json` was regenerated. Lint 0 findings; unit 1521 pass, 0 fail, 5 skipped. The trunk bug Writer found (`index.xlsx` ignoring the frozen time) is fixed with a test that fails without it.
@@ -66,7 +66,7 @@ Every time a hash is reported, the integrator runs, in a scratch copy: a trial m
 
 ## 5. Real Excel is the gate for output modes
 
-No agent here can open real Excel, so the user is the check. The plan says each output mode must pass a human Excel check before the next one starts: new file, then new sheet, then combined, then in place. Scope built the first three back to back, so all three now wait on that check, and in place waits behind them. The pack from Writer's F2-15 is how the user does it. The user reports pass or fail per row of `CHECKLIST.md`; the integrator records the results in `PROGRESS.md` and only then releases in place (F3-08).
+No agent here can open real Excel, so the user is the check. The plan says each output mode must pass a human Excel check before the next one starts: new file, then new sheet, then combined, then in place. Scope built the first three back to back, so all three now wait on that check, and in place waits behind them. The pack from Writer's F2-15 is how the user does it. The user reports pass or fail per row of `CHECKLIST.md`; the integrator records the results in `PROGRESS.md` and only then releases in place (F3-08). The first report (2026-11-24) was informal: every file opened with no repair message and queries and macros ran, contents not reviewed. That released new sheet and combined; in place and Excel-computes-on-open have no case in the pack and stay held until one is added and opened.
 
 ## 6. Decisions
 
@@ -88,6 +88,8 @@ Integrator status, updated as work lands:
 - F2-11 (Get: zip and folder, report) and F2-12 (one confirmation for signed projects): done.
 - Preview landed: yes. F2-10a to F2-10d, Get (F2-11) and the signed-project confirmation (F2-12) are on `fable`. Trunk may work in `src/app/**`, `src/ui/**`, `src/workers/**` and `strings.js` again, but pull first: I changed `main.js`, `plan-run.js`, `grid.js`, `shell.js`, `result-matrix.js`, `strings.js` and `styles/set.css`. Output modes beyond a zip and a folder (new sheet, combined, in place) still wait for the real-Excel check.
 - F3-05 wired (2026-11-24): a Transform recipe with output `newFile` can be previewed and got. Recipes with `newSheet`, `combined`, `inPlace` or compute `excel` say they cannot be previewed yet. A file's hash in a transform is a digest of its output names and hashes, so plan equals run still holds. A test shows the pack's new-file outputs are byte for byte what the app writes.
-- Waiting on the user: open `quoin-excel-pack.zip` (`node scripts/make-excel-pack.mjs`) in real Excel and report pass or fail per row of `CHECKLIST.md`. The `new-file` case is the one to open first. Nothing that writes a sheet is wired until that comes back.
+- Real Excel, first report (2026-11-24): the user opened the pack; no file gave a repair message; queries and macros ran without errors; contents not reviewed, checklist not ticked (PROGRESS.md, "Real Excel, first report"). New file and new sheet are released on that basis; combined is next; in place and Excel-computes-on-open stay held.
+- F3-06 wired (2026-11-24): a Transform recipe with output `newSheet` can be previewed and got; one copy per source, `{file} (edited).{ext}`, each row names `copy [Sheet]`. Only combined, in place and compute-in-Excel still say they cannot be previewed.
+- Earlier request, now answered in part: open `quoin-excel-pack.zip` (`node scripts/make-excel-pack.mjs`) in real Excel and report pass or fail per row of `CHECKLIST.md`. The `new-file` case is the one to open first. Nothing that writes a sheet is wired until that comes back.
 - Flaky tests, so nobody chases them: `T-WB-05` (30 ms ranking budget), `T-WB-09`, and `outputs.test.js` "tablesToXlsx ... byte-compatible" (fixed 2026-11-23 by pinning the clock).
-
+- T-LINT-22 (2026-11-24): a leftover merge conflict marker in any file, docs included, fails lint. It exists because a merge of `fable` into trunk work left markers in `PROGRESS.md`. After any merge, run `node tests/lint/run.js` before pushing.

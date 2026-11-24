@@ -328,3 +328,21 @@ test('a folder output writes every transform workbook at its own path, then repo
   assert.deepEqual(out.rows.map((r) => r.output), out.files);
 });
 
+const transformNewSheet = { ...transformNewFile, output: { mode: 'newSheet' } };
+
+test('a new-sheet zip holds one copy per source beside it, and each row names the copy and its sheet', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']], transformNewSheet);
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  assert.deepEqual([...(await entries(out.bytes)).keys()], ['report.csv', 'east/pq_simple (edited).xlsx']);
+  assert.deepEqual(out.rows.map((r) => r.output), ['east/pq_simple (edited).xlsx [Result]', 'east/pq_simple (edited).xlsx [Result-2]']);
+  const held = s.perFile.get('f0001').outputs[0];
+  assert.deepEqual(Array.from((await entries(out.bytes)).get('east/pq_simple (edited).xlsx')), Array.from(held.bytes));
+});
+
+test('new-sheet copies whose names differ only by case get -2 and their rows follow', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'x/Book.xlsx'], [EXT, 'pq_simple.xlsx', 'x/book.xlsx']], transformNewSheet);
+  assert.deepEqual(releasedFiles(s).map((f) => f.path), ['x/Book (edited).xlsx', 'x/book (edited)-2.xlsx']);
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  assert.deepEqual(out.rows.map((r) => r.output), ['x/Book (edited).xlsx [Result]', 'x/Book (edited).xlsx [Result-2]', 'x/book (edited)-2.xlsx [Result]', 'x/book (edited)-2.xlsx [Result-2]']);
+});
+

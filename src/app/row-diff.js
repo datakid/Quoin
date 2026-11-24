@@ -1,5 +1,13 @@
+import { splitSheetOutput } from '../batch/execute/changes.js';
+
 const pathOf = (row) => `${row.folder}${row.file}`;
 const keyOf = (op, oldHash, newHash) => `${op}|${oldHash || ''}|${newHash || ''}`;
+
+function transformDetail(row, path) {
+  const split = splitSheetOutput(row.output);
+  const base = { file: path, target: { name: row.unit }, op: 'transform' };
+  return split ? { ...base, writes: `${row.folder}${split.file}`, sheet: split.sheet } : { ...base, writes: `${row.folder}${row.output}` };
+}
 
 export function rowDiff(result, index) {
   const row = result.rows[index];
@@ -8,7 +16,7 @@ export function rowDiff(result, index) {
   const ix = result.indexes.find((i) => i.relPath === path);
   const held = ix && result.perFile.get(ix.id);
   if (!held) return null;
-  if (row.action === 'transform') return row.output ? { file: path, target: { name: row.unit }, op: 'transform', writes: `${row.folder}${row.output}` } : null;
+  if (row.action === 'transform') return row.output ? transformDetail(row, path) : null;
   const rowKey = keyOf(row.action, row.old_hash, row.new_hash);
   let nth = 0;
   for (let i = 0; i < index; i++) {

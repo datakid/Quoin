@@ -5,6 +5,7 @@ import { utf8Encode } from '../core/bytes.js';
 import { Package } from '../core/opc.js';
 import { readZip } from '../core/zip-read.js';
 import { REPORT_COLUMNS, zipClock } from '../batch/execute/collect.js';
+import { sheetOutput, splitSheetOutput } from '../batch/execute/changes.js';
 import { S, reasonWords } from '../ui/strings.js';
 
 const GIB = 1024 * 1024 * 1024;
@@ -136,11 +137,19 @@ export async function buildCollectOutput({ plan, indexes, results, now, runId, c
   return { ok: true, bytes, name: collectZipName(now), rows, folders: [...folders.values()] };
 }
 
+function pathForRow(pathOf, id, output) {
+  const direct = pathOf.get(outputKey(id, output));
+  if (direct) return direct;
+  const split = splitSheetOutput(output);
+  const file = split && pathOf.get(outputKey(id, split.file));
+  return file ? sheetOutput(file, split.sheet) : pathOf.get(id);
+}
+
 export function fillOutputs(rows, indexes, pathOf) {
   const idOf = new Map(indexes.map((ix) => [ix.relPath, ix.id]));
   return rows.map((r) => {
     const id = idOf.get(`${r.folder}${r.file}`);
-    const path = pathOf.get(outputKey(id, r.output)) || pathOf.get(id);
+    const path = pathForRow(pathOf, id, r.output);
     return r.verdict === 'changed' ? { ...r, output: path || '' } : r;
   });
 }

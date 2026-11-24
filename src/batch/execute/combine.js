@@ -4,6 +4,7 @@ import { workbookFromSheets } from '../../core/export/xlsx.js';
 import { NameBook } from '../../core/sheet/names.js';
 import { normalisedRows } from '../../core/sheet/grid.js';
 import { sha256Bytes, sha256Text } from '../index/hash.js';
+import { sheetOutput } from './changes.js';
 
 export const gridDigest = (grid) => sha256Text(JSON.stringify(normalisedRows(grid)));
 
@@ -40,5 +41,5 @@ export async function combineOutputs(results, { now, name = 'Combined.xlsx' } = 
     return { bytes: null, sha256: null, name, sheetNames: [], results: patch(results, parts, () => ({ verdict: 'not-released', reason_code: 'verify.readBack', verified: false, output: '', new_hash: '' })) };
   }
   const sha256 = await sha256Bytes(bytes);
-  return { bytes, sha256, name, sheetNames: parts.map((p) => p.name), results: patch(results, parts, (p) => ({ output: `${name} [${p.name}]`, new_hash: sha256, verified: true })) };
+  return { bytes, sha256, name, sheetNames: parts.map((p) => p.name), results: patch(results, parts, (p) => ({ output: sheetOutput(name, p.name), new_hash: sha256, verified: true })) };
 }

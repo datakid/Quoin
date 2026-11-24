@@ -11,7 +11,7 @@ export function previewSupport(recipe) {
   if (WRITE_RECIPES.includes(recipe.recipe)) return { ok: true };
   if (recipe.recipe !== 'transform') return { ok: false, why: 'kind' };
   if (recipe.compute === 'excel') return { ok: false, why: 'compute' };
-  if (recipe.output && recipe.output.mode === 'newFile') return { ok: true };
+  if (recipe.output && (recipe.output.mode === 'newFile' || recipe.output.mode === 'newSheet')) return { ok: true };
   return { ok: false, why: 'output', mode: recipe.output ? recipe.output.mode : '' };
 }
 const VERDICTS = ['changed', 'unchanged', 'skipped', 'refused', 'failed', 'cancelled', 'not-released'];

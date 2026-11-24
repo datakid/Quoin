@@ -8,6 +8,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { runFilePlan } from '../../src/batch/execute/run-file.js';
 import { appliedMessage, refusedMessage } from '../../src/batch/protocol.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
+import { openWorkbook } from '../../src/core/workbook.js';
 import { fixture, generated } from './helpers.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
@@ -212,9 +213,9 @@ test('a run needs a preview', () => {
 
 const transformOf = (output, extra = {}) => recipeOf({ recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output, ...extra });
 
-test('only inject, replace, align and a transform that writes a new file per unit can be previewed, and the mode must be known', () => {
+test('only inject, replace, align and a transform that writes a new file per unit or a new sheet in a copy can be previewed, and the mode must be known', () => {
   const session = new SetSession();
-  for (const [recipe, why] of [[transformOf({ mode: 'newSheet' }), /transform/], [transformOf({ mode: 'combined' }), /transform/], [transformOf({ mode: 'inPlace', range: 'A1' }), /transform/], [transformOf({ mode: 'newFile' }, { compute: 'excel' }), /transform/]]) {
+  for (const [recipe, why] of [[transformOf({ mode: 'combined' }), /transform/], [transformOf({ mode: 'inPlace', range: 'A1' }), /transform/], [transformOf({ mode: 'newFile' }, { compute: 'excel' }), /transform/]]) {
     assert.throws(() => startPlanRun({ mode: 'preview', session, pool: inProcessPool(), recipe, now: NOW, runId: 'r1' }), why);
   }
   assert.throws(() => startPlanRun({ mode: 'dry', session, pool: inProcessPool(), recipe: injectReplace(), now: NOW, runId: 'r1' }), /mode/);
@@ -223,7 +224,7 @@ test('only inject, replace, align and a transform that writes a new file per uni
 test('previewSupport says why a recipe cannot be previewed', () => {
   assert.deepEqual(previewSupport(injectReplace()), { ok: true });
   assert.deepEqual(previewSupport(transformOf({ mode: 'newFile' })), { ok: true });
-  assert.deepEqual(previewSupport(transformOf({ mode: 'newSheet' })), { ok: false, why: 'output', mode: 'newSheet' });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'newSheet' })), { ok: true });
   assert.deepEqual(previewSupport(transformOf({ mode: 'combined' })), { ok: false, why: 'output', mode: 'combined' });
   assert.deepEqual(previewSupport(transformOf({ mode: 'newFile' }, { compute: 'excel' })), { ok: false, why: 'compute' });
   assert.deepEqual(previewSupport(recipeOf({ recipe: 'collect', v: 1 })), { ok: false, why: 'kind' });
@@ -420,5 +421,53 @@ test('a pattern that matches nothing in a file is a skipped row', async () => {
   const out = await preview({ session, pool: inProcessPool(), recipe }).promise;
   assert.deepEqual(out.rows.map((r) => [r.file, r.verdict, r.reason_code]), [['one.xlsx', 'changed', ''], ['none.xlsm', 'skipped', 'skip.notApplicable']]);
   assert.deepEqual(out.counts, { changed: 1, unchanged: 0, skipped: 1, refused: 0, failed: 0, cancelled: 0, 'not-released': 0 });
+});
+
+async function sheetPair(mutate = null) {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [generated('signed.xlsm'), 'b/two.xlsm']]);
+  const recipe = transformOf({ mode: 'newSheet' });
+  const previewed = await preview({ session, pool: inProcessPool(), recipe }).promise;
+  const run = await startPlanRun({ mode: 'run', session, pool: inProcessPool({ mutate }), recipe, now: NOW, runId: 'r2', preview: previewed, confirmSignatures: true, build: (result) => buildPlanOutput(result) }).promise;
+  return { previewed, run };
+}
+
+test('a new-sheet preview has a row per unit naming the sheet and the copy, and one output hash per file with no bytes', async () => {
+  const { previewed } = await sheetPair();
+  assert.equal(previewed.ok, true);
+  assert.deepEqual(previewed.rows.map((r) => [r.file, r.unit, r.verdict, r.output]), [
+    ['one.xlsx', 'StudentNames', 'changed', 'one (edited).xlsx [Result]'],
+    ['one.xlsx', 'StudentResults', 'changed', 'one (edited).xlsx [Result-2]'],
+    ['two.xlsm', 'FinalTable', 'changed', 'two (edited).xlsm [Result]'],
+    ['two.xlsm', 'RawInput', 'changed', 'two (edited).xlsm [Result-2]']
+  ]);
+  for (const held of previewed.perFile.values()) {
+    assert.equal(held.bytes, null);
+    assert.equal(held.outputs.length, 1);
+    assert.deepEqual([held.outputs[0].bytes === undefined, /^[0-9a-f]{64}$/.test(held.outputs[0].sha256)], [true, true]);
+  }
+});
+
+test('a new-sheet run releases one copy per file, equal to its preview, with every original sheet kept and the new ones added', async () => {
+  const { previewed, run } = await sheetPair();
+  assert.equal(run.ok, true);
+  assert.equal(run.defect, false);
+  assert.deepEqual(run.output.files, ['a/one (edited).xlsx', 'b/two (edited).xlsm']);
+  for (const [id, held] of run.perFile) assert.equal(run.hashes.get(id), previewed.hashes.get(id));
+  const [one, two] = [...run.perFile.values()];
+  const source = await openWorkbook(pq(), 'one.xlsx');
+  const copy = await openWorkbook(one.outputs[0].bytes, 'copy.xlsx');
+  assert.deepEqual(copy.sheets.map((x) => x.name), [...source.sheets.map((x) => x.name), 'Result', 'Result-2']);
+  const macro = await openWorkbook(two.outputs[0].bytes, 'copy.xlsm');
+  assert.deepEqual(macro.sheets.map((x) => x.name).slice(-2), ['Result', 'Result-2']);
+  assert.deepEqual(run.output.rows.map((r) => r.output), ['a/one (edited).xlsx [Result]', 'a/one (edited).xlsx [Result-2]', 'b/two (edited).xlsm [Result]', 'b/two (edited).xlsm [Result-2]']);
+});
+
+test('a new-sheet copy that differs from its preview is not released and its rows name no output', async () => {
+  const flip = (result) => (result.fileId === 'f0002' ? { ...result, outputs: result.outputs.map((o) => ({ ...o, sha256: 'f'.repeat(64) })) } : result);
+  const { run } = await sheetPair(flip);
+  assert.equal(run.defect, true);
+  assert.deepEqual(run.diverged, ['f0002']);
+  assert.deepEqual(run.output.files, ['a/one (edited).xlsx']);
+  assert.deepEqual(run.output.rows.map((r) => [r.verdict, r.output]), [['changed', 'a/one (edited).xlsx [Result]'], ['changed', 'a/one (edited).xlsx [Result-2]'], ['not-released', ''], ['not-released', '']]);
 });
 

@@ -383,3 +383,34 @@ Result: Phase F1 gate passed, except the by-hand slice, which a person still has
 =======
 F2-10d: the per-row diff when a row is selected (old text from the variant loader, new text from the recipe or the replace matches). Then F2-13 (`fable-cancel.spec.js`, `fable-failures.spec.js`) and F2-14 (`fable-batch50.spec.js`), which are test-only, then the F2-16 gate.
 >>>>>>> origin/fable
+
+### F4-01 Save and load recipe files (pure part)
+Layer: app (pure module, not wired)
+Files: src/app/recipe-files.js, tests/unit/recipe-files.test.js
+Do: `saveRecipeFile(recipe)` returns the canonical text, its UTF-8 bytes and a file name made from the recipe name (`Fix sales.quoin-recipe.json`; the recipe kind when there is no name), or refuses with `recipe.binary` (a typed array, buffer, Blob, function, symbol or bigint anywhere in the recipe, with its path), `recipe.invalid` (with the reason) or `recipe.tooLarge` (over 256 KB). `loadRecipeFile(file)` checks the size before reading, refuses binary content (a NUL byte, a control character or invalid UTF-8) with `recipe.binary`, strips a byte order mark, and hands the text to `parseRecipe`, so `recipe.invalid`, `recipe.newer` and the warnings come through. `isRecipeFileName(name)` recognises the suffix in any case. A recipe is only ever parsed as data.
+Test that fails without it: `tests/unit/recipe-files.test.js`, 13 tests (module missing without the change). Deliberately removing the control-character check made the zip-magic case fail.
+Result: Done
+Fails without: yes
+Changed expectations: none
+Deviations: none; the module is not wired into the app (that is the integrator's lane).
+Counts after this task: lint 0 findings.
+
+### F4-03 Stored recipes and recent sets (pure part)
+Layer: app (pure module), lint, privacy test
+Files: src/app/recipe-store.js, tests/unit/recipe-store.test.js, tests/lint/checks.js, tests/unit/lint-rules.test.js, tests/e2e/privacy.spec.js, README.md
+Do: `createRecipeStore(storage)` takes an injected storage object. It keeps recipes under `quoin.recipes` (a list of name and canonical recipe text; at most 50 recipes and one million characters; same name replaces, ignoring case) and the names of recent sets under `quoin.recent` (at most 10, newest first, no duplicates, no path separators, no control characters, at most 80 characters). It never throws: unreadable or corrupt storage lists nothing, a write that fails returns `recipe.storeFull` or `recent.store`, and a stored recipe from a newer version is skipped when listing but kept when saving. It writes only those two keys. T-LINT-8 is now a pure function with the exact three-key allowlist (`quoin.theme`, `quoin.recipes`, `quoin.recent`). T-PRIV-3 keeps its original test (only the theme after ordinary use) and gains one that saves a recipe and remembers a set, then expects exactly the three keys, a recent list that holds only `Q3 sales` (a name with a path in it is refused), and no file name, path or workbook content anywhere in storage. The README privacy sentence names the three keys.
+Test that fails without it: `tests/unit/recipe-store.test.js` (18 tests), two new T-LINT-8 tests in `tests/unit/lint-rules.test.js`, and the new T-PRIV-3 test. Deliberately breaking the case-insensitive replace and the path check each made a test fail.
+Result: Done locally; the module is not wired into the app.
+Fails without: yes
+Changed expectations: T-PRIV-3 as the plan names it; its original assertion is kept as its own test. T-LINT-8 accepts three keys instead of one, as the plan names it.
+Deviations: none.
+Decisions made inside the plan's gaps (log, not yet confirmed):
+- Recent sets hold names only, with no timestamps.
+- The key check in lint applies to direct `window.localStorage` calls; the store gets its storage by injection and is restricted to its two constants at run time and by the privacy test.
+
+### Notes for the integrator: wiring F4-01 and F4-03
+- Save: a Save recipe button in the Recipe region calls `saveRecipeFile(recipe)` and downloads `out.bytes` as `out.name` with the app's existing `saveBytes` (type `application/json`). Load: an input accepting `.json`, and a drop of one file whose name passes `isRecipeFileName`, call `loadRecipeFile(file)`; on `ok` put `out.recipe` in the form and show `out.warnings`.
+- Stored recipes: `createRecipeStore(window.localStorage)` once in `main.js`. `saveRecipe`, `listRecipes`, `deleteRecipe`, `rememberSet`, `recentSets`, `clear` return plain data. When a set is created call `rememberSet(name)` with the dropped folder's own name (never a path) or a short label such as "12 files".
+- Strings to add to `src/ui/strings.js` when the code that uses them lands (T-E-11 rejects unused keys): `recipe.tooLarge` ("This recipe file is larger than 256 KB."), `recipe.binary` ("This is not a text file."), `recipe.name` ("Give the recipe a name before saving it."), `recipe.storeFull` ("Quoin cannot keep more recipes here. Delete one, or save it as a file."), `recent.name` and `recent.store` (not shown to people; may stay as codes).
+- Regenerate `asset-manifest.json` when these files are first imported by the app.
+

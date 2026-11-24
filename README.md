@@ -62,7 +62,7 @@ On the `fable` branch, dropping two or more workbooks or a folder builds a set. 
 
 ## Privacy
 
-Your file never leaves the tab. Quoin makes no network requests after the page and its assets load, sets a Content Security Policy that forbids them, and stores one thing: your theme choice, under the key `quoin.theme` in local storage. There are no cookies, no analytics, and no databases.
+Your file never leaves the tab. Quoin makes no network requests after the page and its assets load, sets a Content Security Policy that forbids them, and stores three small things in local storage: your theme choice (`quoin.theme`), recipes you choose to save (`quoin.recipes`, the recipe text only) and the names of sets you opened recently (`quoin.recent`, a short name and never a path). It never stores a workbook, a query from a workbook, or a file path. There are no cookies, no analytics, and no databases.
 
 ## Built with
 

@@ -18,6 +18,8 @@ import { renderPinned, renderQueue, renderCompare, renderChanges, pinLabel } fro
 import { summariesFor } from './change-summary.js';
 import { openFind } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
+import { insertViewSteps } from '../core/wb/view-steps.js';
+import { OpHistory } from '../core/wb/op-history.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
@@ -117,6 +119,7 @@ export class Workspace {
     this.cachedCompare = new Map();
     this.runToken = 0;
     this.onEditCallbacks = [];
+    this.histories = new Map();
     this.onEdit(() => this.syncChangesTab());
     this.resizer();
   }
@@ -200,13 +203,14 @@ export class Workspace {
     this.view = null;
     this.viewChip = h('span', { class: 'chip view', hidden: true });
     this.viewClear = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.clearView() }, S.colTools.viewClear);
+    this.viewSteps = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.addViewAsSteps() }, S.colTools.viewToSteps);
     this.viewNote = h('span', { class: 'sr-only', 'aria-live': 'polite' });
     this.headLine = h('span', { class: 'result-line' });
     this.verdict = h('span', { class: 'chip', hidden: true });
     this.exportBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: () => this.openResultExport() }, S.resultHead.export);
     this.resultHead = h('span', { class: 'result-head', hidden: true, role: 'group', 'aria-label': S.resultHead.label }, this.headLine, this.verdict);
     this.onSave = null;
-    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.resultHead, this.viewChip, this.viewClear, this.pinBtn, this.exportBtn, this.viewNote), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
+    this.dock.panel('result').append(h('div', { class: 'dock-actions result-actions' }, this.resultHead, this.viewChip, this.viewClear, this.viewSteps, this.pinBtn, this.exportBtn, this.viewNote), this.progress, this.crumbs, this.capNotice, this.resultBody, this.sources);
     this.resultPanel = h('div', { class: 'result-panel' }, this.dock.tabs, this.dock.body);
     this.codeBtn = h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => this.setRegion('code') }, S.code);
     this.stepsBtn = h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => this.setRegion('steps') }, S.stepsPanel.toggle);
@@ -527,6 +531,8 @@ export class Workspace {
       this.stepsPanel.render(null);
       return;
     }
+    if (this.undoKey !== this.historyKey()) this.stepsPanel.hideUndo();
+    this.stepsPanel.setHistorySize(this.item && this.item.type === 'query' ? this.history().size : 0);
     const model = stepsOf(this.editor.getText(), 0, { members: new Set(this.session.queries.map((q) => q.name)) });
     this.stepsModel = model;
     this.stepsPanel.setResults(this.stepResults);
@@ -695,15 +701,65 @@ export class Workspace {
       this.status.set({ note: res.reason });
       return false;
     }
+    const before = this.editor.getText();
     this.editor.replaceDiff(res.text);
     this.refreshSteps(focusName);
     this.stepsPanel.announce(done);
+    const op = this.history().record(done, before, this.editor.getText());
+    if (op) {
+      this.undoKey = this.historyKey();
+      this.stepsPanel.showUndo(done);
+      this.stepsPanel.setHistorySize(this.history().size);
+    }
     return true;
+  }
+
+  historyKey() {
+    return this.item ? `${this.item.type}:${this.item.name}` : '';
+  }
+
+  history() {
+    const key = this.historyKey();
+    if (!this.histories.has(key)) this.histories.set(key, new OpHistory());
+    return this.histories.get(key);
+  }
+
+  undoOperation() {
+    if (!this.item || this.item.type !== 'query') return false;
+    const hist = this.history();
+    const op = hist.undoable(this.editor.getText());
+    if (!op) {
+      this.stepsPanel.announce(S.stepsPanel.undoStale);
+      this.stepsPanel.hideUndo();
+      return false;
+    }
+    this.editor.replaceDiff(op.before);
+    hist.record(S.stepsPanel.undone(op.label), op.after, this.editor.getText());
+    this.refreshSteps();
+    this.stepsPanel.hideUndo();
+    this.stepsPanel.setHistorySize(hist.size);
+    this.stepsPanel.announce(S.stepsPanel.undone(op.label));
+    return true;
+  }
+
+  restoreVersion(v) {
+    const now = this.editor.getText();
+    if (v.text === now) return;
+    const label = v.label === null ? S.stepsPanel.restoredOriginal : S.stepsPanel.restored(v.label);
+    this.editor.replaceDiff(v.text);
+    this.history().record(label, now, this.editor.getText());
+    this.refreshSteps();
+    this.stepsPanel.hideUndo();
+    this.stepsPanel.setHistorySize(this.history().size);
+    this.stepsPanel.announce(label);
   }
 
   stepActions() {
     const text = () => this.editor.getText();
     return {
+      undo: () => this.undoOperation(),
+      versions: () => this.history().versions(),
+      restore: (v) => this.restoreVersion(v),
       go: (st) => {
         this.editor.goto(this.lineOfOffset(text(), st.parts.coreStart), 1);
         this.showStepResult(st.name);
@@ -1787,6 +1843,7 @@ export class Workspace {
     this.grid.columnTools = null;
     this.viewChip.hidden = true;
     this.viewClear.hidden = true;
+    this.viewSteps.hidden = true;
   }
 
   attachColumnTools(resultId) {
@@ -1848,6 +1905,7 @@ export class Workspace {
     this.viewChip.textContent = parts.join(' · ');
     this.viewChip.hidden = false;
     this.viewClear.hidden = false;
+    this.viewSteps.hidden = this.addStepTarget() === null;
     this.viewNote.textContent = S.colTools.viewApplied(f.format(res.rowCount), f.format(res.sourceRows));
   }
 
@@ -1860,6 +1918,7 @@ export class Workspace {
     v.hidden = [];
     this.viewChip.hidden = true;
     this.viewClear.hidden = true;
+    this.viewSteps.hidden = true;
     const r = this.lastResult;
     if (r && r.status === 'ok' && r.result && r.result.value) this.showTable(r.result.value, true, v.baseId);
     this.viewNote.textContent = S.colTools.viewCleared;
@@ -1884,6 +1943,18 @@ export class Workspace {
     let name = null;
     for (const [n, r] of this.stepResults) if (r && r.resultId === this.view.baseId) name = n;
     return (name ? steps.find((x) => x.name === name) : steps[steps.length - 1]) || null;
+  }
+
+  addViewAsSteps() {
+    const v = this.view;
+    const st = this.addStepTarget();
+    if (!v || !st || (!v.filters.length && !v.hidden.length)) return;
+    const res = insertViewSteps(this.editor.getText(), st.index, { filters: v.filters, hidden: v.hidden }, { prevName: st.name, existing: this.stepsModel.steps.map((x) => x.name), names: S.stepNames });
+    const last = res.ok ? res.added[res.added.length - 1] : null;
+    if (!this.applySteps(res, S.colTools.viewStepsAdded(res.ok ? res.added.length : 0), last)) return;
+    const added = this.stepsModel.steps.find((x) => x.name === last);
+    if (added) this.editor.goto(this.lineOfOffset(this.editor.getText(), added.parts.coreStart), 1);
+    this.runSteps(last);
   }
 
   openAddStep(col) {

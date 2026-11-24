@@ -1,6 +1,6 @@
 import { h, clear } from '../dom.js';
 import { S, fmt } from '../strings.js';
-import { menu } from '../dialogs.js';
+import { menu, popover } from '../dialogs.js';
 import { matches } from '../../app/commands.js';
 
 const KEYS = { rename: 'F2', del: 'Delete', bypass: 'b', up: 'Alt+Shift+ArrowUp', down: 'Alt+Shift+ArrowDown', runTo: 'Mod+F10', dup: 'Mod+D', insert: 'Insert' };
@@ -11,7 +11,10 @@ export class StepsPanel {
     this.title = h('span', { class: 'panel-title' }, S.stepsPanel.title);
     this.count = h('span', { class: 'count-pill' }, '0');
     this.runBtn = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => actions.runSteps() }, S.stepsPanel.runSteps);
-    this.head = h('div', { class: 'panel-head' }, this.title, this.count, h('span', { class: 'spacer' }), this.runBtn);
+    this.undoBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => actions.undo() }, S.stepsPanel.undo);
+    this.historyBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, 'aria-haspopup': 'dialog', onclick: (ev) => this.openHistory(ev.currentTarget) }, S.stepsPanel.history);
+    this.undoTimer = null;
+    this.head = h('div', { class: 'panel-head' }, this.title, this.count, h('span', { class: 'spacer' }), this.undoBtn, this.historyBtn, this.runBtn);
     this.list = h('ol', { class: 'steps-list', role: 'list', 'aria-label': S.stepsPanel.aria });
     this.note = h('p', { class: 'panel-note item-meta', hidden: true });
     this.refreshed = h('p', { class: 'panel-note item-meta refreshed-by', hidden: true });
@@ -31,6 +34,42 @@ export class StepsPanel {
     this.list.addEventListener('dragleave', (ev) => {
       if (!this.list.contains(ev.relatedTarget)) this.clearDrop();
     });
+  }
+
+  showUndo(label, ms = 10000) {
+    clearTimeout(this.undoTimer);
+    this.undoBtn.hidden = false;
+    this.undoBtn.setAttribute('aria-label', S.stepsPanel.undoLabel(label));
+    this.undoTimer = setTimeout(() => this.hideUndo(), ms);
+  }
+
+  setHistorySize(n) {
+    this.historyBtn.hidden = !n;
+  }
+
+  hideUndo() {
+    clearTimeout(this.undoTimer);
+    this.undoBtn.hidden = true;
+  }
+
+  openHistory(anchor) {
+    const versions = this.actions.versions();
+    const body = h('div', { class: 'history-pop' }, h('h3', null, S.stepsPanel.historyTitle));
+    const list = h('ol', { class: 'history-list' });
+    versions.forEach((v) => {
+      const label = v.label === null ? S.stepsPanel.historyOriginal : v.label;
+      list.append(h('li', null,
+        h('span', { class: 'history-label' }, label),
+        h('span', { class: 'history-time item-meta' }, new Date(v.at).toLocaleTimeString()),
+        h('button', { class: 'btn btn-quiet', type: 'button', 'aria-label': S.stepsPanel.restoreFor(label), onclick: () => {
+          pop.close();
+          this.actions.restore(v);
+        } }, S.stepsPanel.restore)));
+    });
+    body.append(list);
+    const pop = popover(anchor, body, null, S.stepsPanel.historyTitle);
+    const first = pop.el.querySelector('button');
+    if (first) first.focus();
   }
 
   announce(text) {
@@ -115,7 +154,10 @@ export class StepsPanel {
     const st = this.stepAt(row);
     const rows = this.rows();
     const at = rows.indexOf(row);
-    if (matches(ev, KEYS.up)) {
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey && ev.key.toLowerCase() === 'z') {
+      ev.preventDefault();
+      this.actions.undo();
+    } else if (matches(ev, KEYS.up)) {
       ev.preventDefault();
       this.actions.move(st, st.index - 1);
     } else if (matches(ev, KEYS.down)) {

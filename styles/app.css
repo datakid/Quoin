@@ -1437,8 +1437,9 @@ dialog.palette {
 
 .panel-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s-2);
+  gap: 0 var(--s-2);
   min-height: var(--h-pane-head);
   padding: 0 var(--s-3) 0 var(--s-4);
 }
@@ -3205,4 +3206,38 @@ dialog.colwork.sheet {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+.history-pop {
+  display: grid;
+  gap: var(--s-2);
+  min-width: 18rem;
+  max-width: min(26rem, calc(100vw - var(--s-5)));
+}
+
+.history-pop h3 {
+  margin: 0;
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-1);
+  max-height: 20rem;
+  overflow: auto;
+}
+
+.history-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.history-label {
+  overflow-wrap: anywhere;
 }

@@ -445,3 +445,18 @@
 #### Not done in WB-16 (still)
 - A view sort in the column menu, and turning the view filters on the chip into steps in one click.
 
+### WB-16, WB-14, WB-15: the view as steps, and the operation history with Undo
+- `src/core/wb/view-steps.js` (pure): `viewActions` and `insertViewSteps` turn a view into one filter step per filter plus one Remove Columns step for the hidden columns, chained after a chosen step with `insertStepAfter` and rewiring, so the step after them (or the `in` line) reads the last new step. 6 unit tests run the resulting text through the engine on a `#table` and compare its rows and columns with `applyView` on the same table (two filters and a hidden column, values filter with a null, ignore case, a chain with a following step, unique step names, refusals).
+- The view chip row has Add as steps (only when the shown result is a step of a `let` query). One click inserts the steps as a single text change, moves the caret to the last one, and runs the steps up to it; the view is dropped and the new last step's grid equals what the view showed (`tests/e2e/column-tools.spec.js`, now 14 tests).
+- `src/core/wb/op-history.js` (pure): per query, the last 50 operations with label, before and after text. `undoable(text)` is true only while the text is still the result of the last operation. 4 unit tests.
+- Every operation that goes through `applySteps` (move, rename, delete, bypass, put back, duplicate, insert, Add as a step, Add as steps) is recorded with the editor's own text before and after. The steps panel head shows Undo for 10 seconds after an operation (its accessible name says which one) and `Ctrl/Cmd+Z` with a step row focused does the same; in the editor `Ctrl/Cmd+Z` stays native. Undo puts the text back exactly; if the text was edited by hand since, it refuses and says so. History appears once the query has an operation and opens a popover of the operations newest first with Restore this version on each and a last row for the text before the first operation. A restore is itself an operation, so nothing is lost by restoring. The history is in memory per query, never touches `original`, and is dropped on reload.
+- `tests/e2e/step-history.spec.js` (5 tests): delete then Undo is byte-identical, `Ctrl+Z` in the panel, refusal after a hand edit, five operations then History restores the third and then the text before the first, History and Undo per query.
+
+#### Deviations
+- Undo is a button in the steps panel head, not in the status region: the status bar has no slot for an action.
+- A view sort in the column menu is not built. The menu's Sort entries are the grid's own display sort, which keeps the original row numbers and works to 200 000 rows; a worker sort would renumber the rows and replace it for no gain. `view` still accepts a `sort` and it is unit tested, so it can be wired later.
+- The steps panel head wraps if it runs out of room; History stays hidden until there is something in it so the panel looks the same as before for a query nobody has edited (no visual baseline changed).
+
+#### Not done in WB-14 and WB-15 (still)
+- Peek, pin a step, Invoke for function queries, delta chips beyond row counts, the Count rows setting, the multi-step preview popover, Auto-run steps after structural edits, the editor gutter band.
+

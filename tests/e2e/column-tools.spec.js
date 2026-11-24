@@ -232,3 +232,36 @@ test('T-WB-16: Enter on a focused column header opens its menu, and Escape close
   await expect(page.getByRole('menu')).toHaveCount(0);
   await expect(header(page, 'City')).toBeFocused();
 });
+
+test('T-WB-16: Add as steps turns the view into a filter step and a remove columns step, and the result equals the view', async ({ page }) => {
+  await setup(page);
+  await filterByCondition(page, 'City', 'equals', 'Oslo');
+  await menuItem(page, 'Age', 'Hide in view');
+  await expect(chip(page)).toContainText('1 column hidden');
+  const viewRows = await gridRows(page);
+  expect(viewRows).toEqual([['Ann', 'Oslo'], ['Cy', 'Oslo'], ['Flo', 'Oslo']]);
+  await page.getByRole('button', { name: 'Add as steps' }).click();
+  const text = await editor(page).inputValue();
+  expect(text).toContain('#"Filtered Rows" = Table.SelectRows(Typed, each [City] = "Oslo")');
+  expect(text).toContain('#"Removed Columns" = Table.RemoveColumns(#"Filtered Rows", {"Age"})');
+  expect(text).toMatch(/in\s+#"Removed Columns"\s*$/);
+  await expect(page.locator('.step-row')).toHaveCount(4);
+  await expect(page.locator('.step-row.is-current')).toContainText('Removed Columns');
+  await expect(chip(page)).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Add as steps' })).toBeHidden();
+  expect(await gridRows(page)).toEqual(viewRows);
+});
+
+test('T-WB-16: Add as steps is not offered for a result that is not a let query', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await openApp(page);
+  await loadFile(page, ext('pq_simple.xlsx'));
+  await item(page, 'StudentResults').click();
+  await editor(page).fill('#table({"A", "B"}, {{2, "x"}, {1, "y"}, {2, "z"}})');
+  await page.getByRole('button', { name: /^Run/ }).first().click();
+  await expect(resultGrid(page)).toBeVisible();
+  await filterByCondition(page, 'A', 'equals', '2');
+  await expect(chip(page)).toContainText('2 of 3 rows');
+  await expect(page.getByRole('button', { name: 'Clear view' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add as steps' })).toBeHidden();
+});

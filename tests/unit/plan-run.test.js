@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startPlanRun } from '../../src/app/plan-run.js';
+import { startPlanRun, previewSupport } from '../../src/app/plan-run.js';
+import { buildPlanOutput } from '../../src/app/outputs.js';
 import { createVariantTextLoader } from '../../src/app/variant-text.js';
 import { SetSession } from '../../src/app/set-session.js';
 import { indexWorkbook } from '../../src/batch/index/file-index.js';
@@ -209,11 +210,78 @@ test('a run needs a preview', () => {
   assert.throws(() => startPlanRun({ mode: 'run', session, pool: inProcessPool(), recipe: injectReplace(), now: NOW, runId: 'r1' }), /preview/);
 });
 
-test('only inject, replace and align can be previewed, and the mode must be known', () => {
+const transformOf = (output, extra = {}) => recipeOf({ recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output, ...extra });
+
+test('only inject, replace, align and a transform that writes a new file per unit can be previewed, and the mode must be known', () => {
   const session = new SetSession();
-  const transform = recipeOf({ recipe: 'transform', v: 1, query: { source: 'inline', m: 'let x = 1 in x' }, output: { mode: 'newFile' } });
-  assert.throws(() => startPlanRun({ mode: 'preview', session, pool: inProcessPool(), recipe: transform, now: NOW, runId: 'r1' }), /transform/);
+  for (const [recipe, why] of [[transformOf({ mode: 'newSheet' }), /transform/], [transformOf({ mode: 'combined' }), /transform/], [transformOf({ mode: 'inPlace', range: 'A1' }), /transform/], [transformOf({ mode: 'newFile' }, { compute: 'excel' }), /transform/]]) {
+    assert.throws(() => startPlanRun({ mode: 'preview', session, pool: inProcessPool(), recipe, now: NOW, runId: 'r1' }), why);
+  }
   assert.throws(() => startPlanRun({ mode: 'dry', session, pool: inProcessPool(), recipe: injectReplace(), now: NOW, runId: 'r1' }), /mode/);
+});
+
+test('previewSupport says why a recipe cannot be previewed', () => {
+  assert.deepEqual(previewSupport(injectReplace()), { ok: true });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'newFile' })), { ok: true });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'newSheet' })), { ok: false, why: 'output', mode: 'newSheet' });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'combined' })), { ok: false, why: 'output', mode: 'combined' });
+  assert.deepEqual(previewSupport(transformOf({ mode: 'newFile' }, { compute: 'excel' })), { ok: false, why: 'compute' });
+  assert.deepEqual(previewSupport(recipeOf({ recipe: 'collect', v: 1 })), { ok: false, why: 'kind' });
+});
+
+test('a transform preview lists a row per unit with the file it would write, keeps a hash per file, and drops every byte', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [noQuery(), 'c/none.xlsm']]);
+  const pool = inProcessPool();
+  const out = await preview({ session, pool, recipe: transformOf({ mode: 'newFile' }) }).promise;
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.rows.map((r) => [r.file, r.unit, r.verdict, r.output]), [['one.xlsx', 'StudentNames', 'changed', 'one__StudentNames.xlsx'], ['one.xlsx', 'StudentResults', 'changed', 'one__StudentResults.xlsx'], ['none.xlsm', 'FinalTable', 'changed', 'none__FinalTable.xlsx'], ['none.xlsm', 'RawInput', 'changed', 'none__RawInput.xlsx']]);
+  assert.match(out.hashes.get('f0001'), /^[0-9a-f]{64}$/);
+  const held = out.perFile.get('f0001');
+  assert.equal(held.bytes, null);
+  assert.equal(held.outputs.length, 2);
+  for (const o of held.outputs) assert.deepEqual([o.bytes === undefined, /^[0-9a-f]{64}$/.test(o.sha256)], [true, true]);
+  assert.deepEqual(pool.submitted.map((s) => [s.recipe, s.dryRun]), [['transform', true], ['transform', true]]);
+  assert.equal(out.counts.changed, 4);
+  assert.equal(out.perFile.get('f0002').outputs.length, 2);
+});
+
+async function transformPair(mutate = null) {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [pq(), 'b/two.xlsx']]);
+  const recipe = transformOf({ mode: 'newFile' });
+  const previewed = await preview({ session, pool: inProcessPool(), recipe }).promise;
+  const pool = inProcessPool({ mutate });
+  const run = await startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r2', preview: previewed, build: (result) => buildPlanOutput(result) }).promise;
+  return { previewed, run };
+}
+
+test('a transform run writes the very files the preview described', async () => {
+  const { previewed, run } = await transformPair();
+  assert.equal(run.ok, true);
+  assert.equal(run.defect, false);
+  assert.deepEqual(run.output.files, ['a/one__StudentNames.xlsx', 'a/one__StudentResults.xlsx', 'b/two__StudentNames.xlsx', 'b/two__StudentResults.xlsx']);
+  for (const [id, held] of run.perFile) {
+    assert.equal(run.hashes.get(id), previewed.hashes.get(id));
+    for (const o of held.outputs) assert.deepEqual([o.bytes instanceof Uint8Array, o.bytes.length > 0], [true, true]);
+  }
+  assert.deepEqual(run.rows.map((r) => r.verdict), ['changed', 'changed', 'changed', 'changed']);
+});
+
+test('a transform output that differs from its preview is not released and the run is flagged', async () => {
+  const flip = (result) => {
+    if (!result.outputs || result.fileId !== 'f0002') return result;
+    return { ...result, outputs: result.outputs.map((o, i) => (i === 0 ? { ...o, sha256: 'f'.repeat(64) } : o)) };
+  };
+  const { run } = await transformPair(flip);
+  assert.equal(run.ok, true);
+  assert.equal(run.defect, true);
+  assert.deepEqual(run.diverged, ['f0002']);
+  assert.deepEqual(run.output.files, ['a/one__StudentNames.xlsx', 'a/one__StudentResults.xlsx']);
+  assert.deepEqual(run.output.rows.map((r) => [r.file, r.verdict, r.reason_code, r.output]), [
+    ['one.xlsx', 'changed', '', 'a/one__StudentNames.xlsx'],
+    ['one.xlsx', 'changed', '', 'a/one__StudentResults.xlsx'],
+    ['two.xlsx', 'not-released', 'verify.planDrift', ''],
+    ['two.xlsx', 'not-released', 'verify.planDrift', '']
+  ]);
 });
 
 test('a signed project is previewed as changed with its signature marked removed, and a run needs the set to be confirmed', async () => {
@@ -310,6 +378,26 @@ test('cancelling while the outputs are being built stops quietly: cancelled resu
   assert.equal(sawStop, true);
   assert.equal(session.state, 'ready');
   assert.equal(session.move, null);
+});
+
+test('a run stopped after some files were written says how many and where, and a stop with nothing written says nothing more', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [pq(), 'b/two.xlsx']]);
+  const pool = inProcessPool();
+  const recipe = injectReplace();
+  const previewed = await preview({ session, pool, recipe }).promise;
+  let handle = null;
+  const stopped = async (result) => {
+    handle.cancel();
+    return { ok: true, stopped: true, name: 'out', files: ['a/one.xlsx'], rows: result.rows };
+  };
+  handle = startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r1', preview: previewed, build: stopped });
+  assert.deepEqual(await handle.promise, { cancelled: true, written: 1, into: 'out' });
+  const none = async (result) => {
+    handle.cancel();
+    return { ok: true, stopped: true, name: 'out', files: [], rows: result.rows };
+  };
+  handle = startPlanRun({ mode: 'run', session, pool, recipe, now: NOW, runId: 'r2', preview: previewed, build: none });
+  assert.deepEqual(await handle.promise, { cancelled: true });
 });
 
 test('a preview keeps the text before and after each change for the diff and a run does not carry any', async () => {

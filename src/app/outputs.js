@@ -13,7 +13,7 @@ const INDEX_COLUMNS = ['file', 'name', 'kind', 'load target', 'hash'];
 
 export const collectZipName = (now) => `Collect ${now.slice(0, 10)}.zip`;
 
-const PLAN_KIND = { inject: 'Inject', replace: 'Replace', align: 'Align' };
+const PLAN_KIND = { inject: 'Inject', replace: 'Replace', align: 'Align', transform: 'Transform' };
 const YES_NO = ['verified', 'signature_removed'];
 
 export const planZipName = (kind, now) => `${PLAN_KIND[kind] || 'Run'} ${now.slice(0, 10)}.zip`;
@@ -83,20 +83,30 @@ function outputParts(relPath) {
   return { folders: parts.map((p) => sanitizeFileName(p, '')), stem: sanitizeFileName(file, ext), ext };
 }
 
+const outputKey = (fileId, output) => (output ? `${fileId}\t${output}` : fileId);
+
+function releasedItems(result) {
+  if (result.outputs && result.outputs.length) return result.outputs.filter((o) => o.bytes).map((o) => ({ output: o.name, data: o.bytes }));
+  return result.bytes ? [{ output: '', data: result.bytes }] : [];
+}
+
 export function releasedFiles({ indexes, perFile }) {
   const seen = new Set();
   const out = [];
   for (const ix of indexes) {
     const result = perFile.get(ix.id);
-    if (!result || !result.bytes) continue;
+    if (!result) continue;
     const { folders, stem, ext } = outputParts(ix.relPath);
-    const base = ext ? stem.slice(0, stem.length - ext.length) : stem;
-    let name = stem;
-    let n = 2;
-    while (seen.has([...folders, name].join('/').toLowerCase())) name = `${base}-${n++}${ext}`;
-    const path = [...folders, name].join('/');
-    seen.add(path.toLowerCase());
-    out.push({ fileId: ix.id, path, data: result.bytes });
+    for (const item of releasedItems(result)) {
+      const wanted = item.output ? outputParts(item.output) : { stem, ext };
+      const base = wanted.ext ? wanted.stem.slice(0, wanted.stem.length - wanted.ext.length) : wanted.stem;
+      let name = wanted.stem;
+      let n = 2;
+      while (seen.has([...folders, name].join('/').toLowerCase())) name = `${base}-${n++}${wanted.ext}`;
+      const path = [...folders, name].join('/');
+      seen.add(path.toLowerCase());
+      out.push({ fileId: ix.id, key: outputKey(ix.id, item.output), path, data: item.data });
+    }
   }
   return out;
 }
@@ -129,14 +139,15 @@ export async function buildCollectOutput({ plan, indexes, results, now, runId, c
 export function fillOutputs(rows, indexes, pathOf) {
   const idOf = new Map(indexes.map((ix) => [ix.relPath, ix.id]));
   return rows.map((r) => {
-    const path = pathOf.get(idOf.get(`${r.folder}${r.file}`));
-    return r.verdict === 'changed' && path ? { ...r, output: path } : r;
+    const id = idOf.get(`${r.folder}${r.file}`);
+    const path = pathOf.get(outputKey(id, r.output)) || pathOf.get(id);
+    return r.verdict === 'changed' ? { ...r, output: path || '' } : r;
   });
 }
 
 export async function buildPlanOutput({ plan, indexes, perFile, rows, now, ceilingBytes = GIB, maxEntries = CLASSIC_ZIP_ENTRIES }) {
   const files = releasedFiles({ indexes, perFile });
-  const filled = fillOutputs(rows, indexes, new Map(files.map((f) => [f.fileId, f.path])));
+  const filled = fillOutputs(rows, indexes, new Map(files.map((f) => [f.key, f.path])));
   const reportBytes = reportCsvBytes(filled);
   const compressed = files.reduce((n, f) => n + f.data.length, 0);
   if (compressed + reportBytes.length > ceilingBytes || files.length + 1 > maxEntries) return { ok: false, code: 'output.zipTooLarge', rows: filled };

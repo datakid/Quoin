@@ -65,9 +65,9 @@ export async function buildFolderOutput(root, { plan, indexes, perFile, rows }, 
   const files = releasedFiles({ indexes, perFile });
   const written = new Map();
   for (const f of files) {
-    if (shouldStop()) return { ok: true, stopped: true, files: [...written.values()], rows };
+    if (shouldStop()) return { ok: true, stopped: true, name: root.name, files: [...written.values()], rows };
     try {
-      written.set(f.fileId, await writeOne(root, f.path, f.data));
+      written.set(f.key, await writeOne(root, f.path, f.data));
     } catch {
       return { ok: false, code: 'output.folderFailed', files: [...written.values()], rows: fillOutputs(rows, indexes, written) };
     }

@@ -217,6 +217,10 @@ export class SetShell {
     this.showDetail(-1);
   }
 
+  revealResult() {
+    this.result.scrollIntoView({ block: 'nearest' });
+  }
+
   showDetail(index) {
     if (!this.detail) return;
     clear(this.detail);
@@ -230,9 +234,10 @@ export class SetShell {
       this.detail.append(h('p', { class: 'row-diff-hint item-meta' }, S.rowDiffHint));
       return;
     }
-    const body = d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
+    const writes = d.writes !== undefined;
+    const body = writes ? h('p', { class: 'row-diff-rename' }, S.rowWrites(d.writes, d.target.name)) : d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
     this.detail.append(
-      h('div', { class: 'row-diff', role: 'region', 'aria-label': S.rowDiffLabel(d.target.name), tabindex: '0' },
+      h('div', { class: 'row-diff', role: 'region', 'aria-label': writes ? S.rowWritesLabel(d.target.name) : S.rowDiffLabel(d.target.name), tabindex: '0' },
         h('p', { class: 'row-diff-title' }, S.rowDiffTitle(d.op, d.target.name, d.file)),
         body));
   }

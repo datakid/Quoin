@@ -36,7 +36,7 @@ async function runSet(specs, json) {
     if (!fp.units.length) continue;
     const { bytes, meta } = sources.get(fp.fileId);
     const res = await runFilePlan(bytes, meta, fp, { now: NOW, dryRun: false, limits: recipe.more.limits, culture: recipe.more.culture, runId: 'r1', recipe, acknowledgeSignature: true });
-    perFile.set(fp.fileId, { rows: res.rows, changes: res.changes, warnings: res.warnings, sha256: res.sha256, bytes: res.bytes });
+    perFile.set(fp.fileId, { rows: res.rows, changes: res.changes, warnings: res.warnings, sha256: res.sha256, bytes: res.bytes, outputs: res.outputs });
   }
   const rows = reportRows(plan, indexes, new Map([...perFile].map(([id, v]) => [id, { rows: v.rows }])), 'r1');
   return { plan, indexes, perFile, rows, sources };
@@ -128,6 +128,7 @@ test('the zip is named for the recipe and the day', () => {
   assert.equal(planZipName('inject', NOW), 'Inject 2026-11-14.zip');
   assert.equal(planZipName('replace', NOW), 'Replace 2026-11-14.zip');
   assert.equal(planZipName('align', NOW), 'Align 2026-11-14.zip');
+  assert.equal(planZipName('transform', NOW), 'Transform 2026-11-14.zip');
 });
 
 const notFound = () => Object.assign(new Error('not found'), { name: 'NotFoundError' });
@@ -248,6 +249,7 @@ test('a stop request ends the folder output between files and writes no report',
   const root = new StubDir('out', log);
   const out = await buildFolderOutput(root, { ...s, now: NOW, runId: 'r1' }, { shouldStop: () => { const was = stop; stop = true; return was; } });
   assert.equal(out.stopped, true);
+  assert.equal(out.name, 'out');
   assert.deepEqual(log.filter((l) => l.startsWith('open')), ['open out/a/one.xlsx']);
 });
 
@@ -269,5 +271,60 @@ test('a refused row that carries a detail reads as the sentence followed by the 
   const results = new Map([['f1', { rows: [{ run_id: 'r1', file: 'a.xlsx', folder: 'x/', unit: 'a', unit_index: 0, recipe: 'inject', action: 'remove', compute: '', verdict: 'refused', reason_code: 'refused.loaded', reason: 'Sheet1!Table1', old_hash: '', new_hash: '', output: '', verified: false, signature_removed: false, duration_ms: 0 }] }]]);
   const rows = reportRows(plan, indexes, results, 'r1');
   assert.equal(rows[0].reason, 'This query loads to the workbook, so it cannot be removed. Nothing was changed. (Sheet1!Table1)');
+});
+
+const transformNewFile = { recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output: { mode: 'newFile' } };
+
+test('a transform run zip holds one workbook per unit next to where its source was, and the report names each path', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx'], [EXT, 'pq_simple.xlsx', 'west/pq_simple.xlsx']], transformNewFile);
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  assert.equal(out.ok, true);
+  assert.equal(out.name, 'Transform 2026-11-14.zip');
+  const names = [...(await entries(out.bytes)).keys()];
+  assert.deepEqual(names, ['report.csv', 'east/pq_simple__StudentNames.xlsx', 'east/pq_simple__StudentResults.xlsx', 'west/pq_simple__StudentNames.xlsx', 'west/pq_simple__StudentResults.xlsx']);
+  assert.deepEqual(out.rows.map((r) => [r.folder, r.unit, r.verdict, r.output]), [
+    ['east/', 'StudentNames', 'changed', 'east/pq_simple__StudentNames.xlsx'],
+    ['east/', 'StudentResults', 'changed', 'east/pq_simple__StudentResults.xlsx'],
+    ['west/', 'StudentNames', 'changed', 'west/pq_simple__StudentNames.xlsx'],
+    ['west/', 'StudentResults', 'changed', 'west/pq_simple__StudentResults.xlsx']
+  ]);
+  const report = csvLines((await entries(out.bytes)).get('report.csv'));
+  assert.equal(report.length, 5);
+  assert.ok(report[1].includes('east/pq_simple__StudentNames.xlsx'));
+});
+
+test('each transform output in the zip is exactly the workbook the unit produced', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']], transformNewFile);
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  const inZip = await entries(out.bytes);
+  for (const o of s.perFile.get('f0001').outputs) assert.deepEqual(Array.from(inZip.get(`east/${o.name}`)), Array.from(o.bytes));
+});
+
+test('transform outputs whose names differ only by case get -2 before the extension, and each row names its own path', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'x/Book.xlsx'], [EXT, 'pq_simple.xlsx', 'x/book.xlsx']], transformNewFile);
+  const files = releasedFiles(s);
+  assert.deepEqual(files.map((f) => f.path), ['x/Book__StudentNames.xlsx', 'x/Book__StudentResults.xlsx', 'x/book__StudentNames-2.xlsx', 'x/book__StudentResults-2.xlsx']);
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  assert.deepEqual(out.rows.map((r) => r.output), files.map((f) => f.path));
+});
+
+test('a transform unit that was held back has no entry in the zip and no output in its row', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'a.xlsx']], transformNewFile);
+  const held = s.perFile.get('f0001');
+  s.perFile.set('f0001', { ...held, outputs: [{ ...held.outputs[0], bytes: null }, held.outputs[1]] });
+  const out = await buildPlanOutput({ ...s, now: NOW, runId: 'r1' });
+  assert.deepEqual([...(await entries(out.bytes)).keys()], ['report.csv', 'a__StudentResults.xlsx']);
+  assert.deepEqual(out.rows.map((r) => r.output), ['', 'a__StudentResults.xlsx']);
+});
+
+test('a folder output writes every transform workbook at its own path, then report.csv', async () => {
+  const s = await runSet([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']], transformNewFile);
+  const log = [];
+  const root = new StubDir('out', log);
+  const out = await buildFolderOutput(root, { ...s, now: NOW, runId: 'r1' }, { shouldStop: () => false });
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.files, ['east/pq_simple__StudentNames.xlsx', 'east/pq_simple__StudentResults.xlsx']);
+  assert.deepEqual(log.filter((l) => l.startsWith('open')), ['open out/east/pq_simple__StudentNames.xlsx', 'open out/east/pq_simple__StudentResults.xlsx', 'open out/report.csv']);
+  assert.deepEqual(out.rows.map((r) => r.output), out.files);
 });
 

@@ -111,3 +111,20 @@ test('a row takes its text from its own file even when another file has a change
   };
   assert.deepEqual([0, 1].map((i) => rowDiff(p, i).after), ['new one', 'new two']);
 });
+
+const transformNewFile = { recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output: { mode: 'newFile' } };
+
+test('a changed transform row says which file it would write, beside its source, and has no text to compare', async () => {
+  const p = await previewOf([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx']], transformNewFile);
+  const d = rowDiff(p, 0);
+  assert.deepEqual(d, { file: 'east/pq_simple.xlsx', target: { name: 'StudentNames' }, op: 'transform', writes: 'east/pq_simple__StudentNames.xlsx' });
+  assert.equal(rowDiff(p, 1).writes, 'east/pq_simple__StudentResults.xlsx');
+});
+
+test('a transform row that failed or was skipped has no detail', async () => {
+  const broken = { ...transformNewFile, query: { source: 'inline', m: 'error "boom"' } };
+  const p = await previewOf([[EXT, 'pq_simple.xlsx', 'east/pq_simple.xlsx'], [WB, 'mixed.xlsm', 'north/mixed.xlsm']], broken);
+  assert.ok(p.rows.every((r) => r.verdict !== 'changed'));
+  for (let i = 0; i < p.rows.length; i++) assert.equal(rowDiff(p, i), null);
+});
+

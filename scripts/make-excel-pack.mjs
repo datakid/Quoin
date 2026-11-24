@@ -1,345 +1,367 @@
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join, resolve } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openWorkbook } from '../src/core/workbook.js';
 import { applyChangeSet, emptyChangeSet } from '../src/core/save.js';
 import { runOnce } from '../src/core/m/engine.js';
+import { zipFiles } from '../src/core/export/files.js';
 import { indexWorkbook } from '../src/batch/index/file-index.js';
 import { parseRecipe } from '../src/batch/recipe/recipe.js';
 import { resolvePlan } from '../src/batch/resolve/resolve.js';
 import { executeFile } from '../src/batch/execute/index.js';
 import { combineOutputs } from '../src/batch/execute/combine.js';
-import { zipClock } from '../src/batch/execute/collect.js';
 import { sha256Bytes } from '../src/batch/index/hash.js';
-import { writeZip } from '../src/core/zip-write.js';
 
-export const PACK_NOW = '2026-11-14T10:00:00.000Z';
-const FIXTURES = fileURLToPath(new URL('../tests/fixtures/external/', import.meta.url));
-const fixtureBytes = (name) => new Uint8Array(readFileSync(join(FIXTURES, name)));
-const encode = (text) => new TextEncoder().encode(text);
-const extOf = (name) => (/\.xlsm$/i.test(name) ? 'xlsm' : 'xlsx');
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const NOW = '2026-11-23T12:00:00.000Z';
+const CLOCK = new Date(NOW);
+const fixture = (dir, name) => new Uint8Array(readFileSync(join(root, 'tests', 'fixtures', dir, name)));
+const external = (name) => fixture('external', name);
+const generated = (name) => fixture('workbooks', name);
 
-const SCOPE = { type: 'workbook', match: 'all', excludeHidden: true };
-
-const OPENS_INPUT = 'The input opens in Excel with no message. Click Enable Editing if Protected View appears.';
-const OPENS_OUTPUT = 'The output opens with no repair, recovery or "unreadable content" message.';
-const SAVES = 'File > Save As, under a new name, works with no message, and the saved copy opens again.';
-const REFRESHES = 'Data > Refresh All finishes with no error message.';
-const COMPILES = 'In the VBA editor (Alt+F11), Debug > Compile VBAProject finishes with no error.';
-
-async function runRecipe(bytes, name, json, extra = {}) {
-  const recipe = parseRecipe(JSON.stringify(json)).recipe;
-  const index = await indexWorkbook(bytes, { id: 'f1', name, relPath: name, size: bytes.length });
-  const plan = resolvePlan(recipe, [index], { now: PACK_NOW });
-  const wb = await openWorkbook(bytes, name);
-  const result = await executeFile(wb, plan.files[0], { now: PACK_NOW, recipe, meta: index, runId: 'excel-pack', ...extra });
-  return { recipe, plan, result };
-}
-
-function changed(id, run, { others = [] } = {}) {
-  const { result } = run;
-  if (!result.bytes) throw new Error(`${id}: no output was written: ${JSON.stringify(result.rows.map((r) => [r.verdict, r.reason_code]))}`);
-  const bad = result.rows.filter((r) => !(r.verdict === 'changed' && r.verified) && !others.includes(r.verdict));
-  if (bad.length) throw new Error(`${id}: a row is not a verified change: ${JSON.stringify(bad.map((r) => [r.verdict, r.reason_code]))}`);
-  if (!result.rows.some((r) => r.verdict === 'changed' && r.verified)) throw new Error(`${id}: nothing was changed`);
-  return result.bytes;
-}
-
-const summary = (rows) => rows.map((r) => ({ unit: r.unit, action: r.action, verdict: r.verdict, verified: r.verified, old_hash: r.old_hash, new_hash: r.new_hash, signature_removed: r.signature_removed }));
-
-const inject = (over) => ({ recipe: 'inject', v: 1, scope: SCOPE, inject: { target: 'query', op: 'add', match: 'name', source: 'inline', refreshOnLoad: false, ...over } });
-const replaceIn = (over) => ({ recipe: 'replace', v: 1, scope: SCOPE, replace: { in: ['m', 'vba'], kind: 'text', matchCase: true, ...over } });
-
-const REPLACED_M = [
-  'let',
-  '    Source = Excel.CurrentWorkbook(){[Name="StudentNames"]}[Content],',
-  '    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Name", type text}, {"Age", Int64.Type}}),',
-  '    #"Added Custom" = Table.AddColumn(#"Changed Type", "DateTimeGenerated", each DateTime.LocalNow()),',
-  '    #"Added Version" = Table.AddColumn(#"Added Custom", "Version", each "Quoin pack Q01")',
-  'in',
-  '    #"Added Version"'
-].join('\n');
-
-const COPY_M = ['let', '    Source = Excel.CurrentWorkbook(){[Name="StudentNames"]}[Content]', 'in', '    Source'].join('\n');
+const CURRENT = 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]';
+const TWO_ROWS = 'let\n    Source = #table({"Name", "Score"}, {{"Ann", 1}, {"Bob", 2}})\nin\n    Source';
+const ADDED_M = 'let\n    Source = #table({"Pack"}, {{"added by Quoin"}})\nin\n    Source';
+const HELLO = 'Sub say_hello()\r\n    MsgBox "Hello from Quoin"\r\nEnd Sub\r\n';
+const REPLACED_M = 'let\n    Source = Excel.CurrentWorkbook(){[Name="StudentNames"]}[Content],\n    #"Added Version" = Table.AddColumn(Source, "Version", each "Quoin pack")\nin\n    #"Added Version"';
+const COPY_M = 'let\n    Source = Excel.CurrentWorkbook(){[Name="StudentNames"]}[Content]\nin\n    Source';
 const AWKWARD = ['Totals (2026)', 'Résumé 2026', 'a.b', 'q1_2026'];
-const MACRO_REPLACED = 'Sub Macro1()\n    MsgBox "Macro1 replaced by Quoin"\nEnd Sub\n';
-const MACRO_ADDED = 'Sub QuoinAdded()\n    MsgBox "Added by Quoin"\nEnd Sub\n';
+const MACRO1 = 'Sub Macro1()\r\n    MsgBox "Macro1 replaced by Quoin"\r\nEnd Sub\r\n';
+const NEW_MODULE = 'Sub quoin_added()\r\n    MsgBox "Added by Quoin"\r\nEnd Sub\r\n';
 
-const textTransform = (output) => ({ recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output, more: { culture: 'en-US' } });
+const inject = (spec) => ({ recipe: 'inject', v: 1, inject: { match: 'name', source: 'inline', refreshOnLoad: false, ...spec } });
+const replaceIn = (where, find, replacement) => ({ recipe: 'replace', v: 1, replace: { in: where, find, with: replacement, kind: 'text', matchCase: true } });
+const transform = (output) => ({ recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: CURRENT }, output });
 
-async function buildQueryCases() {
-  const baseName = 'pq_simple.xlsx';
-  const base = fixtureBytes(baseName);
-  const cases = [];
-  const q01 = await runRecipe(base, baseName, inject({ op: 'replace', name: 'StudentResults', text: REPLACED_M, refreshOnLoad: true, target: 'query' }));
-  cases.push({
-    id: 'Q01', slug: 'replace-query', title: 'Replace the text of a query', group: 'Queries',
-    did: 'Replaced the text of the query StudentResults with a version that adds a column Version, and set it to refresh when the file opens.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsx', bytes: changed('Q01', q01) }], rows: summary(q01.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Data > Queries & Connections lists StudentResults. Double-click it: the Advanced Editor shows a step called "Added Version".', REFRESHES, 'On the sheet StudentResults the table has a column Version filled with "Quoin pack Q01".', 'The table StudentNames on the sheet Input is unchanged.', SAVES]
-  });
-  const q02 = await runRecipe(base, baseName, inject({ op: 'add', name: 'Student Names Copy', text: COPY_M }));
-  const q02Bytes = changed('Q02', q02);
-  cases.push({
-    id: 'Q02', slug: 'add-query', title: 'Add a query', group: 'Queries',
-    did: 'Added a connection-only query called "Student Names Copy" that reads the table StudentNames. No table, sheet or connection was created.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsx', bytes: q02Bytes }], rows: summary(q02.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Data > Queries & Connections lists "Student Names Copy" next to StudentResults.', 'Double-click "Student Names Copy": the editor opens and the preview shows the columns Name and Age.', 'Right-click it > Load To... > Table loads the data into a new sheet with no error.', REFRESHES, SAVES]
-  });
-  let awkward = base;
-  const awkwardRows = [];
-  for (const name of AWKWARD) {
-    const run = await runRecipe(awkward, baseName, inject({ op: 'add', name, text: COPY_M }));
-    awkward = changed('Q03', run);
-    awkwardRows.push(...summary(run.result.rows));
-  }
-  cases.push({
-    id: 'Q03', slug: 'add-awkward-names', title: 'Add queries whose names need quoting or escaping', group: 'Queries',
-    did: `Added four connection-only queries named ${AWKWARD.map((n) => `"${n}"`).join(', ')}.`,
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsx', bytes: awkward }], rows: awkwardRows,
-    checks: [OPENS_INPUT, OPENS_OUTPUT, `Data > Queries & Connections lists all four names exactly as written: ${AWKWARD.join(' | ')}.`, 'Double-click each of the four: the editor opens and shows data. Write down any name Excel changes or refuses.', REFRESHES, SAVES]
-  });
-  const q04 = await runRecipe(q02Bytes, 'q02-output.xlsx', inject({ op: 'remove', name: 'Student Names Copy' }));
-  cases.push({
-    id: 'Q04', slug: 'remove-query', title: 'Remove a query that Quoin added', group: 'Queries',
-    did: 'Removed "Student Names Copy" from the output of Q02. Quoin only removes a query that has no connection and loads nowhere.',
-    note: 'The input of this case is the output of Q02.',
-    input: { name: 'input.xlsx', bytes: q02Bytes }, outputs: [{ name: 'output.xlsx', bytes: changed('Q04', q04) }], rows: summary(q04.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Data > Queries & Connections lists only StudentResults.', 'Data > Queries & Connections > Connections tab (or Workbook Connections) has no "Student Names Copy".', REFRESHES, SAVES]
-  });
-  const q05 = await runRecipe(q02Bytes, 'q02-output.xlsx', inject({ op: 'rename', name: 'Student Names Copy', newName: 'Renamed By Quoin', text: undefined }));
-  cases.push({
-    id: 'Q05', slug: 'rename-query', title: 'Rename a query that Quoin added', group: 'Queries',
-    did: 'Renamed "Student Names Copy" to "Renamed By Quoin" in the output of Q02.',
-    note: 'The input of this case is the output of Q02.',
-    input: { name: 'input.xlsx', bytes: q02Bytes }, outputs: [{ name: 'output.xlsx', bytes: changed('Q05', q05) }], rows: summary(q05.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Data > Queries & Connections lists "Renamed By Quoin" and does not list "Student Names Copy".', 'Double-click "Renamed By Quoin": the editor opens and the preview shows the columns Name and Age.', REFRESHES, SAVES]
-  });
-  const q06 = await runRecipe(base, baseName, replaceIn({ in: ['m'], find: 'DateTime.LocalNow()', with: 'DateTime.FixedLocalNow()' }));
-  cases.push({
-    id: 'Q06', slug: 'replace-text-in-query', title: 'Replace text inside query code', group: 'Queries',
-    did: 'Replaced DateTime.LocalNow() with DateTime.FixedLocalNow() in every query.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsx', bytes: changed('Q06', q06, { others: ['unchanged'] }) }], rows: summary(q06.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'StudentResults in the Advanced Editor contains DateTime.FixedLocalNow() and no DateTime.LocalNow().', REFRESHES, SAVES]
-  });
-  return cases;
+async function execute(name, bytes, recipeObject, id = 'f1') {
+  const parsed = parseRecipe(JSON.stringify(recipeObject));
+  if (!parsed.ok) throw new Error(`${name}: recipe not valid`);
+  const recipe = parsed.recipe;
+  const index = await indexWorkbook(bytes, { id, name, relPath: name, size: bytes.length });
+  if (index.status !== 'ready') throw new Error(`${name}: not readable (${index.status})`);
+  const plan = resolvePlan(recipe, [index], { now: NOW });
+  if (plan.errors.length) throw new Error(`${name}: plan has errors ${JSON.stringify(plan.errors)}`);
+  const wb = await openWorkbook(bytes, name);
+  const result = await executeFile(wb, plan.files[0], { now: NOW, recipe, meta: index, runId: 'pack', acknowledgeSignature: true });
+  const bad = result.rows.filter((r) => r.verdict !== 'changed' && r.verdict !== 'unchanged');
+  if (bad.length) throw new Error(`${name}: ${bad.map((r) => `${r.verdict} ${r.reason_code}`).join(', ')}`);
+  if (!result.rows.some((r) => r.verdict === 'changed')) throw new Error(`${name}: the recipe changed nothing`);
+  return result;
 }
 
-async function buildMacroCases() {
-  const baseName = 'xw_macro01.xlsm';
-  const base = fixtureBytes(baseName);
-  const cases = [];
-  const m01 = await runRecipe(base, baseName, inject({ target: 'module', op: 'replace', name: 'Module1', text: MACRO_REPLACED }));
-  cases.push({
-    id: 'M01', slug: 'replace-module', title: 'Replace the code of a module', group: 'Macros',
-    did: 'Replaced the code of Module1 (the procedure Macro1) with a version that shows a message box.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsm', bytes: changed('M01', m01) }], rows: summary(m01.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Alt+F11: the project lists Module1, ThisWorkbook and Sheet1, and Module1 holds the new code.', COMPILES, 'Alt+F8, run Macro1: a message box says "Macro1 replaced by Quoin".', SAVES]
+const written = (result) => {
+  if (!result.bytes) throw new Error('nothing was written');
+  return result.bytes;
+};
+
+const cases = [];
+const add = (c) => cases.push(c);
+
+async function build() {
+  const simple = external('pq_simple.xlsx');
+  const plain = external('plain_table.xlsx');
+  const mixed = generated('mixed.xlsm');
+
+  const q1 = await execute('pq_simple.xlsx', simple, inject({ target: 'query', op: 'replace', name: 'StudentResults', text: TWO_ROWS }));
+  add({
+    slug: 'query-replace', title: 'Replace a query', input: ['pq_simple.xlsx', simple], outputs: [['output.xlsx', written(q1)]],
+    look: [
+      'The output opens with no repair or recovery message.',
+      'Data > Queries & Connections lists the query StudentResults, as in the input. (StudentNames is a table on the sheet Input, not a query, so it is not listed there.)',
+      'Right-click StudentResults > Edit. The query is now a #table of Name and Score with Ann 1 and Bob 2.',
+      'Data > Refresh All finishes with no error and the StudentResults table on its sheet shows Ann 1 and Bob 2.',
+      'Compare with the input: the table StudentNames on the sheet Input and every other sheet look the same.'
+    ]
   });
-  const m02 = await runRecipe(base, baseName, inject({ target: 'module', op: 'add', name: 'Module2', text: MACRO_ADDED }));
-  cases.push({
-    id: 'M02', slug: 'add-module', title: 'Add a standard module', group: 'Macros',
-    did: 'Added a standard module called Module2 with the procedure QuoinAdded.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsm', bytes: changed('M02', m02) }], rows: summary(m02.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Alt+F11: Module2 is listed under Modules and holds the procedure QuoinAdded. Module1 is still there.', COMPILES, 'Alt+F8, run QuoinAdded: a message box says "Added by Quoin". Run Macro1: cell A1 becomes 123.', 'File > Save As .xlsm, close and reopen: both modules are still there.']
+
+  const q2 = await execute('pq_simple.xlsx', simple, inject({ target: 'query', op: 'add', name: 'Added', text: ADDED_M }));
+  const afterAdd = written(q2);
+  add({
+    slug: 'query-add', title: 'Add a query to a workbook that has queries', input: ['pq_simple.xlsx', simple], outputs: [['output.xlsx', afterAdd]],
+    look: [
+      'The output opens with no repair or recovery message.',
+      'Queries & Connections now lists Added next to StudentResults.',
+      'Right-click Added > Edit. The query is a #table with one column Pack and one row "added by Quoin".',
+      'Right-click Added > Load To... > Table loads it to a new sheet with that one row.',
+      'StudentResults is unchanged and still refreshes, and the table StudentNames on the sheet Input is unchanged.'
+    ]
   });
-  const m03 = await runRecipe(base, baseName, inject({ target: 'module', op: 'remove', name: 'Module1' }));
-  cases.push({
-    id: 'M03', slug: 'remove-module', title: 'Remove a standard module', group: 'Macros',
-    did: 'Removed the standard module Module1. The sheet and workbook modules are left alone.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsm', bytes: changed('M03', m03) }], rows: summary(m03.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Alt+F11: Module1 is gone; ThisWorkbook and Sheet1 remain and the Modules folder is empty or absent.', COMPILES, 'Alt+F8: Macro1 is no longer listed.', 'File > Save As .xlsm, close and reopen: the project is unchanged.']
+
+  const template = external('ms_template_query.xlsx');
+  const q2b = await execute('ms_template_query.xlsx', template, inject({ target: 'query', op: 'add', name: 'Added', text: ADDED_M }));
+  add({
+    slug: 'query-add-excel-made', title: 'Add a query to a workbook that Excel made', input: ['ms_template_query.xlsx', template], outputs: [['output.xlsx', written(q2b)]],
+    look: [
+      'The output opens with no repair or recovery message.',
+      'Queries & Connections lists Added and the original Query1.',
+      'Query1 still refreshes with no error.'
+    ]
   });
-  const m04 = await runRecipe(base, baseName, replaceIn({ in: ['vba'], find: '"123"', with: '"456"' }));
-  cases.push({
-    id: 'M04', slug: 'replace-text-in-module', title: 'Replace text inside macro code', group: 'Macros',
-    did: 'Replaced "123" with "456" in the code of every module.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsm', bytes: changed('M04', m04, { others: ['unchanged'] }) }], rows: summary(m04.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'Alt+F11: Module1 contains "456" and no "123".', COMPILES, 'Alt+F8, run Macro1: cell A1 becomes 456.', SAVES]
+
+  const q3 = await execute('pq_added.xlsx', afterAdd, inject({ target: 'query', op: 'remove', name: 'Added' }));
+  add({
+    slug: 'query-remove', title: 'Remove a query that Quoin added', input: ['pq_added.xlsx', afterAdd], outputs: [['output.xlsx', written(q3)]],
+    look: [
+      'The input (the output of the previous Add) opens with no repair message and shows Added.',
+      'The output opens with no repair or recovery message.',
+      'Queries & Connections no longer lists Added. StudentResults is still there and refreshes, and the table StudentNames is still on the sheet Input.'
+    ]
   });
-  return cases;
+
+  const q4 = await execute('pq_added.xlsx', afterAdd, inject({ target: 'query', op: 'rename', name: 'Added', newName: 'Renamed' }));
+  add({
+    slug: 'query-rename', title: 'Rename a query that Quoin added', input: ['pq_added.xlsx', afterAdd], outputs: [['output.xlsx', written(q4)]],
+    look: [
+      'The output opens with no repair or recovery message.',
+      'Queries & Connections lists Renamed and no longer lists Added.',
+      'Right-click Renamed > Edit. The query still returns the one-row table.'
+    ]
+  });
+
+  const refresh = await execute('pq_simple.xlsx', simple, inject({ target: 'query', op: 'replace', name: 'StudentResults', text: REPLACED_M, refreshOnLoad: true }));
+  add({
+    slug: 'query-replace-refresh', title: 'Replace a query and make it refresh when the file opens', input: ['pq_simple.xlsx', simple], outputs: [['output.xlsx', written(refresh)]],
+    look: [
+      'The output opens with no repair or recovery message. If Excel offers to enable data connections, click Enable Content.',
+      'Without pressing Refresh, the StudentResults table gets a column Version filled with \"Quoin pack\" (the query refreshes by itself on open).',
+      'Data > Queries & Connections > StudentResults > Properties: \"Refresh data when opening the file\" is ticked.',
+      'The input does not refresh on open.'
+    ]
+  });
+
+  let awkward = simple;
+  for (const name of AWKWARD) awkward = written(await execute('pq_simple.xlsx', awkward, inject({ target: 'query', op: 'add', name, text: COPY_M })));
+  add({
+    slug: 'query-add-awkward-names', title: 'Add queries whose names need quoting', input: ['pq_simple.xlsx', simple], outputs: [['output.xlsx', awkward]],
+    look: [
+      'The output opens with no repair or recovery message.',
+      `Queries & Connections lists these four names exactly as written: ${AWKWARD.join(' | ')}.`,
+      'Open each of the four in the editor: each shows the Name and Age data. Write down any name Excel changes or refuses.',
+      'Data > Refresh All finishes with no error.'
+    ]
+  });
+
+  const m1 = await execute('mixed.xlsm', mixed, inject({ target: 'module', op: 'replace', name: 'Module1', text: HELLO }));
+  add({
+    slug: 'module-replace', title: 'Replace a module', input: ['mixed.xlsm', mixed], outputs: [['output.xlsm', written(m1)]],
+    look: [
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'Alt+F11: Module1 is there and says "Hello from Quoin".',
+      'Alt+F8 > say_hello > Run shows a message box with "Hello from Quoin".',
+      'ThisWorkbook and Sheet1 are still there, and Debug > Compile VBAProject gives no error.'
+    ]
+  });
+
+  const m2 = await execute('mixed.xlsm', mixed, inject({ target: 'module', op: 'add', name: 'QuoinAdded', text: NEW_MODULE }));
+  const m2b = await execute('xw_macro01.xlsm', external('xw_macro01.xlsm'), inject({ target: 'module', op: 'add', name: 'QuoinAdded', text: NEW_MODULE }));
+  add({
+    slug: 'module-add', title: 'Add a module', input: ['mixed.xlsm', mixed], extraInputs: [['xw_macro01.xlsm', external('xw_macro01.xlsm')]], outputs: [['output.xlsm', written(m2)], ['output-xw_macro01.xlsm', written(m2b)]],
+    look: [
+      'Both outputs open with no repair or recovery message. Enable macros if asked. (The second is made from xw_macro01.xlsm, a file XlsxWriter made, which is in the input folder too. It is the better test: it is an Excel-made file, and any workbook with a macro will do for the input.)',
+      'Alt+F11: QuoinAdded is listed with Module1, ThisWorkbook and Sheet1.',
+      'Alt+F8 > quoin_added > Run shows a message box with "Added by Quoin".',
+      'Debug > Compile VBAProject gives no error.'
+    ]
+  });
+
+  const m3 = await execute('mixed.xlsm', mixed, inject({ target: 'module', op: 'remove', name: 'Module1' }));
+  add({
+    slug: 'module-remove', title: 'Remove a module', input: ['mixed.xlsm', mixed], outputs: [['output.xlsm', written(m3)]],
+    look: [
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'Alt+F11: Module1 is gone. ThisWorkbook and Sheet1 are still there.',
+      'Alt+F8 lists no say_hello macro.',
+      'Debug > Compile VBAProject gives no error.'
+    ]
+  });
+
+  const signedGenerated = generated('signed.xlsm');
+  const signedReal = external('xw_macro04.xlsm');
+  const s1 = await execute('signed.xlsm', signedGenerated, inject({ target: 'module', op: 'replace', name: 'Module1', text: HELLO }));
+  const s2 = await execute('xw_macro04.xlsm', signedReal, inject({ target: 'module', op: 'replace', name: 'Module1', text: HELLO }));
+  add({
+    slug: 'signature-removed', title: 'Change a module in a signed macro project', input: ['signed.xlsm', signedGenerated], extraInputs: [['xw_macro04.xlsm', signedReal]], outputs: [['output.xlsm', written(s1)], ['output-xw_macro04.xlsm', written(s2)]],
+    look: [
+      'Both outputs open with no repair or recovery message. Enable macros if asked.',
+      'Alt+F11 > Tools > Digital Signature: the project shows "No certificate" (the signature was removed, as Quoin said it would).',
+      'Module1 says "Hello from Quoin" and say_hello runs.',
+      'The inputs, if you open them, show a signature.'
+    ]
+  });
+
+  const xw = external('xw_macro01.xlsm');
+  const x1 = await execute('xw_macro01.xlsm', xw, inject({ target: 'module', op: 'replace', name: 'Module1', text: MACRO1 }));
+  const x2 = await execute('xw_macro01.xlsm', xw, inject({ target: 'module', op: 'add', name: 'Module2', text: NEW_MODULE }));
+  const x3 = await execute('xw_macro01.xlsm', xw, inject({ target: 'module', op: 'remove', name: 'Module1' }));
+  add({
+    slug: 'module-excel-made', title: 'Replace, add and remove a module in an Excel-made macro workbook', input: ['xw_macro01.xlsm', xw],
+    outputs: [['output-replace.xlsm', written(x1)], ['output-add.xlsm', written(x2)], ['output-remove.xlsm', written(x3)]],
+    look: [
+      'All three outputs open with no repair or recovery message. Enable macros if asked.',
+      'output-replace: Alt+F11 > Module1 holds the new code; Alt+F8 > Macro1 > Run shows \"Macro1 replaced by Quoin\".',
+      'output-add: Alt+F11 lists Module2 next to Module1, ThisWorkbook and Sheet1, with the procedure quoin_added; Alt+F8 > quoin_added > Run shows \"Added by Quoin\"; Macro1 still sets cell A1 to 123.',
+      'output-remove: Module1 is gone, ThisWorkbook and Sheet1 remain, and Alt+F8 lists no Macro1.',
+      'In all three, Debug > Compile VBAProject gives no error, and File > Save As .xlsm then reopening keeps the same modules.'
+    ]
+  });
+
+  const sx = external('xw_macro04.xlsm');
+  const sa = await execute('xw_macro04.xlsm', sx, inject({ target: 'module', op: 'add', name: 'Module2', text: NEW_MODULE }));
+  const sr = await execute('xw_macro04.xlsm', sx, inject({ target: 'module', op: 'remove', name: 'Module1' }));
+  add({
+    slug: 'signed-add-remove', title: 'Add and remove a module in a signed macro project', input: ['xw_macro04.xlsm', sx], outputs: [['output-add.xlsm', written(sa)], ['output-remove.xlsm', written(sr)]],
+    look: [
+      'The input opens with no message and Alt+F11 > Tools > Digital Signature shows a certificate name.',
+      'Both outputs open with no repair or recovery message. Enable macros if asked.',
+      'Alt+F11 > Tools > Digital Signature on both outputs shows \"No certificate\": the signature was removed, as Quoin said it would be.',
+      'output-add: Module2 is listed with the procedure quoin_added and it runs. output-remove: Module1 is gone and ThisWorkbook and Sheet1 remain.',
+      'Debug > Compile VBAProject gives no error in both.'
+    ]
+  });
+
+  add({
+    slug: 'module-locked-project', title: 'A project locked for viewing must be refused', manual: true, input: ['xw_macro01.xlsm', xw], outputs: [],
+    extraFiles: [['recipe.json', new TextEncoder().encode(`${JSON.stringify(inject({ target: 'module', op: 'add', name: 'QuoinAdded', text: NEW_MODULE }), null, 2)}\n`)]],
+    look: [
+      'Open xw_macro01.xlsm in Excel, press Alt+F11, Tools > VBAProject Properties > Protection, tick \"Lock project for viewing\", set a password, press OK, save as protected.xlsm and close Excel. This case has no output: you make the file.',
+      'Give protected.xlsm to Quoin with recipe/recipe.json (it adds a module). Quoin refuses the file with the reason that the project is locked, and writes no output.',
+      'protected.xlsm, opened again in Excel, is exactly as you saved it: the project still asks for the password and the macros still run.'
+    ]
+  });
+
+  const r1 = await execute('mixed.xlsm', mixed, replaceIn(['vba'], 'Hello, World!', 'Hello from Quoin!'));
+  const r2 = await execute('mixed.xlsm', mixed, replaceIn(['m'], 'DateTime.LocalNow', 'DateTime.FixedLocalNow'));
+  add({
+    slug: 'replace-in-code', title: 'Replace text in code', input: ['mixed.xlsm', mixed], outputs: [['output-vba.xlsm', written(r1)], ['output-m.xlsm', written(r2)]],
+    look: [
+      'Both outputs open with no repair or recovery message. Enable macros if asked.',
+      'output-vba: Alt+F11 > Module1 says "Hello from Quoin!" and nothing else changed.',
+      'output-m: Queries & Connections > FinalTable > Edit shows DateTime.FixedLocalNow in the Advanced Editor and the query still refreshes.'
+    ]
+  });
+
+  const t1 = await execute('pq_simple.xlsx', simple, transform({ mode: 'newFile' }));
+  add({
+    slug: 'new-file', title: 'Transform: a new file per unit', input: ['pq_simple.xlsx', simple], outputs: t1.outputs.map((o) => [o.name, o.bytes]),
+    look: [
+      'Each output opens with no repair or recovery message.',
+      'Each has one sheet named Result holding the values of one table of the input (the rows of StudentNames in one file, StudentResults in the other).',
+      'Dates and numbers look the same as in the input table and are real numbers and dates, not text.',
+      'There are no queries, no macros and no formulas in the outputs.'
+    ]
+  });
+
+  const t2 = await execute('pq_simple.xlsx', simple, transform({ mode: 'newSheet' }));
+  add({
+    slug: 'new-sheet', title: 'Transform: a new sheet in a copy', input: ['pq_simple.xlsx', simple], outputs: t2.outputs.map((o) => [o.name, o.bytes]),
+    look: [
+      'The output opens with no repair or recovery message.',
+      'It has every sheet the input had, in the same order, followed by one new sheet per table with the transformed values.',
+      'Queries & Connections still lists StudentResults and it still refreshes.',
+      'The original sheets and tables are unchanged.',
+      'Every sheet the input had is still visible, none became hidden, and the tab order is the same.',
+      'Pick one date cell and one number cell on an original sheet: the value and the displayed format match the input. File > Options > Advanced > \"Use 1904 date system\" is set the same as in the input.',
+      'Formulas > Name Manager lists the same names as the input. Home > Cell Styles shows the same styles.'
+    ]
+  });
+
+  const c1 = await execute('pq_simple.xlsx', simple, transform({ mode: 'combined', name: '{file.name}__{unit.name}' }), 'f1');
+  const c2 = await execute('plain_table.xlsx', plain, transform({ mode: 'combined', name: '{file.name}__{unit.name}' }), 'f2');
+  const combined = await combineOutputs([c1, c2], { now: CLOCK });
+  if (!combined.bytes) throw new Error('combined produced no workbook');
+  add({
+    slug: 'combined', title: 'Transform: one combined workbook', input: ['pq_simple.xlsx', simple], extraInputs: [['plain_table.xlsx', plain]], outputs: [[combined.name, combined.bytes]],
+    look: [
+      'The output opens with no repair or recovery message.',
+      'One sheet per unit from both inputs, named after the file and the table, in the order of the files.',
+      'Each sheet holds the values of its table. Numbers and dates are real numbers and dates.'
+    ]
+  });
+
+  const macroBook = external('pq_vba_complex.xlsm');
+  const t3 = await execute('pq_vba_complex.xlsm', macroBook, transform({ mode: 'newSheet' }));
+  add({
+    slug: 'new-sheet-macro-workbook', title: 'Transform: new sheets in a copy of a macro workbook', input: ['pq_vba_complex.xlsm', macroBook], outputs: t3.outputs.map((o) => [o.name, o.bytes]),
+    look: [
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'It has the original sheet followed by one new sheet per table, with data.',
+      'Alt+F11: ThisWorkbook and Sheet1 are still in the project with the same code as in the input, and Debug > Compile VBAProject gives no error.',
+      'Write down what Alt+F11 shows for the new sheets: Excel may add a code module for each. Report anything unexpected.',
+      'Data > Refresh All finishes with no error.'
+    ]
+  });
+
+  const signedBook = external('xw_macro04.xlsm');
+  const signedWb = await openWorkbook(signedBook, 'xw_macro04.xlsm');
+  const resultTable = runOnce({ sectionText: 'section Section1;\r\n\r\nshared Result =\r\n#table({\"Name\",\"Score\"},{{\"Ann\",1},{\"Bo\",2}});', queryName: 'Result', now: NOW, previewRows: 2 }).value;
+  const withSheet = emptyChangeSet();
+  withSheet.sheets.add.push({ name: 'Result', table: resultTable, culture: 'en-US' });
+  const signedOut = await applyChangeSet(signedWb, withSheet, { now: CLOCK });
+  add({
+    slug: 'new-sheet-signed-workbook', title: 'A new sheet in a copy of a signed macro workbook', input: ['xw_macro04.xlsm', signedBook], outputs: [['output.xlsm', signedOut.bytes]],
+    look: [
+      'The input opens with no message and Alt+F11 > Tools > Digital Signature shows a certificate name.',
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'It has the original sheet and a new sheet called Result with two rows, Ann 1 and Bo 2.',
+      'Alt+F11 > Tools > Digital Signature on the output: write down whether the certificate is still shown, shows as invalid, or shows \"No certificate\". Quoin expects it to be kept, because the project itself is not touched.',
+      'Debug > Compile VBAProject gives no error and the macros still run.'
+    ]
+  });
 }
 
-async function buildSignedCases() {
-  const baseName = 'xw_macro04.xlsm';
-  const base = fixtureBytes(baseName);
-  const signedChecks = (specific) => [
-    OPENS_INPUT,
-    'Alt+F11 > Tools > Digital Signature: the input shows a certificate name (it is signed).',
-    OPENS_OUTPUT,
-    'Alt+F11 > Tools > Digital Signature on the output shows "No certificate": Quoin removed the signature and said so.',
-    ...specific,
-    SAVES
-  ];
-  const acknowledged = { acknowledgeSignature: true };
-  const m05 = await runRecipe(base, baseName, inject({ target: 'module', op: 'replace', name: 'Module1', text: 'Sub say_hello()\n    MsgBox "Hello from Quoin"\nEnd Sub\n' }), acknowledged);
-  const m06 = await runRecipe(base, baseName, inject({ target: 'module', op: 'add', name: 'Module2', text: MACRO_ADDED }), acknowledged);
-  const m07 = await runRecipe(base, baseName, inject({ target: 'module', op: 'remove', name: 'Module1' }), acknowledged);
-  const mk = (id, slug, title, did, run, specific) => ({
-    id, slug, title, group: 'Signed macro projects', did, input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsm', bytes: changed(id, run) }], rows: summary(run.result.rows), checks: signedChecks(specific)
-  });
-  return [
-    mk('M05', 'signed-replace-module', 'Replace a module in a signed project', 'Replaced the code of say_hello in Module1, after confirming that the signature is lost.', m05, [COMPILES, 'Alt+F8, run say_hello: a message box says "Hello from Quoin".']),
-    mk('M06', 'signed-add-module', 'Add a module to a signed project', 'Added Module2, after confirming that the signature is lost.', m06, ['Alt+F11: Module2 is listed with the procedure QuoinAdded.', COMPILES, 'Alt+F8, run QuoinAdded and say_hello: both show a message.']),
-    mk('M07', 'signed-remove-module', 'Remove a module from a signed project', 'Removed Module1, after confirming that the signature is lost.', m07, ['Alt+F11: Module1 is gone; ThisWorkbook and Sheet1 remain.', COMPILES])
-  ];
-}
+const pad = (n) => String(n).padStart(2, '0');
+const INPUT_OPENS = 'First open the input file or files of this case: they open with no message (click Enable Editing if Protected View appears). If an input does not open, stop: the case cannot be judged. Write down the message.';
 
-async function buildProtectedCase() {
-  const baseName = 'xw_macro01.xlsm';
-  const base = fixtureBytes(baseName);
-  const recipe = inject({ target: 'module', op: 'add', name: 'Module2', text: MACRO_ADDED });
-  return {
-    id: 'M08', slug: 'protected-project', title: 'A project locked for viewing must be refused', group: 'Macros', manual: true,
-    did: 'Nothing: this case needs a file you make in Excel. Quoin must refuse to change a project that is locked for viewing and write nothing.',
-    note: 'Open input.xlsm in Excel, press Alt+F11, Tools > VBAProject Properties > Protection, tick "Lock project for viewing", set a password, press OK, save as protected.xlsm, close Excel. Then give protected.xlsm to Quoin with recipe.json (add a module). recipe.json is in this folder.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base },
-    outputs: [],
-    extra: [{ name: 'recipe.json', bytes: encode(`${JSON.stringify(recipe, null, 2)}\n`) }],
-    rows: [],
-    checks: ['The unprotected input opens with no message.', 'After you lock it: the saved protected.xlsm opens and asks for the password only when you open the project.', 'Quoin refuses the file with the reason that the project is locked, and writes no output file.', 'protected.xlsm, opened again, is exactly as you saved it (Quoin changed nothing).']
-  };
-}
-
-async function buildTransformCases() {
-  const baseName = 'pq_simple.xlsx';
-  const base = fixtureBytes(baseName);
-  const cases = [];
-  const file = await runRecipe(base, baseName, textTransform({ mode: 'newFile' }));
-  if (!file.result.outputs || file.result.outputs.length !== 2) throw new Error('T01: expected two outputs');
-  cases.push({
-    id: 'T01', slug: 'new-file-per-unit', title: 'Result as a new file per table', group: 'Results',
-    did: 'Wrote the table StudentNames and the table StudentResults each into its own new workbook with one sheet called Result and plain values only.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: file.result.outputs.map((o) => ({ name: o.name, bytes: o.bytes })), rows: summary(file.result.rows),
-    checks: [OPENS_INPUT, 'Both output files open with no repair or recovery message.', 'Each has exactly one sheet, called Result, with a header row and the data of its table.', 'Data > Queries & Connections is empty and no cell holds a formula: the values are plain.', 'The column Age holds numbers (right-aligned) and the column DateTimeGenerated holds real dates and times, not text.', SAVES]
-  });
-  const sheet = await runRecipe(base, baseName, textTransform({ mode: 'newSheet' }));
-  cases.push({
-    id: 'T02', slug: 'new-sheet-in-copy', title: 'Result as new sheets in a copy of the workbook', group: 'Results',
-    did: 'Made a copy of the workbook and added one sheet per table after the existing sheets, with the values of that table.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsx', bytes: changed('T02', sheet) }], rows: summary(sheet.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'The workbook has its two original sheets (Input, StudentResults) and then two new sheets called Result and Result-2, each with a header row and data.', 'The original sheets, their tables and the query StudentResults are unchanged. Cell formats on the original sheets look the same as in the input.', 'On the original sheets, dates and numbers still show the same values (compare a date column with the input).', REFRESHES, SAVES]
-  });
-  const combinedInput = await runRecipe(base, baseName, textTransform({ mode: 'combined' }));
-  const combined = await combineOutputs([combinedInput.result], { now: zipClock(PACK_NOW) });
-  if (!combined.bytes) throw new Error('T03: nothing was combined');
-  cases.push({
-    id: 'T03', slug: 'combined-workbook', title: 'Results combined into one new workbook', group: 'Results',
-    did: 'Put the result of every table into one new workbook, one sheet per table.',
-    input: { name: `input.${extOf(baseName)}`, bytes: base }, outputs: [{ name: 'output.xlsx', bytes: combined.bytes }], rows: summary(combinedInput.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'The workbook has two sheets, pq_simple__StudentNames and pq_simple__StudentResults (named after the file and the table), each with a header row and the data of its table.', 'No queries, no formulas: plain values.', SAVES]
-  });
-  const macroName = 'pq_vba_complex.xlsm';
-  const macroBase = fixtureBytes(macroName);
-  const macro = await runRecipe(macroBase, macroName, textTransform({ mode: 'newSheet' }));
-  cases.push({
-    id: 'T04', slug: 'new-sheet-in-macro-workbook', title: 'New sheets in a copy of a macro workbook', group: 'Results',
-    did: 'Added one sheet per table to a copy of a macro-enabled workbook. The macro project is not touched.',
-    input: { name: `input.${extOf(macroName)}`, bytes: macroBase }, outputs: [{ name: 'output.xlsm', bytes: changed('T04', macro) }], rows: summary(macro.result.rows),
-    checks: [OPENS_INPUT, OPENS_OUTPUT, 'The workbook has its original sheet and the new Result sheets with data.', 'Alt+F11: ThisWorkbook and Sheet1 are still in the project and the code is the same as in the input.', COMPILES, 'Write down what Alt+F11 shows for the new sheets: Excel may add a module for each. Report anything unexpected.', REFRESHES, SAVES]
-  });
-  const signedName = 'xw_macro04.xlsm';
-  const signedBase = fixtureBytes(signedName);
-  const signedWb = await openWorkbook(signedBase, signedName);
-  const table = runOnce({ sectionText: 'section Section1;\r\n\r\nshared Result =\r\n#table({"Name","Score"},{{"Ann",1},{"Bo",2}});', queryName: 'Result', now: PACK_NOW, previewRows: 2 }).value;
-  const cs = emptyChangeSet();
-  cs.sheets.add.push({ name: 'Result', table, culture: 'en-US' });
-  const signedOut = await applyChangeSet(signedWb, cs, { now: zipClock(PACK_NOW) });
-  cases.push({
-    id: 'T05', slug: 'new-sheet-in-signed-workbook', title: 'A new sheet in a signed macro workbook', group: 'Results',
-    did: 'Added a sheet called Result to a copy of a signed macro workbook. The macro project and its signature are not touched.',
-    input: { name: `input.${extOf(signedName)}`, bytes: signedBase }, outputs: [{ name: 'output.xlsm', bytes: signedOut.bytes }],
-    rows: [{ unit: 'Result', action: 'newSheet', verdict: 'changed', verified: true, old_hash: '', new_hash: await sha256Bytes(signedOut.bytes), signature_removed: false }],
-    checks: [OPENS_INPUT, 'Alt+F11 > Tools > Digital Signature: the input shows a certificate name.', OPENS_OUTPUT, 'The workbook has the original sheets and a new sheet Result with two rows, Ann and Bo.', 'Alt+F11 > Tools > Digital Signature on the output: write down whether the certificate is still shown, shows "invalid" or shows "No certificate". Quoin expects the signature to be kept because the project is not touched.', COMPILES, SAVES]
-  });
-  return cases;
-}
-
-export async function buildCases() {
-  return [...(await buildQueryCases()), ...(await buildMacroCases()), await buildProtectedCase(), ...(await buildSignedCases()), ...(await buildTransformCases())].sort((a, b) => a.id.localeCompare(b.id));
-}
-
-const folderOf = (c) => `cases/${c.id}-${c.slug}`;
-
-export function checklistMarkdown(cases) {
-  const out = [
+function checklist(sums) {
+  const lines = [
     '# Quoin real-Excel check',
     '',
-    'Quoin writes Excel files itself, and the only way to know Excel accepts them is to open them in Excel. This list has one block per case. For each case, open the input first, then the output, and tick every line that is true. A box that is not ticked means the check was not done or failed; nothing is checked until you tick it.',
+    'No agent can run Excel, so this check is yours. For each case below open the files named in "Open" in Excel, work through the list, and mark pass or fail.',
     '',
-    'Before you start:',
+    'Report back with the case numbers that failed, what you saw (a screenshot of any repair message helps), and your Excel version and platform. A pass needs every line of the case to be true. A repair or recovery message on opening is a fail, even when the file then looks fine.',
     '',
-    '- Use a copy of the pack, not your own workbooks. Every file here is test data.',
-    '- Write down the Excel version and build (File > Account > About Excel) and the system: ____________________',
-    '- If Excel shows any message when opening an output (repair, recovery, "unreadable content", a security warning that the input did not show), do not click through it: copy its exact text into Notes and tick nothing else for that case.',
-    '',
-    'For each case write Pass, Fail or Not done on the Result line. A case passes only when every line is ticked.',
+    'Nothing here is marked verified until you say so.',
     ''
   ];
-  let group = '';
-  for (const c of cases) {
-    if (c.group !== group) {
-      group = c.group;
-      out.push(`## ${group}`, '');
+  cases.forEach((c, i) => {
+    const n = pad(i + 1);
+    lines.push(`## ${n} ${c.title}`, '');
+    lines.push(`Input: cases/${n}-${c.slug}/input/${c.input[0]}` + (c.extraInputs ? `, ${c.extraInputs.map(([name]) => `cases/${n}-${c.slug}/input/${name}`).join(', ')}` : ''));
+    lines.push(c.outputs.length ? `Open: ${c.outputs.map(([name]) => `cases/${n}-${c.slug}/output/${name}`).join(', ')}` : `Open: nothing from Quoin; see the steps (recipe: cases/${n}-${c.slug}/recipe/recipe.json)`, '');
+    const steps = c.manual ? c.look : [INPUT_OPENS, ...c.look];
+    steps.forEach((l, k) => lines.push(`${k + 1}. ${l}`));
+    lines.push('', '- [ ] pass', '- [ ] fail. What I saw: ', '');
+  });
+  lines.push('## File fingerprints', '', 'SHA-256 of every output, so a report can be tied to the exact file.', '', '```');
+  for (const [path, sum] of sums) lines.push(`${sum}  ${path}`);
+  lines.push('```', '');
+  return lines.join('\n');
+}
+
+export async function makePack() {
+  cases.length = 0;
+  await build();
+  const files = [];
+  const sums = [];
+  const enc = new TextEncoder();
+  for (const [i, c] of cases.entries()) {
+    const base = `cases/${pad(i + 1)}-${c.slug}`;
+    files.push({ name: `${base}/input/${c.input[0]}`, data: c.input[1] });
+    for (const [name, data] of c.extraInputs || []) files.push({ name: `${base}/input/${name}`, data });
+    for (const [name, data] of c.extraFiles || []) files.push({ name: `${base}/recipe/${name}`, data });
+    for (const [name, data] of c.outputs) {
+      files.push({ name: `${base}/output/${name}`, data });
+      sums.push([`${base}/output/${name}`, await sha256Bytes(data)]);
     }
-    out.push(`### ${c.id} ${c.title}`, '');
-    out.push(`What Quoin did: ${c.did}`, '');
-    if (c.note) out.push(`${c.note}`, '');
-    out.push(`Files: \`${folderOf(c)}/\` (${[c.input.name, ...c.outputs.map((o) => o.name), ...(c.extra || []).map((x) => x.name)].join(', ')})`, '');
-    for (const check of c.checks) out.push(`- [ ] ${check}`);
-    out.push('', 'Result: ____________   Notes: ______________________________________________', '');
   }
-  return `${out.join('\n')}\n`;
+  files.unshift({ name: 'CHECKLIST.md', data: enc.encode(checklist(sums)) });
+  return { bytes: await zipFiles(files, { now: CLOCK }), cases: cases.length, files: files.length };
 }
 
-function readmeText(cases) {
-  return [
-    '# Quoin real-Excel pack',
-    '',
-    `Built from Quoin with a fixed clock (${PACK_NOW}), so building it again gives the same files.`,
-    '',
-    `It holds ${cases.length} cases. Each folder under cases/ has the input workbook and the workbook or workbooks Quoin wrote from it. The input of every case is an Excel-made file from the Quoin test fixtures, except Q04 and Q05, whose input is the output of Q02.`,
-    '',
-    'How to use it:',
-    '',
-    '1. Open CHECKLIST.md and follow it case by case.',
-    '2. Fill in the boxes, the Result line and the Notes line, and send the file back.',
-    '',
-    'manifest.json lists every file with its SHA-256 and what Quoin reported for it (verdict, old hash, new hash). If Excel shows a problem, send the case id and the exact message.',
-    ''
-  ].join('\n');
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const out = resolve(process.argv[2] || 'quoin-excel-pack.zip');
+  const pack = await makePack();
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, pack.bytes);
+  process.stdout.write(`${out}: ${pack.cases} cases, ${pack.files} files, ${pack.bytes.length} bytes\n`);
 }
-
-export async function buildExcelPack() {
-  const cases = await buildCases();
-  const checklist = checklistMarkdown(cases);
-  const entries = [];
-  const manifest = { builtWith: 'quoin', clock: PACK_NOW, cases: [] };
-  const add = async (path, bytes) => {
-    entries.push({ name: `quoin-excel-pack/${path}`, data: bytes });
-    return { path, sha256: await sha256Bytes(bytes), bytes: bytes.length };
-  };
-  for (const c of cases) {
-    const files = [await add(`${folderOf(c)}/${c.input.name}`, c.input.bytes)];
-    for (const o of c.outputs) files.push(await add(`${folderOf(c)}/${o.name}`, o.bytes));
-    for (const x of c.extra || []) files.push(await add(`${folderOf(c)}/${x.name}`, x.bytes));
-    manifest.cases.push({ id: c.id, title: c.title, manual: !!c.manual, files, rows: c.rows });
-  }
-  await add('README.md', encode(readmeText(cases)));
-  await add('CHECKLIST.md', encode(checklist));
-  await add('manifest.json', encode(`${JSON.stringify(manifest, null, 2)}\n`));
-  const zip = await writeZip(entries, { now: zipClock(PACK_NOW) });
-  return { zip, cases, checklist, manifest, entries };
-}
-
-async function main() {
-  const flag = process.argv.indexOf('--out');
-  const dir = resolve(flag > 0 ? process.argv[flag + 1] : 'excel-pack');
-  const pack = await buildExcelPack();
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'quoin-excel-pack.zip'), pack.zip);
-  writeFileSync(join(dir, 'CHECKLIST.md'), pack.checklist);
-  process.stdout.write(`${pack.cases.length} cases, ${pack.entries.length} files\n${join(dir, 'quoin-excel-pack.zip')}\n${join(dir, 'CHECKLIST.md')}\n`);
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

@@ -1,6 +1,6 @@
 # Messages from Writer (branch fable-writer)
 
-**Status: all Writer tasks including F2-15 are done in code and pushed. Waiting for the integrator: the Browser step goes green only after `npm run build` regenerates the manifest; someone with Excel to tick `docs/fable/excel-pack/CHECKLIST.md` (`node scripts/make-excel-pack.mjs` builds the files). Waiting for Scope: finding 5 below. Until it lands, `tests/unit/excel-pack.test.js` fails in a tree that has both branches merged (case T05), though it passes on `fable-writer` alone.**
+**Status: all Writer tasks including F2-15 are done in code and pushed. Waiting for the integrator: the Browser step goes green only after `npm run build` regenerates the manifest; someone with Excel to tick `CHECKLIST.md` from the pack (`node scripts/make-excel-pack.mjs` builds the zip). Waiting for Scope: finding 5 below. Until it lands, the pack script fails in a tree that has both branches merged (case `new-sheet-signed-workbook`), though it passes on `fable-writer` alone.**
 
 For Scope and trunk. The user asked us to leave notes for each other and not to relay through them. How this works: each agent keeps `docs/fable/MESSAGES-<agent>.md` on its own branch. Read the others with `git fetch origin && git show origin/fable-scope:docs/fable/MESSAGES-scope.md` (and `origin/fable-writer` for this file). Answer by editing your own file. Writer reads both at the start of every task and before every push, and answers within the same push.
 
@@ -20,6 +20,18 @@ The user said to follow the plan wherever it has an answer. Where it has none, W
 ## Where Writer stands against `NOTES-FOR-AGENTS.md`
 
 Read and followed. Done since the first reading: the injected deadline, the contract tests of section 2 (inputs unchanged, structured clone, time zones, reopen and save again, reversed order, empty and duplicate input, files with warnings, Q5 stated in tests), a worker test with no timers, and `fable` merged in. Not following to the letter: the commit subjects of the progress and message commits, which are not task commits, and no code comments are in any code file; the markdown notes are prose by nature.
+
+## Review of the real-Excel pack (the integrator's `scripts/make-excel-pack.mjs`)
+
+Asked for by `MANAGER.md` ("list what the pack misses or gets wrong"). Writer fixed these in the script directly, because the manager asked Writer to add cases for Writer's paths and the fixes are in the same cases; integrator: please check the diff of `scripts/make-excel-pack.mjs` and `tests/unit/excel-pack.test.js` when you merge, and say here if you want any of it reverted.
+
+1. **No case said to open the input first.** A failure could be the input's fault, and the tester could not tell. Every case now starts with that line.
+2. **Module and signed cases used the repo's generated `mixed.xlsm` and `signed.xlsm`**, which no Excel ever wrote, so "does not open" could be the fixture's fault. Cases on the Excel-made `xw_macro01.xlsm` and `xw_macro04.xlsm` were added for replace, add and remove, signed and unsigned. The generated ones stay as they were.
+3. **Two outputs had no input in the pack** (`xw_macro01.xlsm` for module-add, `xw_macro04.xlsm` for the signed case), so there was nothing to compare with. Both are now in `input/`.
+4. **Five lines claimed `StudentNames` is listed in Queries & Connections.** It is a table on the sheet Input; the only query in `pq_simple.xlsx` is `StudentResults`. Corrected, and a test now stops the checklist from listing a table as a query.
+5. **The new-sheet case could not see an undeclared change.** "The original sheets and tables are unchanged" does not catch a hidden sheet, the 1904 date system, changed cell formats, defined names or styles, which are exactly the things the sheet writer's check had missed (finding 1 below). Lines for each were added.
+6. **Writer paths with no case:** replace with refresh on open (the `connections.xml` edit), add with awkward names, add and remove in a signed project, the locked project (a file the person makes; Quoin must refuse), and a new sheet in a macro workbook and in a signed one (finding 4 below). All added.
+7. **Not fixed, a limit of the format:** each case has one pass box, so a case with several outputs cannot say which output failed; the Notes line has to carry that. Cases with three outputs (`module-excel-made`) are the worst for this; split them if testers find it hard.
 
 ## Review of Scope's hunks in `src/core/save.js` and of `verifyAddedSheets`
 

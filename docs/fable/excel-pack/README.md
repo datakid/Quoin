@@ -1,38 +1,25 @@
 # Real-Excel pack (F2-15)
 
-Quoin writes Excel files itself. Its own reader and checks cannot say whether Excel accepts them, so this pack puts the output of every writing path in front of a person with Excel.
+Quoin writes Excel files itself, and its own reader and checks cannot say whether Excel accepts them. The pack puts the output of every writing path in front of a person with Excel.
 
 ## Build it
 
 ```
-node scripts/make-excel-pack.mjs
+node scripts/make-excel-pack.mjs [path/to/quoin-excel-pack.zip]
 ```
 
-This writes `excel-pack/quoin-excel-pack.zip` and `excel-pack/CHECKLIST.md` in the current folder. `--out <folder>` puts them somewhere else. The clock is frozen, so building twice gives the same zip, byte for byte. The script runs every case through the same path the app will use (`parseRecipe`, `resolvePlan`, `executeFile`, `combineOutputs`, `applyChangeSet`) and stops with an error if a case does not produce a verified change, so a pack that builds is a pack whose files Quoin itself verified.
+With no path it writes `quoin-excel-pack.zip` in the current folder (ignored by git). The clock is frozen, so building twice gives the same zip, byte for byte. The script runs every case through the path the app will use (`parseRecipe`, `resolvePlan`, `executeFile`, `combineOutputs`, `applyChangeSet`) and stops with an error if a case does not give a verified change, so a pack that builds is a pack whose files Quoin itself verified.
 
 ## What is in it
 
-19 cases, each in `cases/<id>-<name>/` with the input workbook and what Quoin wrote from it.
+`CHECKLIST.md` at the top of the zip, and one folder per case under `cases/NN-name/` with `input/`, `output/` and, for the locked-project case, `recipe/`. Twenty cases: queries (replace, replace with refresh on open, add, add with awkward names, remove, rename, replace text), modules in generated and in Excel-made workbooks (replace, add, remove, replace text), signed projects (replace, add, remove: the signature is removed and the checklist says to check that), a locked project that Quoin must refuse (a file the person makes in Excel), and the result modes (new file, new sheet, combined, new sheets in a macro workbook and in a signed one). Every case starts with "open the input first", so a bad input cannot be mistaken for a bad output.
 
-| Group | Cases |
-|---|---|
-| Queries | Q01 replace, Q02 add, Q03 add with awkward names, Q04 remove, Q05 rename, Q06 replace text in query code |
-| Macros | M01 replace a module, M02 add a module, M03 remove a module, M04 replace text in macro code, M08 a locked project (a case you make yourself; Quoin must refuse) |
-| Signed macro projects | M05 replace, M06 add, M07 remove, each after confirming that the signature is lost |
-| Results | T01 new file per table, T02 new sheets in a copy, T03 combined workbook, T04 new sheets in a macro workbook, T05 a new sheet in a signed macro workbook |
+## Who made what
 
-Inputs are the Excel-made files in `tests/fixtures/external` (`pq_simple.xlsx`, `pq_vba_complex.xlsm`, `xw_macro01.xlsm`, `xw_macro04.xlsm`). Q04 and Q05 start from the output of Q02, because Quoin only removes or renames a query it added itself (it has no connection and loads nowhere).
-
-## How a person uses it
-
-Open `CHECKLIST.md`. Each case has a short list of things to look at, in Excel, with a tick box for each. The boxes are empty. A case passes only when every box is ticked; anything Excel says on opening goes into Notes word for word.
+The script and its first thirteen cases are the integrator's. Writer reviewed them and added the cases and checks that cover Writer's paths (see `docs/fable/MESSAGES-writer.md`, "Review of the real-Excel pack"). `tests/unit/excel-pack.test.js` is the integrator's; `tests/unit/excel-pack-claims.test.js` checks that the text of the added cases matches the files.
 
 ## What it does not do
 
-Nothing here is marked as checked. Until someone has ticked the boxes in real Excel, none of the writers is verified against Excel, and the manual case M08 needs a file the person makes in Excel.
+Nothing in it is checked. Until someone has ticked the boxes in real Excel, none of the writers is verified against Excel.
 
-## Keeping it honest
-
-`tests/unit/excel-pack.test.js` checks that the zip is valid and every file matches `manifest.json`, that two builds are identical, that every input and output opens, that the text of each case matches the files (the query lists, the modules, the sheets, the signatures), that no box is ticked, and that `docs/fable/excel-pack/CHECKLIST.md` equals what the script makes now. When a writer changes what a case contains, rebuild with `node scripts/make-excel-pack.mjs --out /tmp/pack` and copy `CHECKLIST.md` here.
-
-`repro-sheet-gap.mjs` is a separate script: it reproduces finding 1 in `docs/fable/MESSAGES-writer.md`.
+`repro-sheet-gap.mjs` in this folder is a separate script: it reproduces findings 1 and 5 about the sheet writer in `docs/fable/MESSAGES-writer.md` and exits non-zero while a gap is open.

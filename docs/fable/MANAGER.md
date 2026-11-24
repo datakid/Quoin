@@ -47,9 +47,9 @@ Stay out of `src/app/**`, `src/ui/**`, `src/workers/**` and `src/ui/strings.js` 
 
 ### Writer (`fable-writer`)
 
-You may now also create `scripts/make-excel-pack.mjs` and the folder `docs/fable/excel-pack/`. Nothing else outside your usual list.
+The pack script already exists (see item 1). Your edit rights stay as before; add nothing outside `docs/fable/MESSAGES-writer.md` and your progress file.
 
-1. F2-15, the real-Excel pack. `node scripts/make-excel-pack.mjs` writes one zip with an input and an output workbook for every case, and `CHECKLIST.md` with one tick row per case and the exact thing to look at. Cases: query replace, add, remove, rename (the allowed ones, on workbooks Quoin adds the query to), module replace, module add, module remove (signed and protected projects too), signature removal, and replace in code. Add Scope's three output modes (new file, new sheet, combined) by calling the functions on `fable`; read them, do not edit them. Do not mark anything verified. Say in your progress file how to run it and where the zip lands.
+1. F2-15 is done: the integrator built `scripts/make-excel-pack.mjs` (13 cases, 17 outputs, `CHECKLIST.md`) because nothing had come back from you since Nov 21 and the person's Excel check depends on it. Do not rebuild it. Read it, run `node scripts/make-excel-pack.mjs`, and list in `MESSAGES-writer.md` any case you think is missing or any "look at" line that could pass while the file is wrong (a part changing without being declared is the one to hunt). Add cases to the script only if they are about writer paths; keep its shape.
 2. Review the three small hunks Scope made in your `src/core/save.js` (`refuseUnapplied`, `applyChangeSet`, `selfCheck`) and `verifyAddedSheets`. List findings in `MESSAGES-writer.md`: anything that could let a part change without being declared. Do not edit them; Scope fixes what you find.
 3. Open points 3 and 4 in your progress file (a connection for an added query; remove and rename of queries Excel made) stay as they are. They are decided: leave the refusals in place until the pack results say otherwise.
 

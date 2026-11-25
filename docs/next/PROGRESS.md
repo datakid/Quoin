@@ -476,3 +476,15 @@
 #### Not done in WB-14 and WB-15 (still)
 - Invoke for function queries, the multi-step preview popover (Apply and Cancel), the editor gutter band.
 
+### WB-10: layout presets and the More menu
+- `src/core/wb/layout-presets.js` (pure): Write (navigator and editor, inspector and dock collapsed), Debug (navigator collapsed, steps open, dock open at 50 % on Result), Review (navigator and steps collapsed, dock open at 70 % on Changes); `dockSplit` clamps the dock to 15 to 85 %. 3 unit tests.
+- `Workspace.applyPreset` moves each pane to the wanted state through the existing toggles (so focus and rails behave as they do by key), sets the editor and dock split through the same custom properties the splitter uses, and shows the wanted dock tab. At 1099 px and narrower the presets are not offered (the layout is already one region at a time): the menu items are disabled and the palette command says so in the status line. Sizes stay in memory.
+- Top bar: a More actions button (⋯) after Export, hidden until a workbook is open and hidden below 700 px (there is no room for it beside the file name; the Download popover still has Review changes there). Its menu has Layout (Write, Debug, Review) and Changes (Review N changes, which opens the Changes tab, and Revert all changes, which asks first); both Changes items are disabled when nothing has changed.
+- Palette: Layout: write, Layout: debug, Layout: review and Show the Changes tab.
+- Tests: `tests/e2e/layout-presets.spec.js` (7). Visual baselines: the nine 390 wide ones were unaffected once the button is hidden there; the twenty 1280 wide ones were regenerated (checked with a crop of the top bar and the open menu) because the button is now in every one.
+
+#### Deviations
+- Run is not moved into the top bar. It sits in the run bar beside the editor with its dropdown, and it is already the only filled button on screen; moving it would leave two Run buttons or touch every test that finds it by name.
+- There is no Changes split button. The Download button keeps its count; Review changes and Revert all are in the More menu, the palette and the Changes tab.
+- No Sources entry in the More menu yet (WB-19).
+

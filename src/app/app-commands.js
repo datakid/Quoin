@@ -29,6 +29,10 @@ export function buildRegistry(app) {
   r.register({ id: 'focusPrev', keys: ['Shift+F6'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.cycleRegion(-1) : false) });
   r.register({ id: 'runSelected', keys: [], surfaces: ['T3'], enabled: (a) => (a.ws && a.ws.selectedQueryNames().length ? true : 'Select queries in the list first.'), run: (a) => (a.ws ? a.ws.runSelected(false) : false) });
   r.register({ id: 'toggleInspector', keys: ['Mod+Alt+B'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.toggleInspector() : false) });
+  r.register({ id: 'layoutWrite', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('write') : false) });
+  r.register({ id: 'layoutDebug', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('debug') : false) });
+  r.register({ id: 'layoutReview', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('review') : false) });
+  r.register({ id: 'reviewChanges', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openChangesTab() : false) });
   r.register({ id: 'problems', keys: [], surfaces: ['T1'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openProblems() : false) });
   r.register({ id: 'find', keys: ['Mod+Shift+F'], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openFind(false) : false) });
   r.register({ id: 'replace', keys: ['Mod+Alt+F'], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openFind(true) : false) });

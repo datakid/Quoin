@@ -3285,3 +3285,9 @@ dialog.colwork.sheet {
   font-weight: 400;
   color: var(--ink-3);
 }
+
+@media (max-width: 699px) {
+  .more-button {
+    display: none;
+  }
+}

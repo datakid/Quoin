@@ -12,6 +12,7 @@ import { summariesFor } from './change-summary.js';
 import { settingsDialog, shortcutsDialog, detailsDialog, changesDialog, confirmDialog, menu, popover } from '../ui/dialogs.js';
 import { Session } from './session.js';
 import { Workspace } from './workspace.js';
+import { PRESET_ORDER } from '../core/wb/layout-presets.js';
 import { queryFile, moduleFile, zipFiles, sanitizeFileName } from '../core/export/files.js';
 import { QuoinError } from '../core/errors.js';
 
@@ -164,11 +165,12 @@ export class App {
     this.printBtn = h('button', { class: 'btn print-button', type: 'button', hidden: true, onclick: () => this.openPrint() }, S.print);
     this.exportBtn = h('button', { class: 'btn', type: 'button', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openExport() }, S.export);
     this.settingsBtn = h('button', { class: 'btn btn-quiet', type: 'button', 'aria-label': S.settings, title: S.settings, onclick: () => this.openSettings() }, '⚙');
+    this.moreBtn = h('button', { class: 'btn btn-quiet more-button', type: 'button', hidden: true, 'aria-label': S.more, title: S.more, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openMore() }, '\u22ef');
     this.downloadCount = h('span', { class: 'dl-count' });
     this.downloadBtn = h('button', { class: 'btn', type: 'button', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': false, 'aria-disabled': true, title: S.downloadNone, onclick: () => this.openDownload() }, S.download, this.downloadCount);
     this.topbar = h('header', { class: 'topbar' },
       h('h1', { class: 'brand' }, markImg('brand-mark', 28), h('span', { class: 'wordmark' }, S.appName)),
-      this.fileBtn, this.fileMeta, h('span', { class: 'spacer' }), this.paletteBtn, this.printBtn, this.exportBtn, this.settingsBtn, this.downloadBtn);
+      this.fileBtn, this.fileMeta, h('span', { class: 'spacer' }), this.paletteBtn, this.printBtn, this.exportBtn, this.moreBtn, this.settingsBtn, this.downloadBtn);
     this.input = h('input', { type: 'file', class: 'sr-only', accept: '.xlsx,.xlsm,.xltx,.xltm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', tabindex: '-1', 'aria-label': S.chooseFile });
     this.input.addEventListener('change', () => {
       if (this.input.files && this.input.files[0]) this.openFile(this.input.files[0]);
@@ -196,6 +198,7 @@ export class App {
     this.paletteBtn.hidden = true;
     this.printBtn.hidden = true;
     this.exportBtn.hidden = true;
+    this.moreBtn.hidden = true;
     this.downloadBtn.hidden = true;
     this.zone = h('div', { class: 'dropzone' }, h('p', { class: 'item-meta' }, S.emptyPrompt), h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.input.click() }, S.chooseFile));
     this.mainEl.append(h('div', { class: 'empty' }, h('div', { class: 'empty-inner' },
@@ -395,6 +398,7 @@ export class App {
     this.paletteBtn.hidden = false;
     this.printBtn.hidden = false;
     this.exportBtn.hidden = false;
+    this.moreBtn.hidden = false;
     this.downloadBtn.hidden = false;
     this.status.set({ counts: S.fileCounts(next.queries.length, next.modules.length) });
     this.ws.renderRail();
@@ -419,6 +423,20 @@ export class App {
       [S.fileTables, String(wb.tables.length)],
       [S.fileQueries, String(wb.queries.length)],
       [S.fileModules, String(this.session.modules.length)]
+    ]);
+  }
+
+  openMore() {
+    const ws = this.ws;
+    if (!ws) return;
+    const count = this.session ? this.session.editCount : 0;
+    const wide = ws.presetsAvailable();
+    menu(this.moreBtn, [
+      { heading: true, label: S.moreLayout },
+      ...PRESET_ORDER.map((id) => ({ label: S.presets[id], run: () => ws.applyPreset(id), disabled: !wide })),
+      { heading: true, label: S.moreChanges },
+      { label: count ? S.moreReview(count) : S.moreNone, run: () => ws.openChangesTab(), disabled: !count },
+      { label: S.moreRevert, run: () => ws.revertAllConfirmed(), disabled: !count }
     ]);
   }
 

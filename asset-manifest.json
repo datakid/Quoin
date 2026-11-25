@@ -1,5 +1,5 @@
 {
-  "version": "d1290a78063dfa53",
+  "version": "dca49db7e55ff0b8",
   "files": [
     "./",
     "index.html",
@@ -101,6 +101,7 @@
     "src/core/wb/fuzzy.js",
     "src/core/wb/graph-layout.js",
     "src/core/wb/ident.js",
+    "src/core/wb/layout-presets.js",
     "src/core/wb/let-edit.js",
     "src/core/wb/lib-names.js",
     "src/core/wb/m-gen.js",

@@ -67,10 +67,12 @@ test('T-WB-16: a second filter narrows the view, a filter on the same column rep
   await expect(chip(page)).toContainText('2 filters');
   expect((await gridRows(page)).map((r) => r[0])).toEqual(['Ann', 'Cy']);
   await filterByCondition(page, 'City', 'equals', 'Rome');
+  await expect(chip(page)).toContainText('0 of 6 rows');
   await expect(chip(page)).toContainText('2 filters');
   expect((await gridRows(page)).map((r) => r[0])).toEqual([]);
   await filterByCondition(page, 'Age', 'is null', null);
   await expect(chip(page)).toContainText('2 filters');
+  await expect(resultGrid(page)).toHaveAttribute('aria-rowcount', '1');
 });
 
 test('T-WB-16: the values list searches, remembers ticks while searching, and filters to the ticked values', async ({ page }) => {

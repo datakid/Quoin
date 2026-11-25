@@ -20,6 +20,7 @@ import { openFind } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
 import { insertViewSteps } from '../core/wb/view-steps.js';
 import { OpHistory } from '../core/wb/op-history.js';
+import { PRESETS, dockSplit } from '../core/wb/layout-presets.js';
 import { DEFAULT_LIMITS } from '../core/limits.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection } from '../core/wb/sources.js';
@@ -995,6 +996,37 @@ export class Workspace {
     this.dockToggle.setAttribute('aria-expanded', String(!collapse));
     if (collapse && inside) this.dockRail.btn.focus();
     else if (!collapse && document.activeElement === this.dockRail.btn) this.dockToggle.focus();
+    return true;
+  }
+
+  presetsAvailable() {
+    return !window.matchMedia('(max-width: 1099px)').matches;
+  }
+
+  applyPreset(name) {
+    const p = PRESETS[name];
+    if (!p) return false;
+    if (!this.presetsAvailable()) {
+      this.status.set({ note: S.presetNarrow });
+      return false;
+    }
+    if ((this.root.dataset.nav !== 'collapsed') !== p.navigator) this.toggleNavigator();
+    if ((this.root.dataset.inspector === 'open') !== p.inspector) this.toggleInspector();
+    if ((this.main.dataset.dock !== 'collapsed') !== p.dock.open) this.toggleDock();
+    if (p.dock.open) {
+      const split = dockSplit(p.dock.percent);
+      this.main.style.setProperty('--top', `${split.top}fr`);
+      this.main.style.setProperty('--bottom', `${split.bottom}fr`);
+      this.splitter.setAttribute('aria-valuenow', String(split.top));
+      this.dock.show(p.dock.tab);
+    }
+    this.status.set({ note: S.presetApplied(S.presets[name]) });
+    return true;
+  }
+
+  openChangesTab() {
+    if (this.main.dataset.dock === 'collapsed') this.toggleDock();
+    this.dock.show('changes');
     return true;
   }
 

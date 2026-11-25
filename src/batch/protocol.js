@@ -58,6 +58,14 @@ function resultProblem(fileId, r) {
     if (typeof r.sha256 !== 'string' || !SHA256_HEX.test(r.sha256)) return 'result.sha256 must be 64 lower case hex characters';
   } else if (r.sha256 !== null) return 'result.sha256 must be null when there are no bytes';
   for (const k of ['changes', 'warnings', 'rows']) if (!Array.isArray(r[k])) return `result.${k} must be an array`;
+  if (r.outputs !== undefined) {
+    if (!Array.isArray(r.outputs)) return 'result.outputs must be an array';
+    for (const o of r.outputs) {
+      if (!isObject(o) || !isText(o.name)) return 'each output needs a name';
+      if (typeof o.sha256 !== 'string' || !SHA256_HEX.test(o.sha256)) return 'each output sha256 must be 64 lower case hex characters';
+      if (o.bytes !== null && (!(o.bytes instanceof Uint8Array) || o.bytes.byteOffset !== 0 || o.bytes.byteLength !== o.bytes.buffer.byteLength)) return 'each output bytes must be null or a Uint8Array that owns its whole buffer';
+    }
+  }
   return null;
 }
 
@@ -103,6 +111,9 @@ export function validateMessage(m) {
 }
 
 export function transferListFor(m) {
-  if (m && m.type === 'applied' && m.result && m.result.bytes instanceof Uint8Array) return [m.result.bytes.buffer];
-  return [];
+  if (!m || m.type !== 'applied' || !m.result) return [];
+  const buffers = new Set();
+  if (m.result.bytes instanceof Uint8Array) buffers.add(m.result.bytes.buffer);
+  if (Array.isArray(m.result.outputs)) for (const o of m.result.outputs) if (o.bytes instanceof Uint8Array) buffers.add(o.bytes.buffer);
+  return [...buffers];
 }

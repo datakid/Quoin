@@ -263,8 +263,12 @@
 
   .set-shell {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(160px, auto) minmax(120px, auto) minmax(120px, auto) auto;
+    grid-template-rows: max-content max-content max-content max-content;
     overflow: auto;
+  }
+
+  .set-result[data-matrix] {
+    height: 70vh;
   }
 
   .set-pane {

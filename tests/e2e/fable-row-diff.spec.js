@@ -108,17 +108,40 @@ test('fable row diff: the result of Get is a report and has no diff area', async
   await expect(diffRegion(page)).toHaveCount(0);
 });
 
-test('fable row diff: the diff and the table both fit inside the shell without the page scrolling', async ({ page }) => {
+test('fable row diff: on a phone the panes stack without covering each other and the result and diff come into view', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await previewed(page, moduleReplace, [['signed.xlsm', fx('signed.xlsm')], ['mixed.xlsm', fx('mixed.xlsm')]]);
+  await openApp(page);
+  await dropTree(page, [{ name: 'books', children: [['signed.xlsm', fx('signed.xlsm')], ['mixed.xlsm', fx('mixed.xlsm')]].map(([name, path]) => ({ name, data: b64(path) })) }]);
+  await waitForSet(page);
+  await give(page, moduleReplace);
+  const layout = () => page.evaluate(() => {
+    const box = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, spill: e.scrollHeight - e.clientHeight }; };
+    return { shell: box('.set-shell'), files: box('.set-files'), recipe: box('.set-recipe'), result: box('.set-result'), detail: box('.set-detail'), sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  });
+  const stacked = (l) => {
+    expect(l.sideways).toBeLessThanOrEqual(0);
+    expect(l.files.spill).toBeLessThanOrEqual(1);
+    expect(l.recipe.spill).toBeLessThanOrEqual(1);
+    expect(l.files.bottom).toBeLessThanOrEqual(l.recipe.top + 1);
+    expect(l.recipe.bottom).toBeLessThanOrEqual(l.result.top + 1);
+  };
+  const inside = (l, part) => {
+    expect(l[part].top).toBeGreaterThanOrEqual(l.shell.top - 1);
+    expect(l[part].bottom).toBeLessThanOrEqual(l.shell.bottom + 1);
+  };
+  stacked(await layout());
+  await previewButton(page).click();
+  await expect(matrix(page)).toBeVisible();
+  const previewed = await layout();
+  stacked(previewed);
+  inside(previewed, 'result');
   await firstCell(changedRows(page).first()).click();
   await expect(diffRegion(page)).toHaveCount(1);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(0);
-  const box = await detail(page).boundingBox();
-  const matrixBox = await matrix(page).boundingBox();
-  expect(box.height).toBeGreaterThan(0);
-  expect(matrixBox.height).toBeGreaterThan(0);
+  const picked = await layout();
+  stacked(picked);
+  inside(picked, 'detail');
+  expect(picked.detail.bottom - picked.detail.top).toBeGreaterThan(40);
+  expect(picked.result.bottom - picked.result.top).toBeGreaterThan(300);
 });
 
 test('fable row diff: a click on a cell repaints the table once and leaves drag mode', async ({ page }) => {

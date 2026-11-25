@@ -50,6 +50,8 @@ Quoin opens an Excel `.xlsx` or `.xlsm` file in your browser and shows its Power
 
 On the `fable` branch, dropping two or more workbooks or a folder builds a set. Each file is indexed in a pool of background workers and listed with a badge (Ready, Skipped, Failed) and its reason; the top bar shows the number of files and queries. Choosing a file opens it beside the list exactly as a single dropped workbook opens, with an All files button back. The Versions panel groups every query and module by name and content and shows how many files hold each version; choosing a version shows its diff against the most common one. Export everything downloads one zip with a folder for each workbook, an index of every query and module, and a report with a row for every action and every file that was skipped. Nothing is written to any file: the workbooks you drop are only read. Dropping one workbook opens it as before.
 
+Load recipe takes a `.quoin-recipe.json` file. Collect, Inject (add, replace, remove or rename a query or module), Replace in code and Align recipes can be previewed, and so can a Transform recipe that writes a new file for each unit (named `{file}__{unit}.xlsx`, with one sheet, Result, holding the values). Transform recipes that write a new sheet in a copy, one combined workbook or the result in place wait until real Excel has opened the first kind. Preview lists every action in every file with the verdict it would get, and selecting a row shows the text that would change. Preview writes nothing. Get downloads a zip of the workbooks that changed, and Get into a folder (browsers with a folder picker) writes them to a folder you choose, each with a `report.csv`. A workbook is only released after it has been rebuilt, read back and checked to differ from the original in exactly the parts the recipe names, and it has the same bytes Preview described; if not, the row says not released and the file is not written. When a set holds signed macro projects, Get asks once for the whole set before removing the signatures. Stopping a Get leaves only complete files. The dropped files are never opened for writing.
+
 ## What it does not do
 
 - It never runs VBA. VBA is shown and edited only.
@@ -62,7 +64,7 @@ On the `fable` branch, dropping two or more workbooks or a folder builds a set. 
 
 ## Privacy
 
-Your file never leaves the tab. Quoin makes no network requests after the page and its assets load, sets a Content Security Policy that forbids them, and stores one thing: your theme choice, under the key `quoin.theme` in local storage. There are no cookies, no analytics, and no databases.
+Your file never leaves the tab. Quoin makes no network requests after the page and its assets load, sets a Content Security Policy that forbids them, and stores three small things in local storage: your theme choice (`quoin.theme`), recipes you choose to save (`quoin.recipes`, the recipe text only) and the names of sets you opened recently (`quoin.recent`, a short name and never a path). It never stores a workbook, a query from a workbook, or a file path. There are no cookies, no analytics, and no databases.
 
 ## Built with
 

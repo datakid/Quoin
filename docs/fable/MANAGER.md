@@ -7,9 +7,9 @@ Written 2026-11-21 by the integrator (Claude on `fable`). The user has told all 
 | Phase | State |
 |---|---|
 | F0 Set | Done on `fable` (F0-00 to F0-16) |
-| F1 Collect and Variants | F1-01 to F1-07 done on `fable`; F1-08 gate not yet recorded |
-| F2 Inject and Replace | Writer's F2-01 to F2-09 are now merged into `fable`. F2-10 to F2-16 are open |
-| F3 Transform | Scope's F3-01 to F3-07 are now merged into `fable`. F3-08 to F3-11 are open |
+| F1 Collect and Variants | Done on `fable`, gate recorded (F1-08) |
+| F2 Inject and Replace | Done on `fable`, gate recorded (F2-16) except the real-Excel check, which only the user can do |
+| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit) is wired in the app: Preview and Get work. F3-06, F3-07 and F3-09 are not wired and F3-08 is on hold, all waiting for the real-Excel check |
 | F4 Recipes, F5 Trust | Not started |
 
 The merge of `fable-writer` and then `fable-scope` into `fable` is done. The only conflict was the first line of `executeFile` in `src/batch/execute/index.js`; both sides were kept (Writer's `shouldStop`, Scope's transform dispatch). `asset-manifest.json` was regenerated. Lint 0 findings; unit 1521 pass, 0 fail, 5 skipped. The trunk bug Writer found (`index.xlsx` ignoring the frozen time) is fixed with a test that fails without it.
@@ -49,7 +49,7 @@ Stay out of `src/app/**`, `src/ui/**`, `src/workers/**` and `src/ui/strings.js` 
 
 The pack script already exists (see item 1). Your edit rights stay as before; add nothing outside `docs/fable/MESSAGES-writer.md` and your progress file.
 
-1. F2-15 is done: the integrator built `scripts/make-excel-pack.mjs` (13 cases, 17 outputs, `CHECKLIST.md`) because nothing had come back from you since Nov 21 and the person's Excel check depends on it. Do not rebuild it. Read it, run `node scripts/make-excel-pack.mjs`, and list in `MESSAGES-writer.md` any case you think is missing or any "look at" line that could pass while the file is wrong (a part changing without being declared is the one to hunt). Add cases to the script only if they are about writer paths; keep its shape.
+1. F2-15 is done: the integrator built `scripts/make-excel-pack.mjs` (13 cases, 18 outputs, `CHECKLIST.md`) because nothing had come back from you since Nov 21 and the person's Excel check depends on it. Do not rebuild it. Read it, run `node scripts/make-excel-pack.mjs`, and list in `MESSAGES-writer.md` any case you think is missing or any "look at" line that could pass while the file is wrong (a part changing without being declared is the one to hunt). Add cases to the script only if they are about writer paths; keep its shape.
 2. Review the three small hunks Scope made in your `src/core/save.js` (`refuseUnapplied`, `applyChangeSet`, `selfCheck`) and `verifyAddedSheets`. List findings in `MESSAGES-writer.md`: anything that could let a part change without being declared. Do not edit them; Scope fixes what you find.
 3. Open points 3 and 4 in your progress file (a connection for an added query; remove and rename of queries Excel made) stay as they are. They are decided: leave the refusals in place until the pack results say otherwise.
 
@@ -87,3 +87,7 @@ Integrator status, updated as work lands:
 - F2-10c, the Preview screen (Load recipe, Preview, the would-change table): done.
 - F2-11 (Get: zip and folder, report) and F2-12 (one confirmation for signed projects): done.
 - Preview landed: yes. F2-10a to F2-10d, Get (F2-11) and the signed-project confirmation (F2-12) are on `fable`. Trunk may work in `src/app/**`, `src/ui/**`, `src/workers/**` and `strings.js` again, but pull first: I changed `main.js`, `plan-run.js`, `grid.js`, `shell.js`, `result-matrix.js`, `strings.js` and `styles/set.css`. Output modes beyond a zip and a folder (new sheet, combined, in place) still wait for the real-Excel check.
+- F3-05 wired (2026-11-24): a Transform recipe with output `newFile` can be previewed and got. Recipes with `newSheet`, `combined`, `inPlace` or compute `excel` say they cannot be previewed yet. A file's hash in a transform is a digest of its output names and hashes, so plan equals run still holds. A test shows the pack's new-file outputs are byte for byte what the app writes.
+- Waiting on the user: open `quoin-excel-pack.zip` (`node scripts/make-excel-pack.mjs`) in real Excel and report pass or fail per row of `CHECKLIST.md`. The `new-file` case is the one to open first. Nothing that writes a sheet is wired until that comes back.
+- Flaky tests, so nobody chases them: `T-WB-05` (30 ms ranking budget), `T-WB-09`, and `outputs.test.js` "tablesToXlsx ... byte-compatible" (fixed 2026-11-23 by pinning the clock).
+

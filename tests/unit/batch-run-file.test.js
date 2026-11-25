@@ -101,11 +101,10 @@ test('a deadline that has passed fails every row with m.timeout and writes nothi
   assert.ok(res.rows.every((r) => r.verdict === 'failed' && r.reason_code === 'm.timeout'));
 });
 
-test('a recipe kind that is not wired yet is refused loudly', async () => {
+test('a recipe kind that is not wired is refused loudly', async () => {
   const bytes = fixture('pq_simple.xlsx');
   const { meta, filePlan } = await planFor(bytes, 'pq_simple.xlsx', { recipe: 'collect', v: 1 });
-  const transform = parseRecipe(JSON.stringify({ recipe: 'transform', v: 1, query: { source: 'inline', m: 'let x = 1 in x' }, output: { mode: 'newFile' } })).recipe;
-  await assert.rejects(() => runFilePlan(bytes, meta, filePlan, options(transform)), /not (wired|supported)/);
+  await assert.rejects(() => runFilePlan(bytes, meta, filePlan, options({ recipe: 'frobnicate', more: {} })), /not wired/);
 });
 
 test('a module replace in a signed project is refused until the set has confirmed, then marks the signature as removed', async () => {
@@ -125,4 +124,36 @@ test('the result survives structured clone', async () => {
   const { recipe, meta, filePlan } = await planFor(bytes, 'pq_simple.xlsx', injectReplace);
   const res = await runFilePlan(bytes, meta, filePlan, options(recipe));
   assert.deepEqual(structuredClone(res).rows, res.rows);
+});
+
+const transformNewFile = { recipe: 'transform', v: 1, scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output: { mode: 'newFile' } };
+
+test('a transform run hands back one workbook per unit with its hash and no whole-file bytes', async () => {
+  const bytes = fixture('pq_simple.xlsx');
+  const { recipe, meta, filePlan } = await planFor(bytes, 'pq_simple.xlsx', transformNewFile);
+  const res = await runFilePlan(bytes, meta, filePlan, options(recipe));
+  assert.equal(res.bytes, null);
+  assert.equal(res.sha256, null);
+  assert.deepEqual(res.changes, []);
+  assert.deepEqual(res.outputs.map((o) => o.name), ['pq_simple__StudentNames.xlsx', 'pq_simple__StudentResults.xlsx']);
+  for (const o of res.outputs) assert.equal(o.sha256, sha(o.bytes));
+  assert.deepEqual(res.rows.map((r) => [r.unit, r.verdict, r.output, r.new_hash]), res.outputs.map((o) => [o.unit.name, 'changed', o.name, o.sha256]));
+});
+
+test('a transform preview names the same hashes as the run but sends no workbook bytes', async () => {
+  const bytes = fixture('pq_simple.xlsx');
+  const { recipe, meta, filePlan } = await planFor(bytes, 'pq_simple.xlsx', transformNewFile);
+  const ran = await runFilePlan(bytes, meta, filePlan, options(recipe));
+  const previewed = await runFilePlan(bytes, meta, filePlan, options(recipe, { dryRun: true }));
+  assert.deepEqual(previewed.outputs.map((o) => [o.name, o.sha256]), ran.outputs.map((o) => [o.name, o.sha256]));
+  for (const o of previewed.outputs) assert.equal(o.bytes, null);
+});
+
+test('a transform that fails on one unit still returns the units that worked', async () => {
+  const bytes = fixture('pq_simple.xlsx');
+  const broken = { ...transformNewFile, query: { source: 'inline', m: 'if "{unit.name}" = "StudentNames" then error "boom" else Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' } };
+  const { recipe, meta, filePlan } = await planFor(bytes, 'pq_simple.xlsx', broken);
+  const res = await runFilePlan(bytes, meta, filePlan, options(recipe));
+  assert.deepEqual(res.rows.map((r) => [r.unit, r.verdict, r.reason_code]), [['StudentNames', 'failed', 'unit.error'], ['StudentResults', 'changed', '']]);
+  assert.deepEqual(res.outputs.map((o) => o.name), ['pq_simple__StudentResults.xlsx']);
 });

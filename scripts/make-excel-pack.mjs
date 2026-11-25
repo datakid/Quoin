@@ -11,6 +11,9 @@ import { resolvePlan } from '../src/batch/resolve/resolve.js';
 import { executeFile } from '../src/batch/execute/index.js';
 import { combineOutputs } from '../src/batch/execute/combine.js';
 import { sha256Bytes } from '../src/batch/index/hash.js';
+import { buildDataMashup } from '../src/core/pq/datamashup.js';
+import { base64Encode } from '../src/core/bytes.js';
+import { applyEdits, textContentEdit, parseXml } from '../src/core/xml.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NOW = '2026-11-23T12:00:00.000Z';
@@ -54,6 +57,16 @@ const written = (result) => {
   return result.bytes;
 };
 
+async function withoutBindings(bytes, name) {
+  const wb = await openWorkbook(bytes, name);
+  const mashup = wb.mashup;
+  const model = { ...mashup.model, permissionBindings: new Uint8Array(0) };
+  const encoded = base64Encode(await buildDataMashup(model, null));
+  const fresh = parseXml(mashup.text.text, mashup.part);
+  await wb.pkg.setText(mashup.part, applyEdits(mashup.text.text, [textContentEdit(fresh.root, encoded)]), mashup.text);
+  return wb.pkg.write({ now: CLOCK });
+}
+
 const cases = [];
 const add = (c) => cases.push(c);
 
@@ -64,9 +77,9 @@ async function build() {
 
   const q1 = await execute('pq_simple.xlsx', simple, inject({ target: 'query', op: 'replace', name: 'StudentResults', text: TWO_ROWS }));
   add({
-    slug: 'query-replace', title: 'Replace a query', input: ['pq_simple.xlsx', simple], outputs: [['output.xlsx', written(q1)]],
+    slug: 'query-replace', title: 'Replace a query', input: ['pq_simple.xlsx', simple], outputs: [['output.xlsx', written(q1)], ['output-no-bindings.xlsx', await withoutBindings(written(q1), 'output.xlsx')]],
     look: [
-      'The output opens with no repair or recovery message.',
+      'The output opens with no repair or recovery message. If it does, open output-no-bindings.xlsx as well and say which of the two opens clean: the second differs only in having no permission bindings, the fallback the spec names if Excel rejects the stored ones (MX-3). You can stop after the first if it is clean.',
       'Data > Queries & Connections lists the query StudentResults, as in the input. (StudentNames is a table on the sheet Input, not a query, so it is not listed there.)',
       'Right-click StudentResults > Edit. The query is now a #table of Name and Score with Ann 1 and Bob 2.',
       'Data > Refresh All finishes with no error and the StudentResults table on its sheet shows Ann 1 and Bob 2.',

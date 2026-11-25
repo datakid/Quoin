@@ -1,0 +1,120 @@
+name: openxml
+on:
+  push:
+    branches: [fable]
+    paths:
+      - 'src/**'
+      - 'scripts/make-excel-pack.mjs'
+      - '.github/workflows/openxml.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build the Excel pack
+        run: |
+          node scripts/make-excel-pack.mjs "$RUNNER_TEMP/pack.zip"
+          mkdir "$RUNNER_TEMP/pack"
+          unzip -q "$RUNNER_TEMP/pack.zip" -d "$RUNNER_TEMP/pack"
+      - name: Create the validator
+        run: |
+          dotnet new console -o "$RUNNER_TEMP/validator" --force
+          dotnet add "$RUNNER_TEMP/validator" package DocumentFormat.OpenXml --version 3.1.0
+          cat > "$RUNNER_TEMP/validator/Program.cs" <<'EOF'
+          using DocumentFormat.OpenXml;
+          using DocumentFormat.OpenXml.Packaging;
+          using DocumentFormat.OpenXml.Validation;
+
+          var root = args[0];
+          var validator = new OpenXmlValidator(FileFormatVersions.Microsoft365);
+          var fresh = 0;
+          var files = 0;
+
+          Dictionary<string, string> Check(string file)
+          {
+              var found = new Dictionary<string, string>();
+              try
+              {
+                  using var doc = SpreadsheetDocument.Open(file, false);
+                  foreach (var e in validator.Validate(doc))
+                  {
+                      var key = $"{e.Id}|{e.Description}|{e.Part?.Uri}";
+                      found[key] = $"{e.Id} in {e.Part?.Uri} at {e.Path?.XPath}: {e.Description}";
+                  }
+              }
+              catch (Exception ex)
+              {
+                  found[$"open|{ex.GetType().Name}"] = $"could not open: {ex.GetType().Name}: {ex.Message}";
+              }
+              return found;
+          }
+
+          foreach (var dir in Directory.GetDirectories(Path.Combine(root, "cases")).OrderBy(d => d))
+          {
+              var baseline = new HashSet<string>();
+              foreach (var input in Directory.GetFiles(Path.Combine(dir, "input")).OrderBy(f => f))
+              {
+                  var found = Check(input);
+                  files++;
+                  Console.WriteLine($"INPUT  {Path.GetRelativePath(root, input)}: {found.Count} finding(s)");
+                  foreach (var (key, text) in found)
+                  {
+                      baseline.Add(key);
+                      Console.WriteLine($"         {text}");
+                  }
+              }
+              foreach (var output in Directory.GetFiles(Path.Combine(dir, "output")).OrderBy(f => f))
+              {
+                  var found = Check(output);
+                  files++;
+                  var added = found.Where(kv => !baseline.Contains(kv.Key)).ToList();
+                  fresh += added.Count;
+                  Console.WriteLine($"OUTPUT {Path.GetRelativePath(root, output)}: {found.Count} finding(s), {added.Count} not in the input");
+                  foreach (var (key, text) in found)
+                  {
+                      Console.WriteLine($"         {(baseline.Contains(key) ? "same as input" : "NEW")}: {text}");
+                  }
+              }
+          }
+
+          Console.WriteLine($"SUMMARY files={files} new-findings-in-outputs={fresh}");
+          return fresh == 0 ? 0 : 1;
+          EOF
+      - name: Prove the validator reports a broken file
+        run: |
+          mkdir -p "$RUNNER_TEMP/calib/cases/01/input" "$RUNNER_TEMP/calib/cases/01/output"
+          cp "$RUNNER_TEMP/pack/cases/01-query-replace/input/pq_simple.xlsx" "$RUNNER_TEMP/calib/cases/01/input/"
+          python3 - "$RUNNER_TEMP/pack/cases/01-query-replace/output/output.xlsx" "$RUNNER_TEMP/calib/cases/01/output/broken.xlsx" <<'PY'
+          import sys, zipfile
+          src, dst = sys.argv[1], sys.argv[2]
+          hit = 0
+          with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zout:
+              for item in zin.infolist():
+                  data = zin.read(item.filename)
+                  if item.filename.startswith('xl/worksheets/sheet') and item.filename.endswith('.xml') and b'<sheetData' in data and not hit:
+                      data = data.replace(b'<sheetData', b'<notAnElement/><sheetData', 1)
+                      hit += 1
+                  zout.writestr(item, data)
+          assert hit == 1, hit
+          PY
+          set +e
+          dotnet run --project "$RUNNER_TEMP/validator" -c Release -- "$RUNNER_TEMP/calib" 2>&1 | tee "$RUNNER_TEMP/calib.log"
+          code=${PIPESTATUS[0]}
+          grep -q 'NEW:' "$RUNNER_TEMP/calib.log" && [ "$code" -ne 0 ] || { echo "the validator did not report a file with an unknown element"; exit 1; }
+      - name: Validate every pack file
+        run: |
+          set +e
+          dotnet run --project "$RUNNER_TEMP/validator" -c Release -- "$RUNNER_TEMP/pack" 2>&1 | tee "$RUNNER_TEMP/openxml.log"
+          code=${PIPESTATUS[0]}
+          sh scripts/ci-annotate.sh "open xml validator" "$RUNNER_TEMP/openxml.log" -E '^(INPUT|OUTPUT|SUMMARY)|NEW:'
+          exit $code

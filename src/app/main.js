@@ -18,7 +18,7 @@ import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
 import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
-import { startPlanRun } from './plan-run.js';
+import { startPlanRun, previewSupport } from './plan-run.js';
 import { rowDiff } from './row-diff.js';
 import { buildPlanOutput } from './outputs.js';
 import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
@@ -27,7 +27,6 @@ import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
 
 const MAX_RECIPE_BYTES = 256 * 1024;
-const PREVIEWABLE = ['inject', 'replace', 'align'];
 
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
 
@@ -416,9 +415,11 @@ export class App {
   recipeView(extra = {}) {
     const held = this.recipeHeld;
     if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, ...extra };
-    const previewable = PREVIEWABLE.includes(held.recipe.recipe);
+    const support = previewSupport(held.recipe);
+    const previewable = support.ok;
     const canGet = previewable && !!this.preview && this.preview.counts.changed > 0;
-    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [S.recipeNotPreviewable], canPreview: previewable, canGet, ...extra };
+    const why = { kind: S.recipeNotPreviewable, compute: S.recipeComputeNotYet, output: S.recipeOutputNotYet(support.mode) }[support.why];
+    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...extra };
   }
 
   forgetPreview() {
@@ -545,6 +546,7 @@ export class App {
         this.showRecipe(this.recipeView({ error: this.planProblem(out) }));
       }
       this.shell.recipePanel.restoreFocus();
+      if (out.ok) this.shell.revealResult();
       return out;
     });
   }

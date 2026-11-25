@@ -70,3 +70,22 @@ What the user said, in his words as closely as they can be kept: he opened the 1
 How to record it: evidence for "opens without repair" and "runs without error" for the 13 cases, from the user's own session. Not evidence for "the values and formats are right" or for any individual checklist line, because he did not look at them. Do not mark the part 1 checklist as ticked; record what was seen and what was not. The Excel edition and version he used are not known yet; Scope has asked.
 
 Part 2: the user has no Windows machine. Scope tagged each line of `CHECKLIST-SCOPE.md` with what it needs: any desktop Excel (opening, saving, formulas, merged cells), `[needs refresh]` (desktop Excel with Power Query: certain on Windows, version-dependent on a Mac, impossible in Excel for the web) and `[needs VBA editor]`. Lines the user cannot do stay empty and are marked "cannot do on this Excel". The in-place case X03 needs no refresh at all, so it can be checked on any desktop Excel; the plan still says to do it after X01 and X02 have been seen to open cleanly, which the open-only lines of those two cases can show.
+
+## Static review of both packs by an agent without Excel (2026-11-25)
+
+A reviewer with no Excel access checked part 1 (13 cases) and part 2 (X01 to X03) in a Linux sandbox: SHA-256 of all outputs, OOXML package integrity, the Power Query mashup (M, metadata, permission bindings), the VBA project decompressed and compared byte for byte with the inputs, cell-level dumps, a comparison with `expected-by-quoin.xlsx`, and a LibreOffice headless load of all 24 workbooks.
+
+Result as reported: every static check passes and nothing contradicts an Excel-only line. All 18 part 1 fingerprints and the 3 part 2 hashes match. This is static evidence, not Excel evidence; the lines that only desktop Excel can confirm are still open (repair prompts, the Queries & Connections pane, Refresh All, Debug > Compile, Alt+F8, Tools > Digital Signature, Save As). The user separately opened the 13 files of part 1 in Excel with no repair message.
+
+Defects it found, all in Scope's checklist text and none in a file, now fixed in `scripts/make-excel-pack-scope.mjs` (the three output hashes are unchanged and are pinned in `excel-pack-scope.test.js`):
+
+- X03 said typing 4 in A2 makes A3 show 6. A1 is 1, so A3 shows 5.
+- X02 said Alt+F8 lists the macros. The workbook's only macro is an event handler, so Alt+F8 lists none, in the input as well. The line now says so and asks for the VBA editor check instead.
+- X03 said "the formula result 3"; E4 holds the plain value 3, F4 is empty. The line now says so.
+
+Notes it made that need no change but should be read by whoever ticks the boxes:
+
+- Case 11 (new file per unit): dates display as `yyyy-mm-dd hh:mm:ss`, the input showed a long date. The values are the same; a values-only workbook does not carry the source's number formats. This is how Scope's New file, New sheet and Combined outputs behave and is a decision, not a bug.
+- Case 13 (combined): a formula cell of the input is stored as its computed value, which is what "the values of its table" asks for.
+- X01, X02: the stored M evaluates over the input data to exactly the expected file; both connections carry `refreshOnLoad="1"`; X02's VBA project is byte-identical to the input.
+- Case 09 (Writer's): with the signature removed Excel may show the unsigned-macro behaviour instead of the signed-trust prompt.

@@ -40,3 +40,16 @@ test('the checklist says nothing was run in Excel and that in place waits for th
   assert.match(checklist, /## X03 \(hold: after X01 and X02\)/);
   assert.equal((checklist.match(/- \[ \]/g) || []).length > 12, true);
 });
+
+test('the checklist lines the reviewer found wrong now say what the files do', async () => {
+  const { checklist } = await buildScopePack();
+  assert.match(checklist, /Type 4 in A2 and A3 shows 5 \(A1 is 1\)/);
+  assert.equal(checklist.includes('changes to 6'), false);
+  assert.match(checklist, /Alt\+F8 lists no macro, in the input as well as the output/);
+  assert.match(checklist, /E4 holds 3 and F4 is empty\. The 3 in E4 is a plain value, not a formula/);
+});
+
+test('the three outputs have the hashes the reviewer checked', async () => {
+  const { cases } = await buildScopePack();
+  assert.deepEqual(cases.map((c) => c.hash), ['fc55738c07ef57431bb2de6d57905c3b8deaac151683d3c394b6cf96177405c9', '19f0111eb293a8c03c43b06c642e77d9ac684e99fb7bbb73d76786439a86b244', '9bbd78bcc4db771759b642e563c14bb06d52b7c11a2d9ed2789ab240d8f249ea']);
+});

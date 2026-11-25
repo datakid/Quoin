@@ -71,7 +71,7 @@ export async function buildScopePack() {
   ]));
   cases.push(await excelCase('X02', 'pq_vba_complex.xlsm', { type: 'tables', match: 'pattern', pattern: 'RawInput' }, X02_M, 'FinalTable', [
     OPENS_INPUT, OPENS_OUTPUT, COMPILES,
-    '[needs VBA editor] The macros are still in the workbook: Alt+F8 lists them and the document modules ThisWorkbook and Sheet1 are intact.',
+    '[needs VBA editor] The VBA is still there and unchanged: in the VBA editor Sheet1 still has its Worksheet_Change handler and ThisWorkbook still starts with Option Explicit. Alt+F8 lists no macro, in the input as well as the output, because the only macro in this workbook is an event handler.',
     REFRESHES,
     '[needs refresh] On sheet Input the table FinalTable has the columns of RawInput plus a column Pack that holds "Quoin pack X02" in every row, and its contents equal the sheet "Result" of expected-by-quoin.xlsx.',
     '[needs refresh] The query fGetNamedRange and the table RawInput are unchanged and RawInput still refreshes.',
@@ -85,8 +85,8 @@ export async function buildScopePack() {
     expects: [
       'Run this one only after X01 and X02 have passed: the plan holds in-place output until the other modes have been checked.',
       OPENS_INPUT, OPENS_OUTPUT,
-      'A3 still shows 3 and changes to 6 if you type 4 in A2. The merged cell B2:C2 is still merged and still shows "merged here".',
-      'From E1 on Sheet1 there is a small table: a first row Column1, Column2 and below it the values 1, left, 2, merged here and the formula result 3. Nothing else on the sheet moved.',
+      'A3 still shows 3. Type 4 in A2 and A3 shows 5 (A1 is 1); press Ctrl+Z to put A2 back. The merged cell B2:C2 is still merged and still shows "merged here".',
+      'From E1 on Sheet1 there is a small table: E1 and F1 hold Column1 and Column2, E2 and F2 hold 1 and left, E3 and F3 hold 2 and merged here, E4 holds 3 and F4 is empty. The 3 in E4 is a plain value, not a formula. Nothing else on the sheet moved.',
       SAVES
     ],
     files: [{ name: 'X03/input.xlsx', data: held }, { name: 'X03/output.xlsx', data: verified('X03', placed) }, { name: 'X03/what-quoin-reported.json', data: encode(JSON.stringify(summary(placed.result.rows), null, 2)) }],

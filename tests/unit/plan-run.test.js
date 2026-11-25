@@ -8,6 +8,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { runFilePlan } from '../../src/batch/execute/run-file.js';
 import { appliedMessage, refusedMessage } from '../../src/batch/protocol.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
+import { S } from '../../src/ui/strings.js';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { readUsedGrid } from '../../src/core/cells.js';
 import { combineOutputs } from '../../src/batch/execute/combine.js';
@@ -544,5 +545,10 @@ test('when no unit gives a table there is no combined workbook', async () => {
   assert.equal(run.combined, null);
   assert.deepEqual(run.output.files, []);
   assert.ok(run.output.rows.every((r) => r.verdict === 'failed' && r.output === ''));
+});
+
+test('the plan summary reads as section 9 words it and keeps singular and plural right', () => {
+  assert.equal(S.planSummary({ files: 10, units: 13, groups: [{ unitsPerFile: 1, files: 7 }, { unitsPerFile: 2, files: 3 }] }), '7 files → 1 unit each, 3 files → 2 units each — 13 units across 10 files');
+  assert.equal(S.planSummary({ files: 1, units: 1, groups: [{ unitsPerFile: 1, files: 1 }] }), '1 file → 1 unit each — 1 unit across 1 file');
 });
 

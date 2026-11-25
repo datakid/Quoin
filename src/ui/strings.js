@@ -260,6 +260,7 @@ export const S = {
   recipeWarning: (path) => `Unknown field ${path} was ignored.`,
   recipeIgnoredBlock: (path) => `The ${path} section does not belong to this recipe and was ignored.`,
   recipeWarnings: 'Notes on this recipe',
+  planSummary: (p) => `${p.groups.map((g) => `${g.files} ${g.files === 1 ? 'file' : 'files'} → ${g.unitsPerFile} ${g.unitsPerFile === 1 ? 'unit' : 'units'} each`).join(', ')} — ${p.units} ${p.units === 1 ? 'unit' : 'units'} across ${p.files} ${p.files === 1 ? 'file' : 'files'}`,
   recipeCounts: (c) => [`${c.changed} would change`, c.unchanged ? `${c.unchanged} unchanged` : '', c.skipped ? `${c.skipped} skipped` : '', c.refused ? `${c.refused} refused` : '', c.failed ? `${c.failed} failed` : ''].filter(Boolean).join(' · '),
   recipeSigned: (n) => `${n} ${n === 1 ? 'file has' : 'files have'} a signed macro project. Running removes the signature.`,
   recipePlanMore: (n) => `${n} more ${n === 1 ? 'problem' : 'problems'} with this recipe.`,

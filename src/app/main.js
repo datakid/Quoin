@@ -541,7 +541,7 @@ export class App {
       if (out.ok) {
         this.preview = out;
         this.shell.showResult(out.rows, 'preview', { detailFor: (i) => rowDiff(out, i) });
-        this.showRecipe(this.recipeView({ notes: [S.recipeCounts(out.counts), ...(out.signedCount ? [S.recipeSigned(out.signedCount)] : [])] }));
+        this.showRecipe(this.recipeView({ notes: [...(out.plan.recipe.recipe === 'transform' && out.plan.summary.files ? [S.planSummary(out.plan.summary)] : []), S.recipeCounts(out.counts), ...(out.signedCount ? [S.recipeSigned(out.signedCount)] : [])] }));
       } else {
         this.showRecipe(this.recipeView({ error: this.planProblem(out) }));
       }

@@ -9,7 +9,7 @@ Written 2026-11-21 by the integrator (Claude on `fable`). The user has told all 
 | F0 Set | Done on `fable` (F0-00 to F0-16) |
 | F1 Collect and Variants | Done on `fable`, gate recorded (F1-08) |
 | F2 Inject and Replace | Done on `fable`, gate recorded (F2-16) except the real-Excel check, which only the user can do |
-| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit), F3-06 (a new sheet in a copy) and F3-07 (one combined workbook) are wired in the app: Preview and Get work. F3-10 is next. F3-08 (in place) and F3-09 (Excel computes on open) are held: no real-Excel case exists for them |
+| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit), F3-06 (a new sheet in a copy) and F3-07 (one combined workbook) are wired in the app: Preview and Get work. F3-10 (section 9) passes with three differences waiting on the person. F3-08 (in place) and F3-09 (Excel computes on open) are held: no real-Excel case exists for them |
 | F4 Recipes, F5 Trust | Not started |
 
 The merge of `fable-writer` and then `fable-scope` into `fable` is done. The only conflict was the first line of `executeFile` in `src/batch/execute/index.js`; both sides were kept (Writer's `shouldStop`, Scope's transform dispatch). `asset-manifest.json` was regenerated. Lint 0 findings; unit 1521 pass, 0 fail, 5 skipped. The trunk bug Writer found (`index.xlsx` ignoring the frozen time) is fixed with a test that fails without it.
@@ -94,3 +94,4 @@ Integrator status, updated as work lands:
 - Earlier request, now answered in part: open `quoin-excel-pack.zip` (`node scripts/make-excel-pack.mjs`) in real Excel and report pass or fail per row of `CHECKLIST.md`. The `new-file` case is the one to open first. Nothing that writes a sheet is wired until that comes back.
 - Flaky tests, so nobody chases them: `T-WB-05` (30 ms ranking budget), `T-WB-09`, and `outputs.test.js` "tablesToXlsx ... byte-compatible" (fixed 2026-11-23 by pinning the clock).
 - T-LINT-22 (2026-11-24): a leftover merge conflict marker in any file, docs included, fails lint. It exists because a merge of `fable` into trunk work left markers in `PROGRESS.md`. After any merge, run `node tests/lint/run.js` before pushing.
+- F3-10 done (2026-11-24): `fable-worked-example.spec.js` and `tests/fixtures/worked-example.js` exist; Scope's helper task is closed. Preview shows the plan summary line. Differences from section 9 are in PROGRESS.md under F3-10.

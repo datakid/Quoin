@@ -75,3 +75,22 @@ for (const view of VIEWS) {
     await ctx.close();
   });
 }
+
+for (const view of VIEWS) {
+  test(`T-I-04-FABLE: set shell with the token list open and a saved recipe at ${view.size} in the ${view.theme} theme`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: view.theme, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    await openApp(page);
+    const b64 = (name) => readFileSync(ext(name)).toString('base64');
+    await dropTree(page, [{ name: 'books', children: [{ name: 'pq_simple.xlsx', data: b64('pq_simple.xlsx') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'transform', v: 1, name: 'Tables to files', scope: { type: 'tables', match: 'all' }, query: { source: 'inline', m: 'Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content]' }, output: { mode: 'newFile', name: '{file.name}__{unit.name}.xlsx' } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'tables.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Save in this browser', exact: true }).click();
+    await page.locator('.recipe-tokens summary').click();
+    await page.evaluate(() => { document.querySelector('.set-shell').scrollTop = 0; });
+    await settle(page);
+    await expect(page).toHaveScreenshot(`fable-shell-recipe-tokens-${view.size}-${view.theme}.png`, { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' });
+    await ctx.close();
+  });
+}

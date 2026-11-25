@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from '../../src/app/intake.js';
+import { snapshotDrop, splitRecipe, hasFolder, collectFiles, filesFromInput, indexPending } from '../../src/app/intake.js';
 import { refusalByName } from '../../src/batch/index/file-index.js';
 import { SetSession } from '../../src/app/set-session.js';
 import { openedMessage, refusedMessage } from '../../src/batch/protocol.js';
@@ -171,4 +171,35 @@ test('indexPending ignores an answer for a file that was removed meanwhile', asy
   await indexPending(s, pool);
   assert.deepEqual(s.list().map((f) => f.id), ['f0002']);
   assert.equal(s.state, 'ready');
+});
+
+test('splitRecipe takes a recipe file out of a drop and leaves the rest as it was', () => {
+  const recipe = file('fix.quoin-recipe.json');
+  const folder = file('books');
+  const entries = [fileEntry('/fix.quoin-recipe.json'), dirEntry('/books', [fileEntry('/books/a.xlsx')])];
+  const { recipes, rest } = splitRecipe({ entries, files: [recipe, folder] });
+  assert.deepEqual(recipes.map((f) => f.name), ['fix.quoin-recipe.json']);
+  assert.deepEqual(rest.files.map((f) => f.name), ['books']);
+  assert.deepEqual(rest.entries.map((e) => e.name), ['books']);
+  assert.equal(hasFolder(rest), true);
+});
+
+test('splitRecipe returns the same snapshot when no file is a recipe, and ignores a plain json file', () => {
+  const snapshot = { entries: null, files: [file('a.xlsx'), file('notes.json'), file('x.quoin-recipe.json.txt')] };
+  const out = splitRecipe(snapshot);
+  assert.deepEqual(out.recipes, []);
+  assert.equal(out.rest, snapshot);
+});
+
+test('splitRecipe matches the suffix in any case, finds several recipes, and works without entries', () => {
+  const out = splitRecipe({ entries: null, files: [file('A.QUOIN-RECIPE.JSON'), file('b.quoin-recipe.json'), file('c.xlsx')] });
+  assert.equal(out.recipes.length, 2);
+  assert.deepEqual(out.rest.files.map((f) => f.name), ['c.xlsx']);
+  assert.equal(out.rest.entries, null);
+});
+
+test('splitRecipe leaves nothing when only a recipe was dropped', () => {
+  const out = splitRecipe({ entries: [fileEntry('/r.quoin-recipe.json')], files: [file('r.quoin-recipe.json')] });
+  assert.equal(out.rest.files.length, 0);
+  assert.equal(out.rest.entries.length, 0);
 });

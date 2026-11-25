@@ -50,7 +50,7 @@ function splitPath(relPath, name) {
 }
 
 export class SetShell {
-  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, onLoadRecipe = () => {}, onClearRecipe = () => {}, onPreview = () => {}, onGet = () => {}, onGetFolder = () => {}, canPickFolder = false, onPreviewCleared = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
+  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, onLoadRecipe = () => {}, onClearRecipe = () => {}, onPreview = () => {}, onGet = () => {}, onGetFolder = () => {}, onSaveRecipe = () => {}, onDownloadRecipe = () => {}, onUseStored = () => {}, onDeleteStored = () => {}, canPickFolder = false, onPreviewCleared = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
     this.container = container;
     this.session = session;
     this.onSummary = onSummary;
@@ -62,6 +62,10 @@ export class SetShell {
     this.onPreview = onPreview;
     this.onGet = onGet;
     this.onGetFolder = onGetFolder;
+    this.onSaveRecipe = onSaveRecipe;
+    this.onDownloadRecipe = onDownloadRecipe;
+    this.onUseStored = onUseStored;
+    this.onDeleteStored = onDeleteStored;
     this.canPickFolder = canPickFolder;
     this.onPreviewCleared = onPreviewCleared;
     this.resultMode = null;
@@ -95,7 +99,7 @@ export class SetShell {
     this.empty = h('p', { class: 'set-empty item-meta' });
     this.files = h('section', { class: 'set-pane set-files', 'aria-label': S.setFiles }, h('div', { class: 'set-pane-head' }, h('h2', { class: 'set-pane-title' }, S.setFiles), this.count), this.filter, this.list, this.empty);
     this.recipe = h('section', { class: 'set-pane set-recipe', 'aria-label': S.setRecipe, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setRecipe));
-    this.recipePanel = new RecipePanel(this.recipe, { onLoad: (file) => this.onLoadRecipe(file), onClear: () => this.onClearRecipe(), onPreview: () => this.onPreview(), onGet: () => this.onGet(), onGetFolder: () => this.onGetFolder(), canPickFolder: this.canPickFolder });
+    this.recipePanel = new RecipePanel(this.recipe, { onLoad: (file) => this.onLoadRecipe(file), onClear: () => this.onClearRecipe(), onPreview: () => this.onPreview(), onGet: () => this.onGet(), onGetFolder: () => this.onGetFolder(), onSave: () => this.onSaveRecipe(), onDownload: () => this.onDownloadRecipe(), onUse: (name) => this.onUseStored(name), onDelete: (name) => this.onDeleteStored(name), canPickFolder: this.canPickFolder });
     this.result = h('section', { class: 'set-pane set-result', 'aria-label': S.setResult, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setResult));
     this.runText = h('span', { class: 'set-run-text' });
     this.bar = h('progress', { class: 'set-bar', hidden: true, 'aria-label': S.setRunRunning(0, 0) });
@@ -235,11 +239,15 @@ export class SetShell {
       return;
     }
     const writes = d.writes !== undefined;
-    const body = writes ? h('p', { class: 'row-diff-rename' }, S.rowWrites(d.writes, d.target.name)) : d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
+    const body = writes ? h('p', { class: 'row-diff-rename' }, S.rowWrites(d.writes, d.target.name, d.sheet, d.kind)) : d.rename ? h('p', { class: 'row-diff-rename' }, S.rowDiffRename(d.rename.from, d.rename.to)) : diffTable(d.target.name, d.before, d.after);
     this.detail.append(
       h('div', { class: 'row-diff', role: 'region', 'aria-label': writes ? S.rowWritesLabel(d.target.name) : S.rowDiffLabel(d.target.name), tabindex: '0' },
         h('p', { class: 'row-diff-title' }, S.rowDiffTitle(d.op, d.target.name, d.file)),
         body));
+  }
+
+  setRecipeKept(text) {
+    this.recipePanel.setKept(text);
   }
 
   setRecipeView(view) {

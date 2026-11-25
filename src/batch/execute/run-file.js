@@ -15,7 +15,7 @@ function deadlineFor(limits) {
 
 function transformReply(result, dryRun) {
   const outputs = result.outputs.map((o) => ({ unit: o.unit, name: o.name, bytes: dryRun ? null : o.bytes, sha256: o.sha256 }));
-  return { fileId: result.fileId, bytes: dryRun ? null : result.bytes, sha256: dryRun ? null : result.sha256, changes: [], warnings: result.warnings, rows: result.rows, outputs, sheetParts: dryRun ? [] : result.sheetParts };
+  return { fileId: result.fileId, bytes: dryRun ? null : result.bytes, sha256: dryRun ? null : result.sha256, changes: [], warnings: result.warnings, rows: result.rows, outputs, sheetParts: dryRun ? result.sheetParts.map((part) => ({ ...part, xml: null })) : result.sheetParts };
 }
 
 export async function runFilePlan(bytes, meta, filePlan, options) {

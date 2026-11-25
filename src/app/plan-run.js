@@ -2,6 +2,8 @@ import { applyMessage } from '../batch/protocol.js';
 import { resolvePlan, alignSourceFor } from '../batch/resolve/resolve.js';
 import { failedResult } from '../batch/execute/index.js';
 import { reportRows } from './outputs.js';
+import { combineOutputs, labelCombined } from '../batch/execute/combine.js';
+import { zipClock } from '../batch/execute/collect.js';
 import { indexesOf } from './set-indexes.js';
 import { sha256Text } from '../batch/index/hash.js';
 
@@ -11,7 +13,7 @@ export function previewSupport(recipe) {
   if (WRITE_RECIPES.includes(recipe.recipe)) return { ok: true };
   if (recipe.recipe !== 'transform') return { ok: false, why: 'kind' };
   if (recipe.compute === 'excel') return { ok: false, why: 'compute' };
-  if (recipe.output && recipe.output.mode === 'newFile') return { ok: true };
+  if (recipe.output && ['newFile', 'newSheet', 'combined'].includes(recipe.output.mode)) return { ok: true };
   return { ok: false, why: 'output', mode: recipe.output ? recipe.output.mode : '' };
 }
 const VERDICTS = ['changed', 'unchanged', 'skipped', 'refused', 'failed', 'cancelled', 'not-released'];
@@ -35,6 +37,7 @@ const diverged = (plan, previewHashes, hashes, perFile) =>
     });
 
 const outputsDigest = (outputs) => sha256Text(outputs.map((o) => `${o.name}\t${o.sha256}`).join('\n'));
+const partsDigest = (parts) => sha256Text(parts.map((p) => `${p.name}\t${p.digest}`).join('\n'));
 
 const stoppedResult = (out) => (out && out.stopped && out.files.length ? { cancelled: true, written: out.files.length, into: out.name } : { cancelled: true });
 
@@ -93,8 +96,9 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
       else if (reply.status === 'failed') result = fail('pool.failed');
       if (result) {
         const outputs = Array.isArray(result.outputs) ? result.outputs : [];
-        const sha256 = outputs.length ? await outputsDigest(outputs) : result.sha256;
-        perFile.set(filePlan.fileId, { rows: result.rows, changes: result.changes, warnings: result.warnings, sha256, bytes: mode === 'run' ? result.bytes : null, outputs: mode === 'run' ? outputs : outputs.map(({ bytes, ...rest }) => rest) });
+        const parts = Array.isArray(result.sheetParts) ? result.sheetParts : [];
+        const sha256 = outputs.length ? await outputsDigest(outputs) : parts.length ? await partsDigest(parts) : result.sha256;
+        perFile.set(filePlan.fileId, { rows: result.rows, changes: result.changes, warnings: result.warnings, sha256, bytes: mode === 'run' ? result.bytes : null, outputs: mode === 'run' ? outputs : outputs.map(({ bytes, ...rest }) => rest), sheetParts: parts });
         if (mode === 'run') {
           const failed = result.rows.find((r) => r.verdict === 'failed');
           if (failed) session.markFailed(filePlan.fileId, failed.reason_code);
@@ -113,12 +117,26 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
     const split = mode === 'run' ? diverged(plan, preview.hashes, hashes, perFile) : [];
     for (const id of split) {
       const held = perFile.get(id);
-      perFile.set(id, { ...held, bytes: null, sha256: null, outputs: [], rows: held.rows.map((r) => ({ ...r, verdict: 'not-released', reason_code: 'verify.planDrift', verified: false, output: '' })) });
+      perFile.set(id, { ...held, bytes: null, sha256: null, outputs: [], sheetParts: [], rows: held.rows.map((r) => ({ ...r, verdict: 'not-released', reason_code: 'verify.planDrift', verified: false, output: '' })) });
       session.markFailed(id, 'verify.planDrift');
     }
     if (split.length) hashes = new Map([...hashes].filter(([id]) => !split.includes(id)));
+    let combined = null;
+    if (recipe.recipe === 'transform' && recipe.output.mode === 'combined') {
+      const ids = plan.files.map((f) => f.fileId).filter((id) => perFile.has(id) && perFile.get(id).sheetParts.length);
+      const inputs = ids.map((id) => ({ rows: perFile.get(id).rows, sheetParts: perFile.get(id).sheetParts }));
+      let settled;
+      if (mode === 'run') {
+        const made = await combineOutputs(inputs, { now: zipClock(frozenNow) });
+        settled = made.results;
+        if (made.bytes) combined = { name: made.name, bytes: made.bytes, sha256: made.sha256, sheetNames: made.sheetNames };
+      } else {
+        settled = labelCombined(inputs);
+      }
+      ids.forEach((id, i) => perFile.set(id, { ...perFile.get(id), rows: settled[i].rows, sheetParts: [] }));
+    }
     const rows = reportRows(plan, indexes, new Map([...perFile].map(([id, v]) => [id, { rows: v.rows }])), runId);
-    const result = { ok: true, mode, plan, now: frozenNow, runId, indexes, perFile, hashes, rows, counts: countRows(rows), signedCount: signedFiles(perFile).length, defect: split.length > 0, diverged: split };
+    const result = { ok: true, mode, plan, now: frozenNow, runId, indexes, perFile, hashes, rows, counts: countRows(rows), signedCount: signedFiles(perFile).length, defect: split.length > 0, diverged: split, combined };
 
     if (mode === 'preview') {
       session.endPreview();

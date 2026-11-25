@@ -119,9 +119,7 @@ test('fable transform: Get into a folder writes each unit workbook beside its so
 });
 
 for (const [name, recipe, words] of [
-  ['writes a new sheet in a copy', transform({ mode: 'newSheet' }), 'a new sheet in a copy cannot be previewed here yet. Only a new file for each unit can.'],
-  ['writes one combined workbook', transform({ mode: 'combined' }), 'one combined workbook cannot be previewed here yet. Only a new file for each unit can.'],
-  ['writes the result in place', transform({ mode: 'inPlace', range: 'A1' }), 'the result in place cannot be previewed here yet. Only a new file for each unit can.'],
+  ['writes the result in place', transform({ mode: 'inPlace', range: 'A1' }), 'the result in place cannot be previewed here yet. Only a new file for each unit, a new sheet in a copy, or one combined workbook can.'],
   ['lets Excel compute it', transform({ mode: 'newFile' }, { compute: 'excel' }), 'A recipe that Excel computes on open cannot be previewed here yet.']
 ]) {
   test(`fable transform: a recipe that ${name} says it cannot be previewed yet and offers no Preview`, async ({ page }) => {

@@ -465,7 +465,20 @@ export function runAll() {
     for (const x of oneExecuteEntryFindings(rel(f), read(f))) add('T-LINT-21', f, x.line, x.msg);
   }
 
+  for (const f of walk(root)) {
+    if (!/\.(js|mjs|json|md|css|html|yml|yaml|svg|webmanifest)$/.test(f) || rel(f) === 'package-lock.json') continue;
+    for (const x of conflictMarkerFindings(read(f))) add('T-LINT-22', f, x.line, x.msg);
+  }
+
   return findings;
+}
+
+export function conflictMarkerFindings(text) {
+  const out = [];
+  text.split('\n').forEach((line, n) => {
+    if (/^<{7} \S/.test(line) || /^>{7} \S/.test(line)) out.push({ line: n + 1, msg: 'merge conflict marker' });
+  });
+  return out;
 }
 
 export function printFindings(findings) {

@@ -66,6 +66,14 @@ function resultProblem(fileId, r) {
       if (o.bytes !== null && (!(o.bytes instanceof Uint8Array) || o.bytes.byteOffset !== 0 || o.bytes.byteLength !== o.bytes.buffer.byteLength)) return 'each output bytes must be null or a Uint8Array that owns its whole buffer';
     }
   }
+  if (r.sheetParts !== undefined) {
+    if (!Array.isArray(r.sheetParts)) return 'result.sheetParts must be an array';
+    for (const part of r.sheetParts) {
+      if (!isObject(part) || !isText(part.name)) return 'each sheet part needs a name';
+      if (typeof part.digest !== 'string' || !SHA256_HEX.test(part.digest)) return 'each sheet part digest must be 64 lower case hex characters';
+      if (part.xml !== null && typeof part.xml !== 'string') return 'each sheet part xml must be null or a string';
+    }
+  }
   return null;
 }
 

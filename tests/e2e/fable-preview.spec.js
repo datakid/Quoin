@@ -12,7 +12,7 @@ const moduleReplace = { recipe: 'inject', v: 1, inject: { target: 'module', op: 
 const recipeInput = (page) => page.locator('input[aria-label="Recipe file"]');
 const matrix = (page) => page.getByRole('grid', { name: 'Run results' });
 const previewButton = (page) => page.getByRole('button', { name: 'Preview', exact: true });
-const loadButton = (page) => page.getByRole('button', { name: 'Load recipe' });
+const loadButton = (page) => page.getByRole('button', { name: 'Load recipe', exact: true });
 const panel = (page) => page.locator('.recipe-panel');
 
 const give = (page, json, name = 'my.quoin-recipe.json') => recipeInput(page).setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(typeof json === 'string' ? json : JSON.stringify(json)) });
@@ -104,7 +104,7 @@ test('fable preview: a recipe the set cannot use shows the first problem in word
   await twoBooks(page);
   await give(page, { ...replaceCode, output: { mode: 'newFile', name: '{nope}' } });
   await previewButton(page).click();
-  await expect(panel(page).locator('.recipe-error')).toHaveText('Unknown token {nope}.');
+  await expect(panel(page).locator('.recipe-error')).toHaveText('Unknown token {nope}. The tokens are {file.name}, {file.folder}, {unit.name}, {unit.index}.');
   await expect(matrix(page)).toHaveCount(0);
   expect(await page.evaluate(() => window.__quoin.set.state)).toBe('ready');
 });

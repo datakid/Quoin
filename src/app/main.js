@@ -22,13 +22,20 @@ import { startPlanRun, previewSupport } from './plan-run.js';
 import { rowDiff } from './row-diff.js';
 import { buildPlanOutput } from './outputs.js';
 import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
-import { parseRecipe } from '../batch/recipe/recipe.js';
+import { loadRecipeFile as readRecipeFile, saveRecipeFile } from './recipe-files.js';
+import { createRecipeStore } from './recipe-store.js';
 import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
 
-const MAX_RECIPE_BYTES = 256 * 1024;
-
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
+
+function browserStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 function loadTheme() {
   try {
@@ -167,6 +174,7 @@ export class App {
     this.shell = null;
     this.fromSet = null;
     this.recipeHeld = null;
+    this.store = createRecipeStore(browserStorage());
     this.preview = null;
     this.build();
     this.bindGlobal();
@@ -235,6 +243,10 @@ export class App {
       onOpen: (id) => this.openFromSet(id),
       onLoadRecipe: (file) => this.loadRecipeFile(file),
       onClearRecipe: () => this.clearRecipe(),
+      onSaveRecipe: () => this.saveRecipeHere(),
+      onDownloadRecipe: () => this.downloadRecipe(),
+      onUseStored: (name) => this.useStoredRecipe(name),
+      onDeleteStored: (name) => this.deleteStoredRecipe(name),
       onPreview: () => this.previewRecipe(),
       onGet: () => this.getRecipe({ folder: false }),
       onGetFolder: () => this.getRecipe({ folder: true }),
@@ -412,14 +424,24 @@ export class App {
     if (this.shell) this.shell.setRecipeView(view);
   }
 
+  showKept(text) {
+    if (this.shell) this.shell.setRecipeKept(text);
+  }
+
   recipeView(extra = {}) {
     const held = this.recipeHeld;
-    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, ...extra };
+    const stored = this.storedRecipes();
+    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, ...stored, ...extra };
     const support = previewSupport(held.recipe);
     const previewable = support.ok;
     const canGet = previewable && !!this.preview && this.preview.counts.changed > 0;
     const why = { kind: S.recipeNotPreviewable, compute: S.recipeComputeNotYet, output: S.recipeOutputNotYet(support.mode) }[support.why];
-    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...extra };
+    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...stored, ...extra };
+  }
+
+  storedRecipes() {
+    const { recipes, skipped } = this.store.listRecipes();
+    return { stored: recipes.map(({ name, kind }) => ({ name, kind })), storedSkipped: skipped };
   }
 
   forgetPreview() {
@@ -431,17 +453,54 @@ export class App {
     this.recipeHeld = null;
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
-    if (file.size > MAX_RECIPE_BYTES) return this.showRecipe(this.recipeView({ error: S.recipeTooLarge }));
-    let text;
-    try {
-      text = await file.text();
-    } catch {
-      return this.showRecipe(this.recipeView({ error: S.recipeUnreadable }));
-    }
-    const parsed = parseRecipe(text);
-    if (!parsed.ok) return this.showRecipe(this.recipeView({ error: errorMessage(parsed.code, { detail: parsed.detail }) }));
-    this.recipeHeld = { name: file.name, recipe: parsed.recipe, warnings: parsed.warnings };
+    const out = await readRecipeFile(file);
+    if (!out.ok) return this.showRecipe(this.recipeView({ error: this.recipeFileProblem(out) }));
+    this.recipeHeld = { name: file.name, recipe: out.recipe, warnings: out.warnings };
     this.showRecipe(this.recipeView());
+  }
+
+  recipeFileProblem(out) {
+    if (out.code === 'recipe.tooLarge') return S.recipeTooLarge;
+    if (out.code === 'recipe.invalid' && out.detail === 'the file could not be read') return S.recipeUnreadable;
+    return errorMessage(out.code, { detail: out.detail });
+  }
+
+  keptRecipe() {
+    const { recipe, name } = this.recipeHeld;
+    return typeof recipe.name === 'string' && recipe.name.trim() ? recipe : { ...recipe, name: name.replace(/\.quoin-recipe\.json$/i, '').replace(/\.json$/i, '') };
+  }
+
+  saveRecipeHere() {
+    if (!this.recipeHeld) return;
+    const recipe = this.keptRecipe();
+    const out = this.store.saveRecipe(recipe);
+    if (!out.ok) return this.showKept(errorMessage(out.code));
+    this.showRecipe(this.recipeView());
+    this.showKept(S.recipeSaved(recipe.name));
+  }
+
+  downloadRecipe() {
+    if (!this.recipeHeld) return;
+    const out = saveRecipeFile(this.keptRecipe());
+    if (!out.ok) return this.showKept(errorMessage(out.code, { detail: out.detail }));
+    saveBytes(out.bytes, out.name, 'application/json');
+    this.showKept(S.recipeDownloaded(out.name));
+  }
+
+  useStoredRecipe(name) {
+    const found = this.store.listRecipes().recipes.find((r) => r.name === name);
+    if (!found) return this.showRecipe(this.recipeView());
+    this.recipeHeld = { name: found.name, recipe: found.recipe, warnings: [] };
+    this.preview = null;
+    if (this.shell) this.shell.clearPreview();
+    this.showRecipe(this.recipeView());
+  }
+
+  deleteStoredRecipe(name) {
+    const out = this.store.deleteRecipe(name);
+    if (!out.ok) return this.showKept(errorMessage(out.code));
+    this.showRecipe(this.recipeView());
+    this.showKept(S.recipeDeleted(name));
   }
 
   clearRecipe() {

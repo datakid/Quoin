@@ -439,3 +439,49 @@
     grid-template-columns: minmax(200px, 260px) minmax(0, 0.7fr) minmax(0, 2fr);
   }
 }
+
+.recipe-keep {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+
+.recipe-kept {
+  margin: var(--s-2) 0 0;
+}
+
+.recipe-stored {
+  margin-top: var(--s-4);
+  border-top: 1px solid var(--line);
+  padding-top: var(--s-2);
+}
+
+.recipe-stored-title {
+  margin: 0 0 var(--s-1);
+  font-weight: 600;
+}
+
+.recipe-stored-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recipe-stored-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) 0;
+}
+
+.recipe-stored-name {
+  flex: 1 1 10em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recipe-stored-note {
+  margin: var(--s-1) 0 0;
+}

@@ -225,7 +225,7 @@ Quoin does not use toasts. Status lives in one place: the status bar at the bott
 | PR-2 | No third-party requests of any kind: fonts, scripts, images, analytics, and error reporting are all same-origin. | T-PRIV-1 |
 | PR-3 | Nothing is persisted by default: no `localStorage`, `sessionStorage`, `IndexedDB`, cookies, or Cache API entries containing user data. The only persisted item is the theme preference (`localStorage["quoin.theme"]` = `"light" \| "dark" \| "system"`). | T-PRIV-3 |
 | PR-4 | The service worker caches only the app's own static assets, which are listed explicitly in a build manifest. | T-PRIV-4 |
-| PR-5 | Closing or reloading the tab discards everything. The UI says this once, in the footer of the empty state: `Files stay in this tab. Nothing is uploaded or stored.` | T-E2E-1 |
+| PR-5 | Closing or reloading the tab discards everything. The UI says this once, in the footer of the empty state: `Files stay in this tab. Nothing is uploaded or stored, except your theme and the recipes you choose to save.` | T-E2E-1 |
 | PR-6 | Quoin never runs VBA, and it never evaluates M functions that touch the network or the filesystem without an explicit user-chosen file binding (§8.8). | T-SEC-6, T-M-CONN-* |
 
 ### 3.2 Content Security Policy
@@ -887,7 +887,8 @@ Empty state (centred, max-width 560 px):
 │   │                                                       │   │
 │   ╰───────────────────────────────────────────────────────╯   │
 │                                                               │
-│     Files stay in this tab. Nothing is uploaded or stored.    │
+│     Files stay in this tab. Nothing is uploaded or stored,    │
+│     except your theme and the recipes you choose to save.     │
 └───────────────────────────────────────────────────────────────┘
 ```
 

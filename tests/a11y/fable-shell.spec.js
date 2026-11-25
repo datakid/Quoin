@@ -147,3 +147,19 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
+
+for (const theme of ['light', 'dark']) {
+  test(`T-A11Y-FABLE: no axe violations with a recipe loaded and a saved recipe listed, ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await openApp(page);
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await dropTree(page, [{ name: 'books', children: [{ name: 'pq_simple.xlsx', data: readFileSync(ext('pq_simple.xlsx')).toString('base64') }] }]);
+    await waitForSet(page);
+    const recipe = { recipe: 'inject', v: 1, name: 'Fix sales', inject: { target: 'query', op: 'add', match: 'name', name: 'Added', source: 'inline', text: 'let\n    Source = 2\nin\n    Source' } };
+    await page.locator('input[aria-label="Recipe file"]').setInputFiles({ name: 'my.quoin-recipe.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(recipe)) });
+    await page.getByRole('button', { name: 'Save in this browser', exact: true }).click();
+    await page.locator('.recipe-kept').waitFor();
+    await page.locator('.recipe-stored').waitFor();
+    await audit(page, `${theme} saved recipe`);
+  });
+}

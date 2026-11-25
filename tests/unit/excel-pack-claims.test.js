@@ -7,7 +7,11 @@ import { readZip } from '../../src/core/zip-read.js';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 import { executeFile } from '../../src/batch/execute/index.js';
-import { makePack } from '../../scripts/make-excel-pack.mjs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { makePack, WRITER_ADDED } from '../../scripts/make-excel-pack.mjs';
 
 let loaded;
 async function pack() {
@@ -151,4 +155,41 @@ test('excel pack claims: the locked-project case has a recipe that Quoin refuses
   const res = await executeFile(wb, plan, { now: '2026-11-23T12:00:00.000Z', recipe: parsed.recipe });
   assert.ok(res.bytes === null);
   assert.equal(res.rows[0].reason_code, 'vba.locked');
+});
+
+async function unpack(bytes) {
+  const zip = new Package(readZip(bytes));
+  const files = new Map();
+  for (const name of zip.names()) files.set(name, await zip.bytes(name));
+  return files;
+}
+
+test('excel pack claims: the Writer-added cases can be built alone, numbered from one, with everything they need', async () => {
+  const full = await pack();
+  for (const slug of WRITER_ADDED) assert.ok(folderOf(full.files, slug), slug);
+  const alone = await makePack({ only: WRITER_ADDED });
+  assert.equal(alone.cases, WRITER_ADDED.length);
+  const files = await unpack(alone.bytes);
+  const folders = [...new Set([...files.keys()].filter((n) => n.startsWith('cases/')).map((n) => n.split('/')[1]))].sort();
+  assert.deepEqual(folders.map((f) => f.slice(3)), [...WRITER_ADDED].sort((a, b) => WRITER_ADDED.indexOf(a) - WRITER_ADDED.indexOf(b)).map((s) => s));
+  assert.deepEqual(folders.map((f) => f.slice(0, 2)), WRITER_ADDED.map((_, i) => String(i + 1).padStart(2, '0')));
+  const text = new TextDecoder().decode(files.get('CHECKLIST.md'));
+  const named = [...text.matchAll(/^(?:Input|Open): (.+)$/gm)].flatMap((m) => m[1].split(', ')).filter((p) => p.startsWith('cases/'));
+  assert.ok(named.length >= 10);
+  for (const path of named) assert.ok(files.has(path), path);
+  assert.equal((text.match(/^## \d\d /gm) || []).length, WRITER_ADDED.length);
+  assert.ok(!/\[[xX]\]/.test(text));
+});
+
+test('excel pack claims: an unknown case name stops the build', async () => {
+  await assert.rejects(() => makePack({ only: ['query-add', 'no-such-case'] }), /no such case: no-such-case/);
+});
+
+test('excel pack claims: the command line builds the Writer-added pack with --only=writer-added', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'quoin-pack-'));
+  const out = join(dir, 'pack3.zip');
+  const printed = execFileSync(process.execPath, [fileURLToPath(new URL('../../scripts/make-excel-pack.mjs', import.meta.url)), out, '--only=writer-added'], { encoding: 'utf8' });
+  assert.match(printed, new RegExp(`${WRITER_ADDED.length} cases`));
+  const some = execFileSync(process.execPath, [fileURLToPath(new URL('../../scripts/make-excel-pack.mjs', import.meta.url)), out, '--only=query-add,query-remove'], { encoding: 'utf8' });
+  assert.match(some, /2 cases/);
 });

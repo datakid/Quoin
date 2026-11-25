@@ -8,7 +8,7 @@ Quoin writes Excel files itself, and its own reader and checks cannot say whethe
 node scripts/make-excel-pack.mjs [path/to/quoin-excel-pack.zip]
 ```
 
-With no path it writes `quoin-excel-pack.zip` in the current folder (ignored by git). The clock is frozen, so building twice gives the same zip, byte for byte. The script runs every case through the path the app will use (`parseRecipe`, `resolvePlan`, `executeFile`, `combineOutputs`, `applyChangeSet`) and stops with an error if a case does not give a verified change, so a pack that builds is a pack whose files Quoin itself verified.
+With no path it writes `quoin-excel-pack.zip` in the current folder (ignored by git). `--only=a,b` builds just the named cases (case names are the folder names without the number); `--only=writer-added` builds the seven cases Writer added, which are the ones nobody has opened in Excel yet. That smaller pack is numbered from 01 and has its own checklist. The clock is frozen, so building twice gives the same zip, byte for byte. The script runs every case through the path the app will use (`parseRecipe`, `resolvePlan`, `executeFile`, `combineOutputs`, `applyChangeSet`) and stops with an error if a case does not give a verified change, so a pack that builds is a pack whose files Quoin itself verified.
 
 ## What is in it
 

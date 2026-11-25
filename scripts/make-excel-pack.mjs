@@ -351,9 +351,17 @@ function checklist(sums) {
   return lines.join('\n');
 }
 
-export async function makePack() {
+export const WRITER_ADDED = ['query-replace-refresh', 'query-add-awkward-names', 'module-excel-made', 'signed-add-remove', 'module-locked-project', 'new-sheet-macro-workbook', 'new-sheet-signed-workbook'];
+
+export async function makePack({ only = null } = {}) {
   cases.length = 0;
   await build();
+  if (only) {
+    const unknown = only.filter((slug) => !cases.some((c) => c.slug === slug));
+    if (unknown.length) throw new Error(`no such case: ${unknown.join(', ')}`);
+    const kept = cases.filter((c) => only.includes(c.slug));
+    cases.splice(0, cases.length, ...kept);
+  }
   const files = [];
   const sums = [];
   const enc = new TextEncoder();
@@ -372,8 +380,11 @@ export async function makePack() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const out = resolve(process.argv[2] || 'quoin-excel-pack.zip');
-  const pack = await makePack();
+  const args = process.argv.slice(2);
+  const flag = args.find((a) => a.startsWith('--only='));
+  const only = flag ? (flag.slice(7) === 'writer-added' ? WRITER_ADDED : flag.slice(7).split(',')) : null;
+  const out = resolve(args.find((a) => !a.startsWith('--')) || 'quoin-excel-pack.zip');
+  const pack = await makePack({ only });
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, pack.bytes);
   process.stdout.write(`${out}: ${pack.cases} cases, ${pack.files} files, ${pack.bytes.length} bytes\n`);

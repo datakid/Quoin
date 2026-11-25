@@ -104,7 +104,7 @@ test('fable preview: a recipe the set cannot use shows the first problem in word
   await twoBooks(page);
   await give(page, { ...replaceCode, output: { mode: 'newFile', name: '{nope}' } });
   await previewButton(page).click();
-  await expect(panel(page).locator('.recipe-error')).toHaveText('Unknown token {nope}.');
+  await expect(panel(page).locator('.recipe-error')).toHaveText('Unknown token {nope}. The tokens are {file.name}, {file.folder}, {unit.name}, {unit.index}.');
   await expect(matrix(page)).toHaveCount(0);
   expect(await page.evaluate(() => window.__quoin.set.state)).toBe('ready');
 });

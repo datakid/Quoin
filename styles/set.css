@@ -485,3 +485,54 @@
 .recipe-stored-note {
   margin: var(--s-1) 0 0;
 }
+
+.recipe-tokens {
+  margin-top: var(--s-3);
+}
+
+.recipe-tokens summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.recipe-token-list {
+  list-style: none;
+  margin: var(--s-2) 0 0;
+  padding: 0;
+}
+
+.recipe-token {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s-2);
+  padding: var(--s-1) 0;
+}
+
+.recipe-token-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--s-2);
+}
+
+.recipe-token-name {
+  font-family: var(--font-code);
+}
+
+.recipe-token-what {
+  grid-column: 1;
+}
+
+.recipe-token-copy {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.recipe-token-used {
+  font-weight: 600;
+}
+
+.recipe-token-status {
+  margin: var(--s-1) 0 0;
+}

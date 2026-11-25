@@ -1,11 +1,13 @@
 import { h, clear } from '../dom.js';
 import { S } from '../strings.js';
 
-const warningText = (w) => (w.code === 'recipe.ignored' ? S.recipeIgnoredBlock(w.path) : S.recipeWarning(w.path));
+const warningText = (w) => (w.code === 'recipe.ignored' ? S.recipeIgnoredBlock(w.path) : w.code === 'recipe.token' ? S.recipeTokenWarning(w.path) : S.recipeWarning(w.path));
+
+const canCopy = () => typeof navigator !== 'undefined' && !!navigator.clipboard && typeof navigator.clipboard.writeText === 'function';
 
 export class RecipePanel {
   constructor(host, { onLoad, onClear, onPreview, onGet, onGetFolder, onSave, onDownload, onUse, onDelete, canPickFolder = false }) {
-    this.view = { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, stored: [], storedSkipped: 0 };
+    this.view = { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, stored: [], storedSkipped: 0, tokensUsed: [] };
     this.onUse = onUse;
     this.onDelete = onDelete;
     this.canPickFolder = canPickFolder;
@@ -29,6 +31,9 @@ export class RecipePanel {
     this.storedList = h('ul', { class: 'recipe-stored-list' });
     this.storedNote = h('p', { class: 'recipe-stored-note item-meta', hidden: true });
     this.stored = h('section', { class: 'recipe-stored', 'aria-label': S.recipesStored, hidden: true }, this.storedHead, this.storedList, this.storedNote);
+    this.tokenList = h('ul', { class: 'recipe-token-list' });
+    this.tokenStatus = h('p', { class: 'recipe-token-status item-meta', role: 'status' });
+    this.tokens = h('details', { class: 'recipe-tokens', hidden: true }, h('summary', null, S.recipeTokensTitle), h('p', { class: 'recipe-token-intro item-meta', text: S.recipeTokensIntro }), this.tokenList, this.tokenStatus);
     this.line = h('p', { class: 'recipe-line' }, S.recipeNone);
     this.kept = h('p', { class: 'recipe-kept item-meta', role: 'status', hidden: true });
     this.error = h('p', { class: 'recipe-error', role: 'alert' });
@@ -36,7 +41,7 @@ export class RecipePanel {
     this.notes = h('div', { class: 'recipe-notes item-meta', role: 'status' });
     this.root = h('div', { class: 'recipe-panel' },
       h('div', { class: 'recipe-actions' }, this.loadBtn, this.clearBtn, this.previewBtn, this.getBtn, this.folderBtn, this.input),
-      this.line, this.keep, this.kept, this.error, this.warnings, this.notes, this.stored);
+      this.line, this.keep, this.kept, this.error, this.warnings, this.notes, this.tokens, this.stored);
     host.append(this.root);
   }
 
@@ -62,8 +67,30 @@ export class RecipePanel {
     this.keep.hidden = !loaded;
     this.saveBtn.hidden = !loaded;
     this.downloadBtn.hidden = !loaded;
+    this.tokens.hidden = !loaded;
+    this.renderTokens(this.view.tokensUsed);
     this.renderStored(this.view.stored, this.view.storedSkipped);
     this.sync();
+  }
+
+  renderTokens(used) {
+    clear(this.tokenList);
+    this.tokenStatus.textContent = '';
+    for (const token of Object.keys(S.recipeTokenWhat)) {
+      const head = h('span', { class: 'recipe-token-head' }, h('code', { class: 'recipe-token-name', text: token }));
+      if (used.includes(token)) head.append(h('span', { class: 'recipe-token-used', text: S.recipeTokenInUse }));
+      const item = h('li', { class: 'recipe-token' }, head, h('span', { class: 'recipe-token-what', text: S.recipeTokenWhat[token] }));
+      if (canCopy()) item.append(h('button', { class: 'btn btn-quiet recipe-token-copy', type: 'button', 'aria-label': S.recipeTokenCopy(token), onclick: () => this.copyToken(token) }, S.recipeCopy));
+      this.tokenList.append(item);
+    }
+  }
+
+  copyToken(token) {
+    navigator.clipboard.writeText(token).then(() => {
+      this.tokenStatus.textContent = S.recipeTokenCopied(token);
+    }, () => {
+      this.tokenStatus.textContent = '';
+    });
   }
 
   renderStored(stored, skipped) {

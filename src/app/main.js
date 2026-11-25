@@ -16,7 +16,7 @@ import { QuoinError } from '../core/errors.js';
 import { SetSession } from './set-session.js';
 import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
-import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
+import { snapshotDrop, splitRecipe, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
 import { startPlanRun, previewSupport } from './plan-run.js';
 import { rowDiff } from './row-diff.js';
@@ -24,6 +24,8 @@ import { buildPlanOutput } from './outputs.js';
 import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
 import { loadRecipeFile as readRecipeFile, saveRecipeFile } from './recipe-files.js';
 import { createRecipeStore } from './recipe-store.js';
+import { recipeTokens } from '../batch/resolve/tokens.js';
+import { TOKENS } from '../batch/recipe/recipe.js';
 import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
 
@@ -174,12 +176,18 @@ export class App {
     this.shell = null;
     this.fromSet = null;
     this.recipeHeld = null;
+    this.recipeProblem = '';
     this.store = createRecipeStore(browserStorage());
     this.preview = null;
     this.build();
     this.bindGlobal();
-    this.set.subscribe(() => {
+    this.previewAfterIndexing = false;
+    this.set.subscribe((ev) => {
       if (!this.ws && !this.shell && this.set.state !== 'empty') this.showSet();
+      if (this.previewAfterIndexing && ev && ev.type === 'state' && ev.state === 'ready') {
+        this.previewAfterIndexing = false;
+        queueMicrotask(() => this.previewIfPossible());
+      }
     });
   }
 
@@ -328,8 +336,11 @@ export class App {
     if (!dt) return;
     const first = dt.items && dt.items[0];
     const handle = first && typeof first.getAsFileSystemHandle === 'function' ? first.getAsFileSystemHandle().catch(() => null) : null;
-    const snapshot = snapshotDrop(dt);
+    const whole = snapshotDrop(dt);
+    const { recipes, rest: snapshot } = splitRecipe(whole);
     const files = snapshot.files;
+    if (recipes.length > 1) return this.refuse(S.dropRecipeMany);
+    if (recipes.length === 1) return this.dropWithRecipe(recipes[0], snapshot);
     if (this.ws) {
       if (hasFolder(snapshot)) this.refuse(S.dropFolder);
       else if (files.length > 1) this.refuse(S.dropOne);
@@ -340,19 +351,38 @@ export class App {
 
   async collectIntoSet(snapshot) {
     const { files, unreadable } = await collectFiles(snapshot);
-    this.addToSet(files, unreadable);
+    return this.addToSet(files, unreadable);
+  }
+
+  async dropWithRecipe(recipe, snapshot) {
+    const empty = snapshot.files.length === 0;
+    if (this.ws) return this.refuse(S.dropRecipeOpen);
+    if (empty && !this.shell) return this.refuse(S.dropRecipeAlone);
+    await this.loadRecipeFile(recipe);
+    if (empty) return;
+    if (!this.recipeHeld) {
+      await this.collectIntoSet(snapshot);
+      return;
+    }
+    this.previewAfterIndexing = true;
+    const result = await this.collectIntoSet(snapshot);
+    if (result && result.added > 0) return;
+    this.previewAfterIndexing = false;
+    if (result) this.previewIfPossible();
   }
 
   addToSet(refs, unreadable = []) {
-    if (!refs.length && !unreadable.length) return;
+    if (!refs.length && !unreadable.length) return null;
+    let result;
     try {
-      this.set.addFiles(refs);
+      result = this.set.addFiles(refs);
     } catch {
       this.status.set({ alertText: S.setBusy });
-      return;
+      return null;
     }
     if (unreadable.length) this.status.set({ alertText: S.unreadableItems(unreadable.length) });
     indexPending(this.set, sharedPool());
+    return result;
   }
 
   variantText(item, version) {
@@ -431,12 +461,14 @@ export class App {
   recipeView(extra = {}) {
     const held = this.recipeHeld;
     const stored = this.storedRecipes();
-    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, ...stored, ...extra };
+    if (!held) return { loaded: null, warnings: [], tokensUsed: [], error: this.recipeProblem, notes: [], canPreview: false, canGet: false, ...stored, ...extra };
     const support = previewSupport(held.recipe);
     const previewable = support.ok;
     const canGet = previewable && !!this.preview && this.preview.counts.changed > 0;
     const why = { kind: S.recipeNotPreviewable, compute: S.recipeComputeNotYet, output: S.recipeOutputNotYet(support.mode) }[support.why];
-    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...stored, ...extra };
+    const tokens = recipeTokens(held.recipe);
+    const tokenWarnings = tokens.unknown.map((t) => ({ code: 'recipe.token', path: t }));
+    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: [...held.warnings, ...tokenWarnings], tokensUsed: tokens.used, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...stored, ...extra };
   }
 
   storedRecipes() {
@@ -451,10 +483,14 @@ export class App {
 
   async loadRecipeFile(file) {
     this.recipeHeld = null;
+    this.recipeProblem = '';
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
     const out = await readRecipeFile(file);
-    if (!out.ok) return this.showRecipe(this.recipeView({ error: this.recipeFileProblem(out) }));
+    if (!out.ok) {
+      this.recipeProblem = this.recipeFileProblem(out);
+      return this.showRecipe(this.recipeView());
+    }
     this.recipeHeld = { name: file.name, recipe: out.recipe, warnings: out.warnings };
     this.showRecipe(this.recipeView());
   }
@@ -491,6 +527,7 @@ export class App {
     const found = this.store.listRecipes().recipes.find((r) => r.name === name);
     if (!found) return this.showRecipe(this.recipeView());
     this.recipeHeld = { name: found.name, recipe: found.recipe, warnings: [] };
+    this.recipeProblem = '';
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
     this.showRecipe(this.recipeView());
@@ -505,6 +542,7 @@ export class App {
 
   clearRecipe() {
     this.recipeHeld = null;
+    this.recipeProblem = '';
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
     this.showRecipe(this.recipeView());
@@ -514,7 +552,9 @@ export class App {
     if (out.code !== 'plan.invalid' || !out.errors.length) return errorMessage(out.code, { count: out.count });
     const first = out.errors[0];
     const text = errorMessage(first.code, { token: first.detail });
-    return out.errors.length > 1 ? `${text} ${S.recipePlanMore(out.errors.length - 1)}` : text;
+    const more = out.errors.length > 1 ? ` ${S.recipePlanMore(out.errors.length - 1)}` : '';
+    const hint = out.errors.every((e) => e.code === 'recipe.token') ? ` ${S.recipeTokensAre(TOKENS.join(', '))}` : '';
+    return `${text}${more}${hint}`;
   }
 
   async getRecipe({ folder }) {
@@ -574,6 +614,10 @@ export class App {
       this.shell.recipePanel.restoreFocus();
       return out;
     });
+  }
+
+  previewIfPossible() {
+    if (this.recipeHeld && previewSupport(this.recipeHeld.recipe).ok) this.previewRecipe();
   }
 
   previewRecipe() {

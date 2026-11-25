@@ -537,5 +537,32 @@ Reported by the person. Part 1 is this repository's pack (13 cases); the report 
 - Still only Excel can say: no repair message, pane display, refresh, Compile, Alt+F8, signature dialog.
 Changed expectations: the look lines of pack cases 11 and 13 (text only; no output file changed).
 
+### F4-02 Recipe plus folder in one action (done, tests pass locally)
+Layer: app, ui, tests
+Files: src/app/intake.js, src/app/main.js, src/ui/strings.js, tests/unit/intake.test.js, tests/e2e/fable-recipe-drop.spec.js, tests/e2e/helpers.js
+Do: `splitRecipe(snapshot)` takes top-level files named `*.quoin-recipe.json` (any case) out of a drop. One recipe with workbooks or a folder: the recipe loads, the files join the set (a set of one when it is a single workbook), and Preview starts when indexing has finished, the same Preview that the button gives. A recipe dropped alone loads when a set is open and is refused in words when none is. Two recipes are refused. A recipe inside a dropped folder is not taken as the recipe. A recipe that cannot be read opens the set and says why, with no Preview. A recipe the app cannot preview yet (in place, compute in Excel) is loaded and explained, with no Preview. A recipe dropped while a single workbook is open is refused ("Go back to the set before dropping a recipe.").
+Test that fails without it: `tests/e2e/fable-recipe-drop.spec.js`, 9 tests, and 4 unit tests for `splitRecipe`. Making the auto-Preview do nothing failed 4 of the 9; starting it on any ready state, not only when indexing ends, failed the test that drops onto a set that is already ready.
+Result: Done locally
+Fails without: yes
+Changed expectations: `dropTree` in `tests/e2e/helpers.js` now gives a top-level file its real bytes in the `files` list (it gave one byte). Browsers give the real file there, and the recipe is read from it.
+Deviations: none.
+Decisions made inside the plan's gaps (log, not yet confirmed):
+- Only the exact suffix `.quoin-recipe.json` counts as a recipe in a drop. A plain `.json` file does not (the Load recipe picker still takes any `.json`).
+- A recipe alone with no set open is refused, not held until files arrive.
+- A load problem from a dropped recipe is kept and shown when the set screen appears, because the panel does not exist yet when the file is read.
+
+### F4-04 Token editing (done, tests pass locally)
+Layer: batch (pure), ui, app, tests
+Files: src/batch/resolve/tokens.js, src/ui/set/recipe-panel.js, src/app/main.js, src/ui/strings.js, styles/set.css, tests/unit/batch-tokens.test.js, tests/e2e/fable-recipe-tokens.spec.js, tests/e2e/fable-visual.spec.js, tests/a11y/fable-shell.spec.js
+Do: the Recipe panel has a Tokens list (a closed `details`, shown when a recipe is loaded) naming `{file.name}`, `{file.folder}`, `{unit.name}` and `{unit.index}` with what each gives, marking in words the ones the loaded recipe uses ("in use in this recipe") and offering Copy where the browser has a clipboard. `recipeTokens(recipe)` finds the known tokens used and the unknown ones in the query text and the output name, using the same rules as the resolver (so ordinary M braces are never flagged). An unknown token is noted when the recipe loads ("Unknown token {date}. Preview will not run this recipe.") and Preview refuses it with the first problem, the count of the rest and the list of valid tokens.
+Test that fails without it: `tests/e2e/fable-recipe-tokens.spec.js`, 7 tests, 4 unit tests, an axe check in both themes with the list open and a token noted, and visual baselines for the panel with the list open and a saved recipe at three sizes. Removing the in-use marks, the load-time notes and the hint each failed tests.
+Result: Done locally
+Fails without: yes
+Changed expectations: `tests/e2e/fable-preview.spec.js`, "a recipe the set cannot use shows the first problem in words": the refusal for an unknown token used to read `Unknown token {nope}.` and now reads `Unknown token {nope}. The tokens are {file.name}, {file.folder}, {unit.name}, {unit.index}.` The first sentence is the same string as before and as Appendix A. The test still checks the whole text, so it is stricter, not looser.
+Deviations: "token editing" has nothing to edit in, because there is no recipe editor (see the gap noted under F4-01). Tokens are offered as a list with Copy, and flagged when a recipe uses a bad one.
+Decisions made inside the plan's gaps (log, not yet confirmed):
+- Copy rather than insert, for the reason above.
+- The note at load time is in addition to the refusal at Preview, so the problem shows before the person presses Preview.
+
 ### Next
-The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. Then F4-02 (a recipe dropped together with a folder), F4-04 (token editing) and the F4 gate. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.
+The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. Then the F4 gate (F4-05), and F5. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.

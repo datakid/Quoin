@@ -529,5 +529,13 @@ Decisions made inside the plan's gaps (log, not yet confirmed):
 - Using a saved recipe goes through the same path as loading a file, so the same warnings, the same previewable check and the same Preview rules apply.
 Gap for the person to know: there is no screen for writing a recipe. A recipe is a JSON file (Appendix A) that someone writes elsewhere or is given; the app loads, keeps and reuses them. A form for building one is not in the plan.
 
+### Independent static check of the Excel pack (2026-11-25, by an agent with no Excel)
+Reported by the person. Part 1 is this repository's pack (13 cases); the report also covers a Part 2 (X01 to X03) that nothing in this repository or its branches produces.
+- All 18 output fingerprints match the checklist. Every output passes package integrity (content types, relationships, well-formed XML, zip CRC) and opens in LibreOffice. Query text, metadata, permission bindings, VBA modules and cell values were read back and match what each case says. The no-bindings variant differs from `output.xlsx` only in the permission-bindings chunk. Nothing static contradicts any line that only Excel can confirm.
+- Three things it noticed that are by design, now said in the checklist so nobody reads them as faults: a Transform output writes dates with its own fixed formats (`yyyy-mm-dd hh:mm:ss`), because its values come from the query result and not from the input sheet's cell formats (the old line, "look the same as in the input", was wrong); a combined sheet holds the computed value of a column that was a formula; a signed project loses its signature part when a module changes.
+- Part 2's own findings (an arithmetic slip in the X03 checklist line: typing 4 beside 1 gives 5, not 6; Alt+F8 does not list event procedures, so X02's list is empty before and after) belong to whoever owns that pack. They are not fixed here.
+- Still only Excel can say: no repair message, pane display, refresh, Compile, Alt+F8, signature dialog.
+Changed expectations: the look lines of pack cases 11 and 13 (text only; no output file changed).
+
 ### Next
 The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. Then F4-02 (a recipe dropped together with a folder), F4-04 (token editing) and the F4 gate. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.

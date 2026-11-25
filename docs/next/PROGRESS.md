@@ -488,3 +488,17 @@
 - There is no Changes split button. The Download button keeps its count; Review changes and Revert all are in the More menu, the palette and the Changes tab.
 - No Sources entry in the More menu yet (WB-19).
 
+### WB-19: the Sources dialog and the up-front check
+- `unboundFor(inventory, names, boundKeys)` in `src/core/wb/sources.js`: the literal file and web sources of the given queries that have no binding, each with only the queries from that list that use it. One more unit test (11 in `wb-sources.test.js`).
+- `src/ui/wb/sources-dialog.js`. The Sources dialog (More menu, Sources, and the palette command) lists every source in the section: its key or, for a computed path, "Chosen when the query runs"; its kind and call; the queries that use it; and whether a file is bound, with Choose file and Clear (each button's accessible name carries the key). A computed path says Quoin asks when the query runs; a source Quoin cannot read in the browser (database, folder, SharePoint) says that a query needing it ends with an error, and neither gets a choose button. A file that cannot be read is reported in the dialog.
+- Run all, run stale, run downstream and run selected now check first (`Workspace.preflightSources`, using the run plan's own list of queries plus everything upstream of it, since evaluating a query evaluates what it reads). If any of those needs an unbound literal file or web source, one dialog lists them and offers Bind them now (opens Sources, then the run goes ahead), Run anyway (the queries that lack a file end with the source error as before and the rest of the run goes on) and Cancel (nothing runs). With every file bound the run asks nothing. A single Run of one query still asks when it reaches the source, as before.
+- Tests: `tests/e2e/sources.spec.js` (8: the list and its states, bind and clear, three files bound then Run all with no dialog, Cancel, Run anyway ending with `1 failed`, Bind them now then the run, computed path and database rows, an empty list and the palette command, an upstream-only file). The Run all budget test in `budgets.spec.js` now clicks Run anyway on the new dialog and starts its timer after that click, and the More menu list in `layout-presets.spec.js` includes Sources.
+
+#### Deviations
+- The plan's `sources.xlsx` fixture does not exist; the tests write their queries into `csv-query.xlsx` and bind small CSV files made in the test.
+- A single Run of one query is not checked up front; it keeps the existing ask at the source.
+- Bindings are still kept only for the session and never written to the workbook.
+
+#### Not done in WB-19 (still)
+- Nothing in the plan's list; a binding for a folder or a database is not offered because the engine has no way to read one.
+

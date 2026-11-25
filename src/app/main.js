@@ -434,6 +434,8 @@ export class App {
     menu(this.moreBtn, [
       { heading: true, label: S.moreLayout },
       ...PRESET_ORDER.map((id) => ({ label: S.presets[id], run: () => ws.applyPreset(id), disabled: !wide })),
+      { heading: true, label: S.sourcesUi.title },
+      { label: S.menuSources, run: () => ws.openSources() },
       { heading: true, label: S.moreChanges },
       { label: count ? S.moreReview(count) : S.moreNone, run: () => ws.openChangesTab(), disabled: !count },
       { label: S.moreRevert, run: () => ws.revertAllConfirmed(), disabled: !count }

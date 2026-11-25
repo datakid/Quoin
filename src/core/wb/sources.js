@@ -86,3 +86,16 @@ export function unbound(inventory, boundKeys) {
   const bound = boundKeys instanceof Set ? boundKeys : new Set(boundKeys);
   return [...inventory.sources.values()].filter((s) => s.bindable && !s.dynamic && !bound.has(s.key));
 }
+
+export function unboundFor(inventory, names, boundKeys) {
+  const want = new Set(names);
+  const bound = boundKeys instanceof Set ? boundKeys : new Set(boundKeys);
+  const out = [];
+  for (const s of inventory.sources.values()) {
+    if (!s.bindable || s.dynamic || bound.has(s.key)) continue;
+    const queries = s.queries.filter((q) => want.has(q));
+    if (queries.length) out.push({ ...s, queries });
+  }
+  return out;
+}
+

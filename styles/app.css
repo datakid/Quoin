@@ -3291,3 +3291,43 @@ dialog.colwork.sheet {
     display: none;
   }
 }
+
+.sources-list {
+  list-style: none;
+  margin: 0 0 var(--s-3);
+  padding: 0;
+  display: grid;
+  gap: var(--s-3);
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.source-row {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+
+.source-key {
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+  overflow-wrap: anywhere;
+}
+
+.source-state {
+  font-weight: 600;
+  color: var(--ochre-ink);
+}
+
+.source-state.is-bound {
+  color: var(--ink);
+}
+
+.source-actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+

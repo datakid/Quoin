@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findSources, sourcesOfSection, bindingKeysOf, unbound } from '../../src/core/wb/sources.js';
+import { findSources, sourcesOfSection, bindingKeysOf, unbound, unboundFor } from '../../src/core/wb/sources.js';
 import { parseExpressionText } from '../../src/core/m/parser.js';
 import { runOnce } from '../../src/core/m/engine.js';
 import { baseOptions } from './helpers.js';
@@ -70,3 +70,20 @@ test('T-WB-19: the key shown is the key the engine asks for', () => {
     assert.equal(kind, r.kind);
   }
 });
+
+test('T-WB-19: only the unbound literal sources of the queries about to run are reported, with just those queries', () => {
+  const inv = sourcesOfSection(section([
+    ['A', 'Csv.Document(File.Contents("a.csv"))'],
+    ['B', 'Table.Combine({Csv.Document(File.Contents("a.csv")), Csv.Document(File.Contents("b.csv"))})'],
+    ['C', 'Csv.Document(File.Contents(base & "c.csv"))'],
+    ['D', 'Sql.Database("srv", "db")'],
+    ['E', 'Json.Document(Web.Contents("https://example.com/x.json"))']
+  ]));
+  const all = unboundFor(inv, ['A', 'B', 'C', 'D', 'E'], []);
+  assert.deepEqual(all.map((s) => [s.key, s.queries]), [['a.csv', ['A', 'B']], ['b.csv', ['B']], ['https://example.com/x.json', ['E']]]);
+  assert.deepEqual(unboundFor(inv, ['B'], []).map((s) => [s.key, s.queries]), [['a.csv', ['B']], ['b.csv', ['B']]]);
+  assert.deepEqual(unboundFor(inv, ['A', 'B', 'E'], new Set(['a.csv'])).map((s) => s.key), ['b.csv', 'https://example.com/x.json']);
+  assert.deepEqual(unboundFor(inv, ['C', 'D'], []), []);
+  assert.deepEqual(unboundFor(inv, [], []), []);
+});
+

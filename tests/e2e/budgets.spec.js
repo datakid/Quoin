@@ -145,8 +145,9 @@ test('T-WB-27: Run all reports its first member and ends with counts', async ({ 
   await openMany(page);
   await fixBroken(page);
   await page.waitForTimeout(500);
-  const t = await page.evaluate(() => performance.now());
   await page.keyboard.press('Control+Alt+Enter');
+  await page.getByRole('dialog', { name: 'Some files are not bound yet' }).getByRole('button', { name: 'Run anyway' }).click();
+  const t = await page.evaluate(() => performance.now());
   await page.waitForSelector('[role=treeitem] [data-status="ok"]');
   const first = (await page.evaluate(() => performance.now())) - t;
   record.push(['runAllFirstResult', Math.round(first)]);

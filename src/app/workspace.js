@@ -21,9 +21,11 @@ import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js
 import { insertViewSteps } from '../core/wb/view-steps.js';
 import { OpHistory } from '../core/wb/op-history.js';
 import { PRESETS, dockSplit } from '../core/wb/layout-presets.js';
+import { planRun } from '../core/wb/run-plan.js';
+import { sourcesDialog, unboundDialog } from '../ui/wb/sources-dialog.js';
 import { DEFAULT_LIMITS } from '../core/limits.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
-import { sourcesOfSection } from '../core/wb/sources.js';
+import { sourcesOfSection, unboundFor } from '../core/wb/sources.js';
 import { supportedNames } from '../core/wb/lib-names.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
@@ -488,6 +490,7 @@ export class Workspace {
       return true;
     }
     const item = this.item && this.item.type === 'query' ? this.item.name : null;
+    if (!(await this.preflightSources(mode, { current: item }))) return true;
     this.setRunning(true);
     const r = await this.orchestrator.run(mode, { current: item });
     this.setRunning(false);
@@ -1024,6 +1027,46 @@ export class Workspace {
     return true;
   }
 
+  async openSources() {
+    const inventory = sourcesOfSection(this.session.currentSectionText());
+    await sourcesDialog({
+      inventory,
+      boundName: (key) => {
+        const b = this.session.bindings.get(key);
+        return b ? b.name : null;
+      },
+      choose: async (key, kind, file) => {
+        try {
+          await this.session.addBinding(key, file);
+          this.renderSources();
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      clearBinding: (key) => {
+        this.session.bindings.delete(key);
+        this.renderSources();
+      }
+    });
+    return true;
+  }
+
+  async preflightSources(mode, options) {
+    const index = this.orchestrator.refresh();
+    const plan = planRun(index, mode, { ...options, statuses: this.orchestrator.statuses() });
+    const planned = plan.kind === 'steps' ? [plan.name] : plan.names || [];
+    if (!planned.length) return true;
+    const names = [...new Set([...planned, ...upstreamOf(index, planned)])];
+    const inventory = sourcesOfSection(this.session.currentSectionText());
+    const missing = unboundFor(inventory, names, new Set(this.session.bindings.keys()));
+    if (!missing.length) return true;
+    const choice = await unboundDialog(missing);
+    if (!choice) return false;
+    if (choice === 'bind') await this.openSources();
+    return true;
+  }
+
   openChangesTab() {
     if (this.main.dataset.dock === 'collapsed') this.toggleDock();
     this.dock.show('changes');
@@ -1190,6 +1233,7 @@ export class Workspace {
     const index = this.orchestrator.refresh();
     const selection = downstream ? [...new Set([...names, ...downstreamOf(index, names)])] : names;
     const item = this.item && this.item.type === 'query' ? this.item.name : null;
+    if (!(await this.preflightSources('run-selected', { selection }))) return;
     this.setRunning(true);
     const r = await this.orchestrator.run('run-selected', { selection });
     this.setRunning(false);

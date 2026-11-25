@@ -29,7 +29,7 @@ test('T-WB-10: the More menu lists the three layouts and the changes actions, an
   await page.waitForSelector('.nav-list [role=treeitem][data-type=query]');
   await more(page).click();
   const names = await page.getByRole('menuitem').allTextContents();
-  expect(names).toEqual(['Write', 'Debug', 'Review', 'No changes to review', 'Revert all changes']);
+  expect(names).toEqual(['Write', 'Debug', 'Review', 'Sources\u2026', 'No changes to review', 'Revert all changes']);
   await expect(page.getByRole('menuitem', { name: 'No changes to review' })).toBeDisabled();
   await expect(page.getByRole('menuitem', { name: 'Revert all changes' })).toBeDisabled();
 });

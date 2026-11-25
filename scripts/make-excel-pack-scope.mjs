@@ -18,8 +18,8 @@ const encode = (text) => new TextEncoder().encode(text);
 const OPENS_INPUT = 'The input opens in Excel with no message. Click Enable Editing if Protected View appears.';
 const OPENS_OUTPUT = 'The output opens with no repair, recovery or "unreadable content" message.';
 const SAVES = 'File > Save As, under a new name, works with no message, and the saved copy opens again.';
-const REFRESHES = 'Data > Refresh All finishes with no error message.';
-const COMPILES = 'In the VBA editor (Alt+F11), Debug > Compile VBAProject finishes with no error.';
+const REFRESHES = '[needs refresh] Data > Refresh All finishes with no error message.';
+const COMPILES = '[needs VBA editor] In the VBA editor (Alt+F11), Debug > Compile VBAProject finishes with no error.';
 
 const X01_M = ['let', '    Source = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content],', '    Older = Table.SelectRows(Source, each [Age] >= 30),', '    Stamped = Table.AddColumn(Older, "Refreshed", each DateTime.LocalNow())', 'in', '    Stamped'].join('\n');
 const X02_M = ['let', '    Raw = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content],', '    Tagged = Table.AddColumn(Raw, "Pack", each "Quoin pack X02")', 'in', '    Tagged'].join('\n');
@@ -63,18 +63,18 @@ export async function buildScopePack() {
   const cases = [];
   cases.push(await excelCase('X01', 'pq_simple.xlsx', { type: 'tables', match: 'pattern', pattern: 'StudentNames' }, X01_M, 'StudentResults', [
     OPENS_INPUT, OPENS_OUTPUT,
-    'Data > Queries & Connections: StudentResults now shows the new query text (it reads the table StudentNames and keeps people aged 30 or more).',
+    '[needs refresh] Data > Queries & Connections: StudentResults now shows the new query text (it reads the table StudentNames and keeps people aged 30 or more).',
     REFRESHES,
-    'On the StudentResults sheet the table lists the same people and ages as the sheet "Result" of expected-by-quoin.xlsx. The column Refreshed shows the time you refreshed, not 2026-11-14.',
-    'Close the output without saving, open it again and wait: the table refreshes by itself on open, and Refreshed changes.',
+    '[needs refresh] On the StudentResults sheet the table lists the same people and ages as the sheet "Result" of expected-by-quoin.xlsx. The column Refreshed shows the time you refreshed, not 2026-11-14.',
+    '[needs refresh] Close the output without saving, open it again and wait: the table refreshes by itself on open, and Refreshed changes.',
     SAVES
   ]));
   cases.push(await excelCase('X02', 'pq_vba_complex.xlsm', { type: 'tables', match: 'pattern', pattern: 'RawInput' }, X02_M, 'FinalTable', [
     OPENS_INPUT, OPENS_OUTPUT, COMPILES,
-    'The macros are still in the workbook: Alt+F8 lists them and the document modules ThisWorkbook and Sheet1 are intact.',
+    '[needs VBA editor] The macros are still in the workbook: Alt+F8 lists them and the document modules ThisWorkbook and Sheet1 are intact.',
     REFRESHES,
-    'On sheet Input the table FinalTable has the columns of RawInput plus a column Pack that holds "Quoin pack X02" in every row, and its contents equal the sheet "Result" of expected-by-quoin.xlsx.',
-    'The query fGetNamedRange and the table RawInput are unchanged and RawInput still refreshes.',
+    '[needs refresh] On sheet Input the table FinalTable has the columns of RawInput plus a column Pack that holds "Quoin pack X02" in every row, and its contents equal the sheet "Result" of expected-by-quoin.xlsx.',
+    '[needs refresh] The query fGetNamedRange and the table RawInput are unchanged and RawInput still refreshes.',
     SAVES
   ]));
   const held = await workbookFromSheets([{ name: 'Sheet1', xml: FORMULA_SHEET }], { now: new Date(SCOPE_PACK_NOW) });
@@ -92,7 +92,7 @@ export async function buildScopePack() {
     files: [{ name: 'X03/input.xlsx', data: held }, { name: 'X03/output.xlsx', data: verified('X03', placed) }, { name: 'X03/what-quoin-reported.json', data: encode(JSON.stringify(summary(placed.result.rows), null, 2)) }],
     hash: await sha256Bytes(placed.result.bytes)
   });
-  const lines = ['# Real-Excel pack, part 2: Excel compute and in place', '', 'Written by Scope. Nothing here has been run in real Excel. Do not mark a case as verified for anyone who has not opened it. This pack adds to `make-excel-pack.mjs`; the cases there stay in that pack.', '', 'Tick a box only when you saw it happen. Write what you saw in the line under the case if something differs.', ''];
+  const lines = ['# Real-Excel pack, part 2: Excel compute and in place', '', 'Written by Scope. Nothing here has been run in real Excel. Do not mark a case as verified for anyone who has not opened it. This pack adds to `make-excel-pack.mjs`; the cases there stay in that pack.', '', 'Tick a box only when you saw it happen. Write what you saw in the line under the case if something differs.', '', 'Which Excel can do what. Opening a file, saving it, formulas and merged cells: any desktop Excel, and Excel for the web can open and look. Lines marked [needs refresh] need desktop Excel with Power Query: certain on Windows, depends on the version on a Mac, and Excel for the web cannot refresh queries. Lines marked [needs VBA editor] need desktop Excel on Windows or Mac. If a button is missing or a line cannot be done on your Excel, leave the box empty and write "cannot do on this Excel" instead of guessing.', ''];
   for (const c of cases) {
     lines.push(`## ${c.id}${c.held ? ' (hold: after X01 and X02)' : ''}`, '', `Files: \`${c.id}/\`. SHA-256 of the output: \`${c.hash}\`.`, '');
     for (const e of c.expects) lines.push(`- [ ] ${e}`);

@@ -62,3 +62,11 @@ See section 4 of `docs/fable/REMAINING-WORK-scope.md`. Consequences for the othe
 - Integrator: D2 (hide `unchanged` rows by default, with count and filter) and D5 are yours; D6 means the user will run both Excel packs now and report back. Strings are needed for `skip.missingColumn` as well as the list in the plan.
 - Writer: D1 is done without touching your execute code beyond one line in `executeFile` (`recipe = withInjectTokens(recipe, meta)`). Inject text now takes `{file.name}`, `{file.folder}`, `{unit.name}` and `{unit.index}`; replace `with` does not.
 - Scope: D3 is built (`skipped / skip.missingColumn`) and the worked-example test asserts 11 changed and 2 skipped.
+
+## User report on the real-Excel pack, part 1 (read this, integrator and Writer)
+
+What the user said, in his words as closely as they can be kept: he opened the 13 files of part 1 in Excel; none showed a repair or recovery message; the queries and the VBA ran without errors; he did not review the content of the outputs and did not tick the boxes of the checklist one by one. He said he was pleased with the result.
+
+How to record it: evidence for "opens without repair" and "runs without error" for the 13 cases, from the user's own session. Not evidence for "the values and formats are right" or for any individual checklist line, because he did not look at them. Do not mark the part 1 checklist as ticked; record what was seen and what was not. The Excel edition and version he used are not known yet; Scope has asked.
+
+Part 2: the user has no Windows machine. Scope tagged each line of `CHECKLIST-SCOPE.md` with what it needs: any desktop Excel (opening, saving, formulas, merged cells), `[needs refresh]` (desktop Excel with Power Query: certain on Windows, version-dependent on a Mac, impossible in Excel for the web) and `[needs VBA editor]`. Lines the user cannot do stay empty and are marked "cannot do on this Excel". The in-place case X03 needs no refresh at all, so it can be checked on any desktop Excel; the plan still says to do it after X01 and X02 have been seen to open cleanly, which the open-only lines of those two cases can show.

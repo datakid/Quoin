@@ -212,6 +212,7 @@ export const S = {
   moreNone: 'No changes to review',
   countRowsLabel: 'Count rows for every step',
   autoRunLabel: 'Run the steps again after structural edits',
+  followCaretLabel: 'Follow the caret through the query steps',
   upstreamLabel: 'Use upstream query results instead of cached cells',
   settingsNote: 'Only the theme is remembered.',
   exportResult: 'Result',

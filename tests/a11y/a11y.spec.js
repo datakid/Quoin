@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { fx, ext, openApp, loadFile, item, editor, runButton } from '../e2e/helpers.js';
+import { fx, ext, openApp, loadFile, item, editor, runButton, openSettings, openExport, openDownload } from '../e2e/helpers.js';
 import { STATES, settle } from '../e2e/states.js';
 
 const require = createRequire(import.meta.url);
@@ -28,14 +28,14 @@ for (const theme of ['light', 'dark']) {
     await audit(page, `${theme} query`);
     await item(page, 'Module1').click();
     await audit(page, `${theme} module`);
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await openSettings(page);
     await audit(page, `${theme} settings`);
     await page.getByRole('button', { name: 'Close' }).click();
-    await page.getByRole('button', { name: 'Export' }).click();
+    await openExport(page);
     await audit(page, `${theme} export menu`);
     await page.keyboard.press('Escape');
     await editor(page).fill(`${await editor(page).inputValue()}\n' x`);
-    await page.locator('.topbar button[aria-haspopup="dialog"]').click();
+    await openDownload(page);
     await audit(page, `${theme} download`);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Shift+?');

@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { ext, fx, loadFile, item, editor, runButton, openSettings } from './helpers.js';
+import { ext, fx, loadFile, item, editor, runButton, openSettings, openExport } from './helpers.js';
 
 export async function pick(page, name) {
   const toggle = page.locator('.rail-toggle');
@@ -102,7 +102,7 @@ export const STATES = [
       await expect(page.locator('.grid-cell:not(.grid-index)').first()).toHaveText('1');
       if (await page.locator('.print-button').isVisible()) await page.locator('.print-button').click();
       else {
-        await page.getByRole('button', { name: 'Export' }).click();
+        await openExport(page);
         await page.getByRole('menuitem', { name: 'Print preview' }).click();
       }
       await expect(page.locator('.print-page').first()).toBeVisible();

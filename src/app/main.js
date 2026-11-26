@@ -172,10 +172,10 @@ export class App {
     this.fileTail = h('span', { class: 'fn-tail' });
     this.fileName = h('span', { class: 'file-name', hidden: true }, this.fileHead, this.fileTail);
     this.fileMeta = h('span', { class: 'file-meta item-meta', hidden: true });
-    this.paletteBtn = h('button', { class: 'palette-trigger', type: 'button', hidden: true, 'aria-keyshortcuts': 'Control+K Meta+K', 'aria-label': S.palette.trigger, onclick: () => this.openPalette() }, glyph('search'), h('span', { class: 'palette-placeholder' }, S.palette.trigger), h('span', { class: 'kbd', 'aria-hidden': 'true' }, S.palette.kbd));
+    this.paletteBtn = h('button', { class: 'palette-trigger', type: 'button', hidden: true, 'aria-keyshortcuts': 'Control+K Meta+K', onclick: () => this.openPalette() }, glyph('search'), h('span', { class: 'palette-placeholder' }, S.palette.trigger), h('span', { class: 'kbd', 'aria-hidden': 'true' }, S.palette.kbd));
     this.printBtn = h('button', { class: 'btn btn-quiet print-button', type: 'button', hidden: true, 'aria-label': S.print, title: S.print, onclick: () => this.openPrint() }, glyph('print'));
     this.changesBtn = h('button', { class: 'btn btn-secondary changes-button', type: 'button', hidden: true, 'aria-disabled': true, title: S.downloadNone, onclick: () => this.ws && this.ws.openChangesTab() }, h('span', { class: 'changes-label' }, S.changesN(0)));
-    this.changesSplit = h('button', { class: 'btn btn-secondary split-chevron changes-split', type: 'button', hidden: true, 'aria-label': S.download, title: S.download, 'aria-haspopup': 'menu', 'aria-expanded': false, 'aria-disabled': true, onclick: () => this.openChangesMenu() }, '\u2304');
+    this.changesSplit = h('button', { class: 'btn btn-secondary split-chevron changes-split', type: 'button', hidden: true, 'aria-label': S.download, title: S.download, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openChangesMenu() }, '\u2304');
     this.runSlot = h('span', { class: 'run-slot', hidden: true });
     this.moreBtn = h('button', { class: 'btn btn-quiet more-button', type: 'button', hidden: true, 'aria-label': S.more, title: S.more, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openMore() }, '\u22ef');
     this.topbar = h('header', { class: 'topbar' },

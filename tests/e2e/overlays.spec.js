@@ -55,9 +55,10 @@ test('T-B-13: Escape closes the download popover and returns focus to the Downlo
   await loadFile(page, ext('pq_vba_complex.xlsm'));
   await item(page, 'FinalTable').click();
   await editor(page).fill(`${await editor(page).inputValue()}\n// x`);
-  await page.locator('.topbar button[aria-haspopup="dialog"]').click();
+  await page.locator('.topbar .changes-split').click();
+  await page.getByRole('menuitem', { name: 'Download' }).click();
   await expect(page.locator('.popover')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.popover')).toHaveCount(0);
-  await expect(page.locator('.topbar button[aria-haspopup="dialog"]')).toBeFocused();
+  await expect(page.locator('.topbar .changes-split')).toBeFocused();
 });

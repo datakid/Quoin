@@ -32,8 +32,6 @@ export function buildRegistry(app) {
   r.register({ id: 'layoutWrite', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('write') : false) });
   r.register({ id: 'layoutDebug', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('debug') : false) });
   r.register({ id: 'layoutReview', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('review') : false) });
-  r.register({ id: 'findReferences', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.runIntel('references') : false) });
-  r.register({ id: 'goToDefinition', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.runIntel('definition') : false) });
   r.register({ id: 'sources', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openSources() : false) });
   r.register({ id: 'reviewChanges', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openChangesTab() : false) });
   r.register({ id: 'problems', keys: [], surfaces: ['T1'], enabled: needsFile, run: (a) => (a.ws ? a.ws.openProblems() : false) });

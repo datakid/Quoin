@@ -9,7 +9,7 @@
     "test:lint": "node tests/lint/run.js",
     "test": "npm run test:lint && npm run test:unit && npm run test:browser",
     "docs:coverage": "node scripts/gen-coverage.mjs",
-    "build": "node scripts/build-names.mjs && node scripts/build-manifest.mjs",
+    "build": "node scripts/build-manifest.mjs",
     "fixtures": "node tests/fixtures/generators/build.js"
   },
   "devDependencies": {

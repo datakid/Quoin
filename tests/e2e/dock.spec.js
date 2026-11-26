@@ -17,12 +17,12 @@ async function runItem(page, name) {
   await expect(page.locator('.dock-panel[data-panel=result] .grid, .dock-panel[data-panel=result] [role=grid]').first()).toBeVisible();
 }
 
-test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Problems, Queue, Graph, Changes and References that the arrows walk', async ({ page }) => {
+test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Problems, Queue, Graph and Changes that the arrows walk', async ({ page }) => {
   await open(page);
   const list = page.locator('.dock-tabs');
   await expect(list).toHaveAttribute('role', 'tablist');
   const names = await list.getByRole('tab').evaluateAll((els) => els.map((e) => e.dataset.tab));
-  expect(names).toEqual(['result', 'pinned', 'compare', 'problems', 'queue', 'graph', 'changes', 'references']);
+  expect(names).toEqual(['result', 'pinned', 'compare', 'problems', 'queue', 'graph', 'changes']);
   await expect(tab(page, 'Result')).toHaveAttribute('aria-selected', 'true');
   await tab(page, 'Result').focus();
   await page.keyboard.press('ArrowRight');
@@ -31,7 +31,7 @@ test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Problems, Que
   await expect(page.locator('.dock-panel[data-panel=pinned]')).toBeVisible();
   await expect(page.locator('.dock-panel[data-panel=result]')).toBeHidden();
   await page.keyboard.press('End');
-  await expect(tab(page, 'References')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab(page, 'Changes')).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Home');
   await expect(tab(page, 'Result')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.dock-tab[tabindex="0"]')).toHaveCount(1);

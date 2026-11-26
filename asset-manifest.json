@@ -1,5 +1,5 @@
 {
-  "version": "d9de472fb154329a",
+  "version": "b7860d6eaea5893b",
   "files": [
     "./",
     "index.html",
@@ -97,7 +97,6 @@
     "src/core/wb/ast-walk.js",
     "src/core/wb/compare-results.js",
     "src/core/wb/deps.js",
-    "src/core/wb/editor-intel.js",
     "src/core/wb/find.js",
     "src/core/wb/fuzzy.js",
     "src/core/wb/graph-layout.js",
@@ -141,8 +140,6 @@
     "src/ui/wb/dock.js",
     "src/ui/wb/find-dialog.js",
     "src/ui/wb/graph-view.js",
-    "src/ui/wb/intel.js",
-    "src/ui/wb/m-names.js",
     "src/ui/wb/navigator.js",
     "src/ui/wb/outline-panel.js",
     "src/ui/wb/palette.js",

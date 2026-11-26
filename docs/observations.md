@@ -85,11 +85,16 @@ Measured on `many-queries.xlsx` (320 queries, 4 layers, 12 staging tables):
 | Workbook opens, tree usable | Tree interactive in ~0.4 s; the full problems scan (4 rows) settles under 3 s |
 | Run all (after fixing the one parse error) | 310 ran, 3 failed (unresolved, unsupported, external), ~1.2 s in the e2e budget |
 | Steps panel, *Evaluate steps* on a 7-step query | Beads and deltas render in the same frame batch; F10 step results arrive without a new run |
-| Structural edits (insert + move) | Steps rerun up to the edited step; the move preview opens in a popover under the steps host |
+| Structural edits (insert + move) | Steps rerun up to the edited step; the move preview opens in a popover under the steps host, with *Apply* and *Cancel* inside the window at 1400x900 and 1280x800 |
 | Batch queue | The Queue tab paints a table (`queue-table`) progressively; the readout ends with counts |
 
 Known gaps from this phase:
 
-- The move-preview popover is placed below the steps host without a flip; in a 1400x900 window with the steps list near the bottom, its *Apply* button can sit outside the viewport (keyboard activation still works). Placement fix pending.
+- The move-preview popover used to run past the right edge of a 1400x900 window (*Apply* at x 1877). An earlier note here blamed its placement below the steps host; that was wrong. The popover was a grid column sized to its content and the diff did not wrap, so the longest changed line set its width. Fixed: the column is `minmax(0, 1fr)` and the diff wraps (PROGRESS, WB-28 closeout, fourth session).
 - `Stale N` is not shown as a readout element; staleness surfaces on the navigator beads and the pinned-result *Out of date* chip only.
 - The acceptance story's macro step runs on `mixed.xlsm`: `many-queries.xlsx` cannot carry a VBA project, because no generator writes VBA project binaries.
+
+## Browser test harness (Playwright 1.56, Chromium 120, Linux)
+
+- A file chooser opened by a key press is lost about one time in three when the key is pressed in the same tick as `page.waitForEvent('filechooser')` is registered: 24 of 72 fresh pages, over three waiting shapes of that kind. With one round trip between registering the waiter and pressing the key (focusing the button first), 0 of 48. The app calls `input.click()` in every case; the loss is on the harness side. Register the waiter first, then act. Measured on `T-E-12` (`keyboard.spec.js`).
+- A full run of the browser suite in this sandbox is slower than its parts (390 tests in about 10 minutes on one worker); a failure that appears only in a full run should be reproduced alone before it is called a timing problem. The 23 failures of one full run were all reproducible alone (PROGRESS, WB-28 closeout, fourth session).

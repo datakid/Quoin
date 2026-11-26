@@ -9,6 +9,13 @@ import { queryNameProblem, queryRemovalProblem, queryRenameProblem } from '../..
 import { sha256Text } from '../index/hash.js';
 import { REPORT_COLUMNS } from './collect.js';
 
+export const sheetOutput = (file, sheet) => `${file} [${sheet}]`;
+
+export function splitSheetOutput(output) {
+  const m = /^(.*) \[([^\]]*)\]$/.exec(output || '');
+  return m ? { file: m[1], sheet: m[2] } : null;
+}
+
 export function reportRow(meta, action, recipe, values) {
   const base = {
     run_id: '',

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { openWorkbook } from '../../src/core/workbook.js';
+import { readZip } from '../../src/core/zip-read.js';
 import { QuoinError } from '../../src/core/errors.js';
 import { normalizeQueryText } from '../../src/core/pq/section.js';
 import { indexWorkbook } from '../../src/batch/index/file-index.js';
@@ -17,7 +18,7 @@ const index = (dir, name, as = name) => {
   return indexWorkbook(bytes, meta(as, bytes));
 };
 
-const KEYS = ['id', 'name', 'relPath', 'size', 'status', 'refused', 'format', 'sheets', 'tables', 'queries', 'modules', 'pq', 'vba', 'warnings'];
+const KEYS = ['id', 'name', 'relPath', 'size', 'inflated', 'status', 'refused', 'format', 'sheets', 'tables', 'queries', 'modules', 'pq', 'vba', 'warnings'];
 
 test('sha256Text hashes the UTF-8 text to 64 lower case hex characters', async () => {
   assert.equal(await sha256Text(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -84,6 +85,14 @@ test('every key of a ready index is present and in order', async () => {
   assert.deepEqual(Object.keys(ix), KEYS);
   assert.deepEqual([ix.id, ix.name, ix.relPath, ix.status, ix.refused, ix.format], ['f0001', 'mixed.xlsm', 'mixed.xlsm', 'ready', null, 'xlsm']);
   assert.equal(ix.size, load(WB, 'mixed.xlsm').length);
+});
+
+test('a ready index carries the inflated size its zip declares, and a refused one carries none', async () => {
+  const ix = await index(WB, 'mixed.xlsm');
+  const declared = readZip(load(WB, 'mixed.xlsm')).entries.reduce((n, e) => n + e.uncompressedSize, 0);
+  assert.equal(ix.inflated, declared);
+  assert.ok(ix.inflated > ix.size);
+  assert.equal((await index(WB, 'encrypted.xlsx')).inflated, 0);
 });
 
 test('mixed.xlsm lists its sheets, tables, queries, modules and flags', async () => {

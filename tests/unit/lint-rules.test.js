@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { commentFindings, layerPurityFindings, importDirectionFindings, base64Findings, storageFindings, STORAGE_KEYS } from '../lint/checks.js';
+import { commentFindings, layerPurityFindings, importDirectionFindings, base64Findings, storageFindings, conflictMarkerFindings, STORAGE_KEYS } from '../lint/checks.js';
 
 const lines = (relPath, source) => commentFindings(relPath, source).map((f) => f.line);
 
@@ -123,3 +123,10 @@ test('T-LINT-8 still refuses a bare localStorage, session storage and IndexedDB'
   assert.deepEqual(storage('export const f = (s) => s.getItem(a);'), []);
   assert.deepEqual(storage('createRecipeStore(window.localStorage);'), []);
 });
+
+test('T-LINT-22 flags a merge conflict marker left in a file, and not a heading underline or an arrow', () => {
+  assert.deepEqual(conflictMarkerFindings('a\n<<<<<<< HEAD\nb\n=======\nc\n>>>>>>> origin/fable\n').map((f) => f.line), [2, 6]);
+  assert.deepEqual(conflictMarkerFindings('>>>>>>> origin/fable\n').map((f) => f.line), [1]);
+  assert.deepEqual(conflictMarkerFindings('Title\n=======\ntext >>>>>>> not at the start\n<<<<<<<<\n'), []);
+});
+

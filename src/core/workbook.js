@@ -71,6 +71,7 @@ export async function openWorkbook(bytes, fileName = '', limits = DEFAULT_LIMITS
     bytes,
     limits,
     pkg,
+    inflatedBytes: zip.declaredBytes,
     format,
     workbookPart,
     contentType,

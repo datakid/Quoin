@@ -17,7 +17,11 @@ These were checked against files saved by real Excel (see `tests/fixtures/extern
 
 ## Waiting for real Excel
 
-None of the manual checks in spec section 14.10 has been run.
+None of the manual checks in spec section 14.10 has been ticked off one by one.
+
+An informal pass has been made on the Excel pack (`scripts/make-excel-pack.mjs`, 13 cases). On 2026-11-24 a person opened all 13 output files in desktop Excel. None showed a repair message, and the queries and macros they ran produced no errors. They did not review the contents of the outputs and did not tick the checklist, so no line of the table below is changed by it. The result was taken as enough to build Transform into a new sheet and into one combined workbook; it was not taken as a result for in-place output or for Excel computing on open, and neither is built.
+
+On 2026-11-25 an agent with no Excel read back every output of the pack: fingerprints, package integrity, query text and metadata, permission bindings, VBA modules and cell values. It found no defect in any file and said so in a report that lists what only Excel can still confirm (open without repair, the Queries and Connections pane, Refresh All, Compile, Alt+F8, the signature dialog). One checklist line was wrong and was corrected: Transform outputs show dates as `yyyy-mm-dd hh:mm:ss`, not in the input table's display format.
 
 | ID | Status |
 | --- | --- |

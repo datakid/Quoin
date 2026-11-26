@@ -1,4 +1,4 @@
-import { TOKENS } from '../recipe/recipe.js';
+import { TOKENS, unknownTokens } from '../recipe/recipe.js';
 
 const KNOWN = new Set(TOKENS);
 const ANY_BRACES = /\{[^{}]*\}/g;
@@ -56,4 +56,13 @@ export function unknownQueryTokens(text) {
   const found = [];
   for (const token of String(text).match(RESERVED_BRACES) || []) if (!KNOWN.has(token) && !found.includes(token)) found.push(token);
   return found;
+}
+
+export function recipeTokens(recipe) {
+  const name = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : '';
+  const m = recipe.recipe === 'transform' && recipe.query && typeof recipe.query.m === 'string' ? recipe.query.m : '';
+  const used = TOKENS.filter((t) => name.includes(t) || m.includes(t));
+  const unknown = [...unknownTokens(name)];
+  for (const t of unknownQueryTokens(m)) if (!unknown.includes(t)) unknown.push(t);
+  return { used, unknown };
 }

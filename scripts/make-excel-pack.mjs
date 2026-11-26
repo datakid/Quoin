@@ -190,7 +190,7 @@ async function build() {
     look: [
       'Each output opens with no repair or recovery message.',
       'Each has one sheet named Result holding the values of one table of the input (the rows of StudentNames in one file, StudentResults in the other).',
-      'Dates and numbers look the same as in the input table and are real numbers and dates, not text.',
+      'Dates and numbers are real dates and numbers, not text. A date shows as yyyy-mm-dd hh:mm:ss: the input table\'s own display format (a long date, say) is not carried over, and that is expected.',
       'There are no queries, no macros and no formulas in the outputs.'
     ]
   });
@@ -215,7 +215,7 @@ async function build() {
     look: [
       'The output opens with no repair or recovery message.',
       'One sheet per unit from both inputs, named after the file and the table, in the order of the files.',
-      'Each sheet holds the values of its table. Numbers and dates are real numbers and dates.'
+      'Each sheet holds the values of its table. Numbers and dates are real numbers and dates. A column that was a formula in the input holds its computed value here, not the formula.'
     ]
   });
 }

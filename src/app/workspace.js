@@ -33,6 +33,7 @@ import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
 import { analyseCalls, definitionOf } from '../core/vba/refs.js';
 import { structureProblems } from '../core/vba/structure.js';
 import { literal, numberLiteral, textLiteral } from '../core/wb/m-gen.js';
+import { diffLines, hunkLines } from '../core/diff.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -1054,6 +1055,46 @@ export class Workspace {
     return true;
   }
 
+  needsStepPreview(res) {
+    if (!res.ok || !this.stepsModel || this.stepsModel.shape !== 'let') return false;
+    const steps = this.stepsModel.steps;
+    const touched = new Set();
+    for (const e of res.changes || []) {
+      for (const st of steps) if (e.start < st.span.end && e.end > st.span.start) touched.add(st.name);
+    }
+    return touched.size > 1;
+  }
+
+  previewSteps(res, done, focusName) {
+    const lines = hunkLines(diffLines(this.editor.getText(), res.text), 2).filter((l) => l.kind !== 'same');
+    const count = new Set(lines.map((l) => l.text)).size;
+    const apply = h('button', { class: 'btn btn-primary', type: 'button' }, S.stepsPanel.apply);
+    const cancel = h('button', { class: 'btn', type: 'button' }, S.stepsPanel.cancel);
+    const content = h('div', { class: 'popover-body step-preview' },
+      h('p', null, S.stepsPanel.previewNote(count)),
+      h('pre', { class: 'step-preview-diff' }, ...lines.slice(0, 16).map((l) => h('div', { class: l.kind === 'add' ? 'diff-add' : 'diff-del' }, l.text))),
+      h('div', { class: 'dialog-actions' }, cancel, apply));
+    const pop = popover(this.stepsHost, content, null, S.stepsPanel.previewTitle);
+    apply.addEventListener('click', () => {
+      pop.close();
+      this.applySteps(res, done, focusName);
+    });
+    cancel.addEventListener('click', () => pop.close());
+  }
+
+  stepEdit(res, done, focusName) {
+    if (!res.ok) {
+      this.stepsPanel.announce(res.reason);
+      this.status.set({ note: res.reason });
+      return false;
+    }
+    if (this.needsStepPreview(res)) {
+      this.previewSteps(res, done, focusName);
+      return true;
+    }
+    return this.applySteps(res, done, focusName);
+  }
+
   gutterStep(line) {
     if (!this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return false;
     const text = this.editor.getText();
@@ -1162,7 +1203,7 @@ export class Workspace {
         this.showStepResult(st.name);
         this.paintStepBand();
       },
-      move: async (st, to) => {
+      move: (st, to) => {
         const model = stepsOf(text(), 0);
         const can = canMove(model, st.index, to);
         if (!can.ok) {
@@ -1170,22 +1211,15 @@ export class Workspace {
           this.status.set({ note: can.reason });
           return;
         }
-        if (can.mode === 'rewire') {
-          const yes = await confirmDialog({ title: S.stepsPanel.rewireTitle, body: S.stepsPanel.rewireBody(st.name), confirmLabel: S.stepsPanel.rewireConfirm, cancelLabel: S.stepsPanel.cancel });
-          if (!yes) {
-            this.stepsPanel.focusStep(st.name);
-            return;
-          }
-        }
-        this.applySteps(moveStep(text(), st.index, to, { rewire: can.mode === 'rewire' }), S.stepsPanel.done.move(st.name), st.name);
+        this.stepEdit(moveStep(text(), st.index, to, { rewire: can.mode === 'rewire' }), S.stepsPanel.done.move(st.name), st.name);
       },
       rename: (st, name) => this.applySteps(renameStep(text(), st.index, name), S.stepsPanel.done.rename(name), name),
       del: (st) => {
         const next = this.stepsModel.steps[st.index + 1] || this.stepsModel.steps[st.index - 1];
-        this.applySteps(deleteStep(text(), st.index), S.stepsPanel.done.delete(st.name), next ? next.name : null);
+        this.stepEdit(deleteStep(text(), st.index), S.stepsPanel.done.delete(st.name), next ? next.name : null);
       },
-      bypass: (st) => this.applySteps(st.bypassed ? unbypassStep(text(), st.index) : bypassStep(text(), st.index), (st.bypassed ? S.stepsPanel.done.restore : S.stepsPanel.done.bypass)(st.name), st.name),
-      duplicate: (st) => this.applySteps(duplicateStep(text(), st.index), S.stepsPanel.done.duplicate(st.name), st.name),
+      bypass: (st) => this.stepEdit(st.bypassed ? unbypassStep(text(), st.index) : bypassStep(text(), st.index), (st.bypassed ? S.stepsPanel.done.restore : S.stepsPanel.done.bypass)(st.name), st.name),
+      duplicate: (st) => this.stepEdit(duplicateStep(text(), st.index), S.stepsPanel.done.duplicate(st.name), st.name),
       runTo: (st) => this.runSteps(st.name),
       pin: (st) => this.pinStep(st),
       runSteps: () => this.runSteps(null),

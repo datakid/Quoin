@@ -75,19 +75,20 @@ test('T-WB-14: delete, bypass and restore, duplicate change the query text and t
   expect(await editorText(page)).toBe(before);
 });
 
-test('T-WB-14: moving a linear step asks to rewire, and cancelling changes nothing', async ({ page }) => {
+test('T-WB-15: moving a linear step previews the rewiring, and cancelling changes nothing', async ({ page }) => {
   await open(page);
   const before = await editorText(page);
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
-  const dlg = page.locator('dialog[open]');
-  await expect(dlg).toBeVisible();
-  await expect(dlg).toContainText('Added Custom');
-  await dlg.getByRole('button', { name: 'Cancel' }).click();
+  const pop = page.locator('.step-preview');
+  await expect(pop).toBeVisible();
+  await expect(pop).toContainText('Added Custom');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await editorText(page)).toBe(before);
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
-  await page.locator('dialog[open]').getByRole('button', { name: 'Move and rewire' }).click();
+  await expect(pop).toBeVisible();
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page.locator('.step-row').nth(1)).toContainText('Added Custom');
   const after = await editorText(page);
   expect(after.indexOf('#"Added Custom" =')).toBeLessThan(after.indexOf('#"Changed Type" ='));

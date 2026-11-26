@@ -848,7 +848,14 @@ export class Workbench {
     this.graphView = mountGraph(this.dock.panel('graph'), {
       nodes: () => index.members.map((m) => m.name),
       edges: () => index.members.flatMap((m) => [...(index.refs.get(m.name) || [])].map((d) => [d, m.name])),
-      statuses: () => this.orchestrator.statuses(),
+      statuses: () => {
+        const st = this.orchestrator.statuses();
+        const rows = this.problemRows || [];
+        if (!rows.length) return st;
+        const marked = new Map(st);
+        for (const p of rows) if (p.item && p.item.type === 'query' && p.severity === 'error' && !marked.get(p.item.name)) marked.set(p.item.name, 'error');
+        return marked;
+      },
       upstream: (n) => [...upstreamOf(index, [n], { transitive: false })],
       downstream: (n) => [...downstreamOf(index, [n], { transitive: false })]
     }, {
@@ -1629,7 +1636,14 @@ export class Workbench {
         }));
       },
       modules: () => s.modules.map((m) => ({ name: m.name, edited: s.isEdited({ type: 'module', name: m.name }) })),
-      statuses: () => this.orchestrator.statuses(),
+      statuses: () => {
+        const st = this.orchestrator.statuses();
+        const rows = this.problemRows || [];
+        if (!rows.length) return st;
+        const marked = new Map(st);
+        for (const p of rows) if (p.item && p.item.type === 'query' && p.severity === 'error') marked.set(p.item.name, 'error');
+        return marked;
+      },
       record: (name) => this.orchestrator.book.record(name),
       textOf: (item) => s.textOf(item),
       stepNames: (name) => {

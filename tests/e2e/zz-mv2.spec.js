@@ -1,0 +1,47 @@
+import { test, expect } from '@playwright/test';
+import { fx, openApp, loadFile } from './helpers.js';
+
+const stepNames = (page) => page.locator('.step-row .step-name').evaluateAll((els) => els.map((e) => e.textContent));
+
+test('move probe 2', async ({ page }) => {
+  test.setTimeout(240000);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await openApp(page);
+  await loadFile(page, fx('many-queries.xlsx'));
+  const search = page.getByRole('searchbox', { name: 'Search queries' });
+  await search.fill('Sales_Broken');
+  await page.locator('[role=treeitem][data-name="Sales_Broken"]').click();
+  await page.locator('.editor-wrap textarea').fill('let\r\n    Source = Sales_Raw,\r\n    Bad = Table.SelectRows(Source, each [Amount] > 0)\r\nin\r\n    Bad');
+  await search.fill('Sales_Clean');
+  await page.locator('[role=treeitem][data-name="Sales_Clean"]').click();
+  await page.getByRole('button', { name: 'Evaluate steps' }).click();
+  await expect(page.locator('.bead-ok')).toHaveCount(7);
+  await page.locator('.editor-wrap textarea').focus();
+  await page.keyboard.press('Control+Home');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('F10');
+  const header = page.locator('.dock-panel[data-panel=result] .grid-hcell', { hasText: 'Region' }).first();
+  await header.click();
+  await page.getByRole('menuitem', { name: 'Filter\u2026' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Filter Region' });
+  await dlg.getByRole('radio', { name: 'Condition' }).check();
+  await dlg.locator('select').selectOption({ label: 'equals' });
+  await dlg.getByLabel('Value', { exact: true }).fill('North');
+  await dlg.getByRole('button', { name: 'Filter the view' }).click();
+  await header.click();
+  await page.getByRole('menuitem', { name: 'Add as a step\u2026' }).click();
+  const add = page.getByRole('dialog', { name: 'Add a step for Region' });
+  await add.locator('select').first().selectOption({ label: 'Filter rows' });
+  await add.locator('select').nth(1).selectOption({ label: 'equals' });
+  await add.getByLabel('Value', { exact: true }).fill('North');
+  await add.getByRole('button', { name: 'Insert step' }).click();
+  await expect(page.locator('.step-row')).toHaveCount(8);
+  await page.waitForTimeout(1500);
+  console.log('BEADS:', await page.evaluate(() => JSON.stringify([...document.querySelectorAll('.step-row')].map((r) => ({ n: r.querySelector('.step-name')?.textContent, b: r.className.match(/bead-\w+/)?.[0] || r.querySelector('[class*=bead]')?.className || (r.textContent.match(/\bok\b|\.\.\./) || [''])[0] })))));
+  console.log('NAMES:', await stepNames(page).then((n) => JSON.stringify(n)));
+  const at = (await stepNames(page)).findIndex((n, i, arr) => i > 0 && n !== 'Source' && n !== 'Promoted' && n !== 'Changed Type' && n !== 'Filtered Rows' && n !== 'Added Margin' && n !== 'Sorted Rows' && n !== 'Result');
+  console.log('AT:', at);
+  await page.locator('.step-row').nth(at).focus();
+  await page.keyboard.press('Alt+Shift+ArrowUp');
+  await page.waitForTimeout(500);
+  console.log('STATE:', await page.evaluate(() => JSON.stringify({ active: document.activeElement.className.slice(0, 30), activeName: document.activeElement.textContent.trim().slice(0, 24), dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.className), live: document.querySelector('.steps-live')?.textContent?.slice(0, 80), preview: !!document.querySelector('.step-preview') })));
+});

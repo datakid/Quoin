@@ -114,7 +114,10 @@ export const STATES = [
     mask: false,
     run: async (page) => {
       await loadFile(page, fx('many-queries.xlsx'));
-      await page.getByRole('combobox', { name: 'Group by' }).selectOption('layer');
+      const toggle = page.locator('.rail-toggle');
+      if (await toggle.isVisible()) await toggle.click();
+      const group = page.getByRole('combobox', { name: 'Group by' });
+      if (await group.isVisible()) await group.selectOption('layer');
       await page.getByRole('searchbox', { name: 'Search queries' }).fill('sales');
       await page.waitForTimeout(200);
     }
@@ -124,10 +127,21 @@ export const STATES = [
     mask: true,
     run: async (page) => {
       await loadFile(page, fx('many-queries.xlsx'));
+      const toggle = page.locator('.rail-toggle');
+      if (await toggle.isVisible()) await toggle.click();
+      await page.getByRole('searchbox', { name: 'Search queries' }).fill('Sales_Broken');
+      await page.locator('[role=treeitem][data-name="Sales_Broken"]').click();
+      await editor(page).fill('let\n    Source = Sales_Raw,\n    Bad = Table.SelectRows(Source, each [Amount] > 0)\nin\n    Bad');
+      const toggle2 = page.locator('.rail-toggle');
+      if (await toggle2.isVisible()) await toggle2.click();
       await page.getByRole('searchbox', { name: 'Search queries' }).fill('Wide_Steps');
       await page.locator('[role=treeitem][data-name="Wide_Steps"]').click();
       await runButton(page).click();
+      const resultBtn = page.getByRole('button', { name: 'Result', exact: true });
+      if (await resultBtn.isVisible()) await resultBtn.click();
       await page.waitForSelector('.grid-cell:not(.grid-index)');
+      const stepsBtn = page.getByRole('button', { name: 'Steps', exact: true });
+      if (await stepsBtn.isVisible()) await stepsBtn.click();
       await page.locator('.steps-list .step-row').nth(4).click();
       await page.waitForTimeout(650);
     }
@@ -165,6 +179,8 @@ export const STATES = [
     mask: false,
     run: async (page) => {
       await loadFile(page, fx('many-queries.xlsx'));
+      const toggle = page.locator('.rail-toggle');
+      if (await toggle.isVisible()) await toggle.click();
       await page.getByRole('searchbox', { name: 'Search queries' }).fill('Staging_01');
       await page.locator('[role=treeitem][data-name="Staging_01"]').click();
       await page.keyboard.press('Control+k');
@@ -180,7 +196,9 @@ export const STATES = [
     run: async (page) => {
       await loadFile(page, fx('many-queries.xlsx'));
       await page.waitForTimeout(800);
-      await page.getByRole('tab', { name: 'Problems' }).click();
+      const result = page.getByRole('button', { name: 'Result', exact: true });
+      if (await result.isVisible()) await result.click();
+      await page.getByRole('tab', { name: /^Problems/ }).click();
       await expect(page.locator('.dock-panel[data-panel=problems] .problem-row')).toHaveCount(4);
     }
   },
@@ -189,6 +207,8 @@ export const STATES = [
     mask: true,
     run: async (page) => {
       await loadFile(page, fx('many-queries.xlsx'));
+      const toggle = page.locator('.rail-toggle');
+      if (await toggle.isVisible()) await toggle.click();
       await page.getByRole('searchbox', { name: 'Search queries' }).fill('Sales_Broken');
       await page.locator('[role=treeitem][data-name="Sales_Broken"]').click();
       await editor(page).fill('let\n    Source = Sales_Raw,\n    Bad = Table.SelectRows(Source, each [Amount] > 0)\nin\n    Bad');
@@ -196,8 +216,10 @@ export const STATES = [
       await page.waitForTimeout(400);
       await page.keyboard.press('Control+Alt+Enter');
       await page.getByRole('dialog', { name: 'Some files are not bound yet' }).getByRole('button', { name: 'Run anyway' }).click();
+      const result = page.getByRole('button', { name: 'Result', exact: true });
+      if (await result.isVisible()) await result.click();
       await page.getByRole('tab', { name: 'Queue' }).click();
-      await page.waitForSelector('.dock-panel[data-panel=queue] .queue-row, .dock-panel[data-panel=queue] [role=listitem], .dock-panel[data-panel=queue] li', { timeout: 5000 });
+      await page.waitForSelector('.dock-panel[data-panel=queue] .queue-table tbody tr', { timeout: 8000 });
     }
   },
   {

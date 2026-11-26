@@ -542,3 +542,13 @@ Done:
 - The editor gains a context menu (right-click): *Complete at the caret* (M only, opens the completion popup), *Go to definition*, *Find references* and *Rename* (M only). Right-click first puts the caret at the clicked position, as the VBE does.
 Changed expectations: none.
 Tests: `tests/e2e/vba-refs.spec.js` (T-WB-24, 4 tests: Calls/Called by with the no-callers note and a call button jumping; F12 to a definition and Shift+F12 listing the exact caller with the row jumping back; the Graph tab in VBA mode without run buttons, opened through the palette as a user would; the context menu running definition and references). The T-WB-24 unit tests over `analyseCalls` were already green from the earlier commit. Lint 0; unit 1161: 1156 pass, 0 fail, 5 skipped; visual baselines unchanged (40 passed without regeneration).
+
+#### WB-23 UI — structure checks in the gutter, the Download tooltip and the Changes review (2026-11-26, commit on `beta-v2`)
+Done:
+- `Editor.setMarkers(lines)`: the gutter marks extra lines (a filled bullet in the madder ink colour, distinct from the single parse-error line) and repaints only when the set changes.
+- `checkModule` (the existing 300 ms debounce) now marks every structure-problem line of the open module, so the markers follow edits without a second timer.
+- The Download popover lists the structure checks of the edited modules (module, message from `S.problem`), capped at five, with the note that these checks do not block saving; the save button stays enabled. The list is computed live from `structureRows` (`structureProblems` over the current editor text), not from the debounced problems pipeline, so it is never stale at open time.
+- The Changes review (already fed by the problems pipeline) also merges the live structure rows for the changed modules, so the list is complete even before the debounced problems pass lands.
+- The `vba.exit` message now capitalises the procedure kind (*inside a Sub*).
+Changed expectations: none.
+Tests: `tests/e2e/structure.spec.js` (T-WB-23, 2 tests: gutter markers on the exact lines after the debounce; the Download tooltip lists both checks without blocking and the Changes review lists them). Lint 0; unit 1161: 1156 pass, 0 fail, 5 skipped; the changes/save/change-summary specs stay green (16 passed).

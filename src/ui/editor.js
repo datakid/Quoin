@@ -29,6 +29,7 @@ export class Editor {
     this.language = language;
     this.onChange = onChange;
     this.error = null;
+    this.markers = new Set();
     this.findState = { open: false, query: '', matchCase: false, matches: [], current: -1 };
     this.fallback = forceFallbackUndo || typeof document.execCommand !== 'function';
     this.forceFallback = forceFallbackUndo;
@@ -305,6 +306,13 @@ export class Editor {
     this.textarea.focus();
   }
 
+  setMarkers(lines) {
+    const next = new Set(lines);
+    if (next.size === this.markers.size && [...next].every((l) => this.markers.has(l))) return;
+    this.markers = next;
+    this.paint();
+  }
+
   setError(err) {
     this.error = err;
     this.errorDesc.textContent = err ? S.lineCol(err.message, err.line, err.col) : '';
@@ -373,7 +381,7 @@ export class Editor {
     clear(this.gutterInner);
     const nums = [];
     const errLine = this.error ? this.error.line - 1 : -1;
-    for (let li = first; li <= last; li++) nums.push(li === errLine ? h('div', { class: 'gutter-err' }, `● ${li + 1}`) : h('div', null, String(li + 1)));
+    for (let li = first; li <= last; li++) nums.push(li === errLine ? h('div', { class: 'gutter-err' }, `● ${li + 1}`) : this.markers.has(li + 1) ? h('div', { class: 'gutter-mark' }, `● ${li + 1}`) : h('div', null, String(li + 1)));
     for (const n of nums) {
       n.style.height = `${this.lineHeight}px`;
       this.gutterInner.append(n);

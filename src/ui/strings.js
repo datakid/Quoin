@@ -534,7 +534,7 @@ export const S = {
       return 'The structure of this module does not balance.';
     },
     'vba.duplicate': (a) => `${a.name} is already defined on line ${a.firstLine}.`,
-    'vba.exit': (a) => `${a.exit} inside a ${a.inside}.`,
+    'vba.exit': (a) => `${a.exit} inside a ${a.inside[0].toUpperCase()}${a.inside.slice(1)}.`,
     'vba.noExplicit': () => 'The module has no Option Explicit, so a misspelled variable is not caught.',
     'vba.encoding': (a) => `${a.char || 'A character'} cannot be stored in this project's code page.`,
     'vba.lineLength': (a) => `This line is ${a.n} characters long; the limit is ${a.max}.`,
@@ -786,6 +786,9 @@ export const S = {
     definition: 'Definition',
     empty: (name) => `No references to ${name} in the workbook.`,
     at: (line, col) => `Line ${line}, column ${col}`
+  },
+  structure: {
+    title: (n) => `${n === 1 ? '1 structure check' : `${n} structure checks`}. These checks do not block saving.`
   },
   editor: {
     renameQuery: 'A query is named in the workbook, so F2 cannot rename it from the editor. F2 renames a step instead.',

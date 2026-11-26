@@ -468,12 +468,14 @@ export class App {
     const msg = h('p', { class: 'warn', role: 'alert', hidden: true });
     const blocked = s.vbaProblems();
     const firstBlocked = blocked.size ? [...blocked][0] : null;
+    const structure = (this.ws ? this.ws.structureRows(s.moduleEdits) : []).slice(0, 5);
     const go = h('button', { class: 'btn btn-primary', type: 'button', disabled: qn + mn === 0 || signed || blocked.size > 0 }, S.download);
     const content = h('div', { class: 'popover-body' },
       h('p', null, qn + mn === 0 ? S.downloadNone : S.changedSummary(qn, mn)),
       qn ? h('label', { class: 'check', for: 'dl-refresh' }, refresh, S.refreshOnOpen) : null,
       qn ? h('p', { class: 'note' }, S.cacheNote) : null,
       firstBlocked ? h('p', { class: 'warn', role: 'alert' }, S.vbaBlocked(firstBlocked[0], errorMessage(firstBlocked[1][0].code, firstBlocked[1][0]))) : null,
+      structure.length ? h('div', { class: 'note structure-note' }, h('p', null, S.structure.title(structure.length)), h('ul', { class: 'structure-list' }, ...structure.map((p) => h('li', null, `${p.item.name}: ${S.problem[p.code] ? S.problem[p.code](p.args) : p.code}`)))) : null,
       signed ? h('p', { class: 'warn' }, S.signedNote) : null,
       signed ? h('label', { class: 'check', for: 'dl-ack' }, ack, S.understand) : null,
       msg,
@@ -537,6 +539,12 @@ export class App {
       return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
     };
     const problems = (this.ws ? this.ws.problemRows : []).filter((p) => names.has(p.item.name) && (p.severity === 'error' || p.severity === 'warning'));
+    if (this.ws) {
+      const seen = new Set(problems.map((p) => `${p.code}:${p.item.name}:${p.line}`));
+      for (const p of this.ws.structureRows(this.session.moduleEdits)) {
+        if (names.has(p.item.name) && !seen.has(`${p.code}:${p.item.name}:${p.line}`)) problems.push(p);
+      }
+    }
     changesDialog(changes, {
       summaries: summariesFor(changes, moduleKind),
       problems,

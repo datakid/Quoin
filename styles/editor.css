@@ -242,3 +242,8 @@
   margin-top: var(--s-1);
   color: var(--on-readout-2);
 }
+
+.gutter .gutter-mark {
+  color: var(--madder-ink);
+  font-weight: 600;
+}

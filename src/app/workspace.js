@@ -31,6 +31,7 @@ import { attachCompletion } from '../ui/wb/autocomplete.js';
 import { attachSignature } from '../ui/wb/signature.js';
 import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
 import { analyseCalls, definitionOf } from '../core/vba/refs.js';
+import { structureProblems } from '../core/vba/structure.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -1910,9 +1911,20 @@ export class Workspace {
     for (const fn of this.onEditCallbacks) fn();
   }
 
+  structureRows(names) {
+    const out = [];
+    for (const m of this.session.modules) {
+      if (names && !names.has(m.name)) continue;
+      const text = this.item && this.item.type === 'module' && this.item.name === m.name ? this.editor.getText() : this.session.textOf({ type: 'module', name: m.name });
+      for (const p of structureProblems(text)) out.push({ item: { type: 'module', name: m.name }, code: p.code, severity: 'error', line: p.line, col: p.col, args: p.args });
+    }
+    return out;
+  }
+
   checkModule(text) {
     if (!this.item || this.item.type !== 'module') return;
     const problems = this.session.validateModule(this.item.name, text);
+    this.editor.setMarkers(structureProblems(text).map((p) => p.line));
     clear(this.info);
     if (!problems.length) {
       this.editor.setError(null);

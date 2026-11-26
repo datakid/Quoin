@@ -502,3 +502,10 @@
 #### Not done in WB-19 (still)
 - Nothing in the plan's list; a binding for a folder or a database is not offered because the engine has no way to read one.
 
+### beta-v2: finishing Phase 6
+
+Work continues on the branch `beta-v2`, cut from `beta` at `95676d4`. Lint and unit on that commit, unchanged: 0 findings, 1128 pass and 5 skipped.
+
+#### Fixed on the way
+- The browser suite on the untouched `beta` tip, in a 2-CPU sandbox: 285 passed and 4 failed, not the 289 and 0 recorded above. All four tests read the page before the effect they assert had landed; nothing in the app changed. `column-tools.spec.js` (Add as a step read the grid before the view was applied; it now waits for the view chip), `steps-panel.spec.js` (the rewiring move read the editor before the confirm dialog's `close` event had run the transform; it now waits for the moved row), `store.spec.js` (the batch was cancelled 600 ms after it started, but the "slow" member reaches the row cap in about 250 ms here, so the batch had already finished; it now cancels as soon as the first member result arrives) and `palette.spec.js` (the `#` test had the same 0 ms timer race as the `:` test above; it is polled the same way). No expectation changed. The four specs passed 7 runs out of 7 afterwards.
+

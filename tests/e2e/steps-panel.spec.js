@@ -88,10 +88,10 @@ test('T-WB-14: moving a linear step asks to rewire, and cancelling changes nothi
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
   await page.locator('dialog[open]').getByRole('button', { name: 'Move and rewire' }).click();
+  await expect(page.locator('.step-row').nth(1)).toContainText('Added Custom');
   const after = await editorText(page);
   expect(after.indexOf('#"Added Custom" =')).toBeLessThan(after.indexOf('#"Changed Type" ='));
   expect(after).toContain('#"Changed Type" = Table.TransformColumnTypes(#"Added Custom"');
-  await expect(page.locator('.step-row').nth(1)).toContainText('Added Custom');
 });
 
 test('T-WB-14: a refused edit says why and changes nothing', async ({ page }) => {

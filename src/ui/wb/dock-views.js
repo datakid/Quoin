@@ -41,6 +41,34 @@ export function renderChanges(host, changes, { summaries, problems, onRevertAll 
     h('div', { class: 'dialog-actions' }, h('button', { class: 'btn', type: 'button', onclick: onRevertAll }, S.revertAll))));
 }
 
+export function renderReferences(host, state, { current, onGo }) {
+  clear(host);
+  if (!state) {
+    host.append(h('p', { class: 'dock-empty' }, S.intel.refsEmpty));
+    return;
+  }
+  const { name, refs } = state;
+  host.append(h('h3', { class: 'refs-title' }, S.intel.refsTitle(name)));
+  if (!refs.length) {
+    host.append(h('p', { class: 'dock-empty' }, S.intel.refsNone(name)));
+    return;
+  }
+  const queries = [...new Set(refs.map((r) => r.query))];
+  host.append(h('p', { class: 'item-meta' }, S.intel.refsFound(name, refs.length, queries.length)));
+  const list = h('div', { class: 'refs-list' });
+  for (const q of queries) {
+    const mine = refs.filter((r) => r.query === q);
+    list.append(h('section', { class: 'ref-group' },
+      h('h4', { class: 'ref-query' }, q, h('span', { class: 'item-meta' }, ` \u00b7 ${mine.length}`)),
+      h('ul', { class: 'ref-rows' }, ...mine.map((r) => h('li', null,
+        h('button', { class: 'btn btn-quiet ref-row', type: 'button', onclick: () => onGo(r) },
+          h('span', { class: 'ref-line' }, String(r.line)),
+          h('span', { class: 'ref-text' }, r.text)))))));
+  }
+  host.append(list);
+  void current;
+}
+
 export function renderQueue(host, rows, summary) {
   clear(host);
   if (!rows.length) {

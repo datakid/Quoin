@@ -44,6 +44,7 @@ export class Editor {
     this.textarea = h('textarea', { spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', wrap: 'off', 'aria-label': label, 'aria-multiline': 'true' });
     this.textarea.readOnly = readOnly;
     this.tooltip = null;
+    this.hooks = { key: null, input: null, caret: null, mod: null, blur: null };
     this.findbar = this.buildFindbar();
     this.area = h('div', { class: 'code-area' }, this.pre, this.textarea, this.findbar);
     this.root = h('div', { class: 'editor-wrap' }, this.gutter, this.area);
@@ -113,11 +114,31 @@ export class Editor {
     ta.addEventListener('input', () => {
       if (this.fallback) this.pushHistory();
       this.afterEdit();
+      if (this.hooks.input) this.hooks.input();
     });
-    ta.addEventListener('scroll', () => this.paint());
-    ta.addEventListener('keydown', (ev) => this.onKey(ev));
-    ta.addEventListener('keyup', () => this.updateBracket());
-    ta.addEventListener('click', () => this.updateBracket());
+    ta.addEventListener('scroll', () => {
+      this.paint();
+      if (this.hooks.blur) this.hooks.blur();
+    });
+    ta.addEventListener('keydown', (ev) => {
+      if (this.hooks.key && this.hooks.key(ev)) return;
+      this.onKey(ev);
+    });
+    ta.addEventListener('keyup', () => {
+      this.updateBracket();
+      if (this.hooks.caret) this.hooks.caret();
+    });
+    ta.addEventListener('click', (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && this.hooks.mod && this.hooks.mod(this.positionAt(ev), ev)) {
+        ev.preventDefault();
+        return;
+      }
+      this.updateBracket();
+      if (this.hooks.caret) this.hooks.caret();
+    });
+    ta.addEventListener('blur', () => {
+      if (this.hooks.blur) this.hooks.blur();
+    });
     ta.addEventListener('mousemove', (ev) => this.onHover(ev));
     ta.addEventListener('mouseleave', () => this.hideTooltip());
     new ResizeObserver(() => this.paint()).observe(this.area);
@@ -366,6 +387,21 @@ export class Editor {
     this.gutterInner.style.transform = `translateY(${first * this.lineHeight - top}px)`;
     const width = Math.max(2, String(total).length + 2);
     this.gutter.style.minWidth = `${width}ch`;
+  }
+
+  caretRect() {
+    const ta = this.textarea;
+    const pos = ta.selectionStart;
+    let li = 0;
+    for (let i = 0; i < this.offsets.length; i++) {
+      if (this.offsets[i].start <= pos) li = i;
+      else break;
+    }
+    const col = pos - this.offsets[li].start;
+    const rect = ta.getBoundingClientRect();
+    const left = rect.left + this.padLeft + col * this.charWidth - ta.scrollLeft;
+    const top = rect.top + this.padTop + li * this.lineHeight - ta.scrollTop;
+    return { left, top, bottom: top + this.lineHeight, line: li + 1, col: col + 1 };
   }
 
   positionAt(ev) {

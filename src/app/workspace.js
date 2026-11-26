@@ -14,7 +14,9 @@ import { pqLinksOfModule, resolveLinks, runPlanOf, refreshedBy } from '../core/v
 import { matchProcedures, revertProcedure } from '../core/vba/proc-diff.js';
 import { mountProblems } from '../ui/wb/problems-view.js';
 import { Dock } from '../ui/wb/dock.js';
-import { renderPinned, renderQueue, renderCompare, renderChanges, pinLabel } from '../ui/wb/dock-views.js';
+import { renderPinned, renderQueue, renderCompare, renderChanges, renderReferences, pinLabel } from '../ui/wb/dock-views.js';
+import { Intel, NAME_ROWS } from '../ui/wb/intel.js';
+import { stepsInScope } from '../core/wb/editor-intel.js';
 import { summariesFor } from './change-summary.js';
 import { openFind } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
@@ -124,6 +126,8 @@ export class Workspace {
     this.runToken = 0;
     this.onEditCallbacks = [];
     this.histories = new Map();
+    this.refsState = null;
+    this.columnCache = new Map();
     this.onEdit(() => this.syncChangesTab());
     this.resizer();
   }
@@ -343,6 +347,7 @@ export class Workspace {
     else if (id === 'compare') this.paintCompare();
     else if (id === 'graph') this.mountGraphPanel();
     else if (id === 'changes') this.paintChanges();
+    else if (id === 'references') this.paintReferences();
   }
 
   paintChanges() {
@@ -910,6 +915,8 @@ export class Workspace {
       return;
     }
     this.stepResults = results;
+    this.columnCache = new Map();
+    for (const [n, r] of results) if (r && r.status === 'ok' && r.result && r.result.kind === 'table') this.columnCache.set(n, r.result.value.columns.map((c) => c.name));
     this.refreshSteps();
     const shown = upTo ? results.get(upTo) : final;
     if (shown && shown.status === 'ok' && shown.result) this.renderResult({ status: 'ok', result: shown.result, durationMs: shown.durationMs || res.durationMs || 0, flags: res.flags || [], compare: null }, !!upTo, shown.resultId);
@@ -1328,6 +1335,7 @@ export class Workspace {
     this.stepsBtn.textContent = isQuery ? S.stepsPanel.toggle : S.outline.title;
     this.inspectorToggle.setAttribute('aria-label', isQuery ? S.stepsPanel.toggleAria : S.outline.toggleAria);
     this.stepResults = new Map();
+    this.columnCache = new Map();
     this.runbar.hidden = !isQuery;
     this.syncDock();
     this.segmented.hidden = !isQuery;
@@ -1377,12 +1385,88 @@ export class Workspace {
     return loaded;
   }
 
+  intelHost(group) {
+    return {
+      enabled: () => group.editor === this.editor && !!this.item && this.item.type === 'query',
+      env: (caret) => this.intelEnv(caret),
+      note: (text) => this.status.set({ note: text }),
+      revealOffset: (off) => {
+        const text = this.editor.getText();
+        this.editor.goto(this.lineOfOffset(text, off), off - (text.lastIndexOf('\n', off - 1) + 1) + 1);
+      },
+      openQuery: (name) => this.select({ type: 'query', name }),
+      showReferences: (r) => this.showReferences(r),
+      renameStep: (st) => this.renameStepFromEditor(st)
+    };
+  }
+
+  intelEnv(caret) {
+    const text = this.editor.getText();
+    const members = this.session.queries.map((q) => q.name);
+    const current = this.item ? this.item.name : null;
+    const fresh = stepsOf(text, 0, { members: new Set(members) });
+    const model = fresh.shape !== 'invalid' ? fresh : this.stepsModel;
+    const steps = model && model.steps ? model.steps : [];
+    const docs = members.map((name) => ({ name, text: name === current ? text : this.session.textOf({ type: 'query', name }) }));
+    return { names: NAME_ROWS, steps, scope: stepsInScope(steps, caret), members, current, columns: this.inputColumns(steps, caret), docs };
+  }
+
+  inputColumns(steps, caret) {
+    const here = steps.find((s) => caret >= s.exprSpan.start && caret <= s.exprSpan.end);
+    const names = [];
+    if (here && here.inputs) for (const i of here.inputs) names.push(typeof i === 'string' ? i : i.name);
+    const at = here ? here.index : steps.length;
+    if (at > 0 && steps[at - 1]) names.push(steps[at - 1].name);
+    for (const n of names) {
+      const r = this.stepResults.get(n);
+      if (r && r.status === 'ok' && r.result && r.result.kind === 'table') return r.result.value.columns.map((c) => c.name);
+      if (this.columnCache.has(n)) return this.columnCache.get(n);
+    }
+    return [];
+  }
+
+  showReferences(state) {
+    this.refsState = state;
+    this.dock.badge('references', state.refs.length || null);
+    this.showDock('references');
+    this.paintReferences();
+    const queries = new Set(state.refs.map((r) => r.query)).size;
+    this.status.set({ note: state.refs.length ? S.intel.refsFound(state.name, state.refs.length, queries) : S.intel.refsNone(state.name) });
+  }
+
+  paintReferences() {
+    renderReferences(this.dock.panel('references'), this.refsState, { current: this.item ? this.item.name : null, onGo: (r) => this.goToReference(r) });
+  }
+
+  goToReference(r) {
+    if (!this.item || this.item.type !== 'query' || this.item.name !== r.query) this.select({ type: 'query', name: r.query });
+    this.editor.goto(r.line, r.col);
+  }
+
+  renameStepFromEditor(st) {
+    if (this.root.dataset.inspector !== 'open') this.toggleInspector();
+    const row = this.stepsPanel.rows()[st.index];
+    if (row) this.stepsPanel.startRename(row, st);
+  }
+
+  runIntel(which) {
+    const intel = this.editor && this.editor.intel;
+    if (!intel || !this.item || this.item.type !== 'query') return false;
+    this.editor.textarea.focus();
+    intel.restoreCaret();
+    if (which === 'references') intel.findReferences();
+    else intel.definitionAtOffset(this.editor.textarea.selectionStart);
+    return true;
+  }
+
   addGroup() {
     const group = { shownKey: null };
     group.strip = new TabStrip(S.tabs.group(this.groups.length + 1), this.stripActions(group));
     const host = h('div', { class: 'editor-host' });
     group.el = h('div', { class: 'editor-group', 'data-group': String(this.groups.length) }, group.strip.el, host);
     group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
+    group.intel = new Intel(group.editor, this.intelHost(group));
+    group.editor.intel = group.intel;
     group.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
     group.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());
     group.el.addEventListener('focusin', () => this.focusGroup(this.groups.indexOf(group)));

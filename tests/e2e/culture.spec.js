@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { fx, openApp, loadFile, item, editor, runButton, status } from './helpers.js';
+import { fx, openApp, loadFile, item, editor, runButton, status, openSettings } from './helpers.js';
 
 async function setCulture(page, culture) {
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.locator('#set-culture').selectOption(culture);
   await page.locator('dialog[open]').getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('dialog')).toHaveCount(0);

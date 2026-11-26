@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile } from './helpers.js';
+import { ext, openApp, loadFile, openSettings } from './helpers.js';
 
 async function openQuery(page) {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
   await page.locator('[role=treeitem][data-type=query]').first().click();
-  await page.locator('.runbar .btn-primary').click();
+  await page.locator('.topbar .run-main').click();
   await page.waitForSelector('.grid-row');
 }
 
@@ -16,7 +16,7 @@ test('T-V-08: comfortable density is the default and compact tightens rows for t
   await openQuery(page);
   expect(await px(page, '.tree-item', 'minHeight')).toBe(32);
   expect(await px(page, '.grid-row .grid-cell', 'height')).toBe(30);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.locator('#set-density').selectOption('compact');
   await page.getByRole('button', { name: 'Save' }).click();
   expect(await px(page, '.tree-item', 'minHeight')).toBe(28);
@@ -24,10 +24,12 @@ test('T-V-08: comfortable density is the default and compact tightens rows for t
   expect(await page.evaluate(() => window.localStorage.getItem('quoin.density'))).toBeNull();
 });
 
-test('T-V-04: each layer carries at most one filled primary button', async ({ page }) => {
+test('T-V-04: each layer carries at most one filled primary button, with the Run split counted once', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openQuery(page);
-  expect(await page.locator('.topbar .btn-primary, .workspace .btn-primary').count()).toBeLessThanOrEqual(1);
+  const filled = page.locator('.topbar .btn-primary:not(.run-split), .workspace .btn-primary:not(.run-split)');
+  expect(await filled.count()).toBeLessThanOrEqual(1);
+  expect(await filled.first()).toHaveClass(/run-main/);
   await page.keyboard.press('Control+p');
   await page.waitForSelector('.print-root');
   expect(await page.locator('.print-root .btn-primary').count()).toBe(1);

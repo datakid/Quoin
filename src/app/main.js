@@ -1,4 +1,4 @@
-import { h, clear } from '../ui/dom.js';
+import { h, clear, svg } from '../ui/dom.js';
 import { S, errorMessage, fmt } from '../ui/strings.js';
 import { formatsFor } from '../ui/formats.js';
 import { markImg, syncMarks, watchMarks } from '../ui/mark.js';
@@ -11,12 +11,12 @@ import { stepsOf } from '../core/wb/steps.js';
 import { summariesFor } from './change-summary.js';
 import { settingsDialog, shortcutsDialog, detailsDialog, changesDialog, confirmDialog, menu, popover } from '../ui/dialogs.js';
 import { Session } from './session.js';
-import { Workspace } from './workspace.js';
+import { Workbench } from './workbench.js';
 import { PRESET_ORDER } from '../core/wb/layout-presets.js';
 import { queryFile, moduleFile, zipFiles, sanitizeFileName } from '../core/export/files.js';
 import { QuoinError } from '../core/errors.js';
 
-const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false, countRows: true, autoRunSteps: false };
+const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false, countRows: true, autoRunSteps: false, followCaret: true };
 
 function loadTheme() {
   try {
@@ -145,6 +145,17 @@ class Status {
   }
 }
 
+
+const GLYPHS = {
+  search: [['circle', { cx: '7', cy: '7', r: '4.5' }], ['path', { d: 'M10.2 10.2 14 14' }]],
+  print: [['path', { d: 'M5 6V2.5h6V6' }], ['rect', { x: '2.5', y: '6', width: '11', height: '5.5', rx: '1' }], ['path', { d: 'M5 9.5h6v4H5z' }]]
+};
+
+function glyph(name) {
+  const box = svg('svg', { viewBox: '0 0 16 16', width: '16', height: '16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'aria-hidden': 'true' }, ...GLYPHS[name].map(([tag, attrs]) => svg(tag, attrs)));
+  return h('span', { class: 'glyph' }, box);
+}
+
 export class App {
   constructor(root) {
     this.root = root;
@@ -159,18 +170,17 @@ export class App {
     this.registry = buildRegistry(this);
     this.fileHead = h('span', { class: 'fn-head' });
     this.fileTail = h('span', { class: 'fn-tail' });
-    this.fileBtn = h('button', { class: 'file-name', type: 'button', hidden: true, onclick: () => this.showDetails() }, this.fileHead, this.fileTail);
+    this.fileName = h('span', { class: 'file-name', hidden: true }, this.fileHead, this.fileTail);
     this.fileMeta = h('span', { class: 'file-meta item-meta', hidden: true });
-    this.paletteBtn = h('button', { class: 'btn btn-quiet palette-button', type: 'button', hidden: true, 'aria-keyshortcuts': 'Control+K Meta+K', onclick: () => this.openPalette() }, S.palette.trigger, h('span', { class: 'kbd', 'aria-hidden': 'true' }, S.palette.kbd));
-    this.printBtn = h('button', { class: 'btn print-button', type: 'button', hidden: true, onclick: () => this.openPrint() }, S.print);
-    this.exportBtn = h('button', { class: 'btn', type: 'button', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openExport() }, S.export);
-    this.settingsBtn = h('button', { class: 'btn btn-quiet', type: 'button', 'aria-label': S.settings, title: S.settings, onclick: () => this.openSettings() }, '⚙');
+    this.paletteBtn = h('button', { class: 'palette-trigger', type: 'button', hidden: true, 'aria-keyshortcuts': 'Control+K Meta+K', onclick: () => this.openPalette() }, glyph('search'), h('span', { class: 'palette-placeholder' }, S.palette.trigger), h('span', { class: 'kbd', 'aria-hidden': 'true' }, S.palette.kbd));
+    this.printBtn = h('button', { class: 'btn btn-quiet print-button', type: 'button', hidden: true, 'aria-label': S.print, title: S.print, onclick: () => this.openPrint() }, glyph('print'));
+    this.changesBtn = h('button', { class: 'btn btn-secondary changes-button', type: 'button', hidden: true, 'aria-disabled': true, title: S.downloadNone, onclick: () => this.ws && this.ws.openChangesTab() }, h('span', { class: 'changes-label' }, S.changesN(0)));
+    this.changesSplit = h('button', { class: 'btn btn-secondary split-chevron changes-split', type: 'button', hidden: true, 'aria-label': S.download, title: S.download, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openChangesMenu() }, '\u2304');
+    this.runSlot = h('span', { class: 'run-slot', hidden: true });
     this.moreBtn = h('button', { class: 'btn btn-quiet more-button', type: 'button', hidden: true, 'aria-label': S.more, title: S.more, 'aria-haspopup': 'menu', 'aria-expanded': false, onclick: () => this.openMore() }, '\u22ef');
-    this.downloadCount = h('span', { class: 'dl-count' });
-    this.downloadBtn = h('button', { class: 'btn', type: 'button', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': false, 'aria-disabled': true, title: S.downloadNone, onclick: () => this.openDownload() }, S.download, this.downloadCount);
     this.topbar = h('header', { class: 'topbar' },
       h('h1', { class: 'brand' }, markImg('brand-mark', 28), h('span', { class: 'wordmark' }, S.appName)),
-      this.fileBtn, this.fileMeta, h('span', { class: 'spacer' }), this.paletteBtn, this.printBtn, this.exportBtn, this.moreBtn, this.settingsBtn, this.downloadBtn);
+      this.fileName, this.fileMeta, h('span', { class: 'spacer' }), this.paletteBtn, this.changesBtn, this.changesSplit, this.printBtn, this.runSlot, this.moreBtn);
     this.input = h('input', { type: 'file', class: 'sr-only', accept: '.xlsx,.xlsm,.xltx,.xltm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', tabindex: '-1', 'aria-label': S.chooseFile });
     this.input.addEventListener('change', () => {
       if (this.input.files && this.input.files[0]) this.openFile(this.input.files[0]);
@@ -192,14 +202,15 @@ export class App {
   showEmpty(message) {
     clear(this.mainEl);
     this.ws = null;
-    this.fileBtn.hidden = true;
+    this.fileName.hidden = true;
     this.fileMeta.hidden = true;
     this.problemsBtn.hidden = true;
     this.paletteBtn.hidden = true;
     this.printBtn.hidden = true;
-    this.exportBtn.hidden = true;
+    this.changesBtn.hidden = true;
+    this.changesSplit.hidden = true;
+    this.runSlot.hidden = true;
     this.moreBtn.hidden = true;
-    this.downloadBtn.hidden = true;
     this.zone = h('div', { class: 'dropzone' }, h('p', { class: 'item-meta' }, S.emptyPrompt), h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.input.click() }, S.chooseFile));
     this.mainEl.append(h('div', { class: 'empty' }, h('div', { class: 'empty-inner' },
       markImg('mark', 64),
@@ -286,10 +297,10 @@ export class App {
 
   syncDownload() {
     const n = this.session.editCount;
-    this.downloadBtn.setAttribute('aria-disabled', String(n === 0));
-    if (n === 0) this.downloadBtn.setAttribute('title', S.downloadNone);
-    else this.downloadBtn.removeAttribute('title');
-    this.downloadCount.textContent = n === 0 ? '' : S.downloadCount(n);
+    this.changesBtn.setAttribute('aria-disabled', String(n === 0));
+    if (n === 0) this.changesBtn.setAttribute('title', S.downloadNone);
+    else this.changesBtn.removeAttribute('title');
+    this.changesBtn.querySelector('.changes-label').textContent = S.changesN(n);
   }
 
   syncLeaveGuard() {
@@ -372,7 +383,7 @@ export class App {
     this.session = next;
     this.settings = { ...this.settings };
     clear(this.mainEl);
-    this.ws = new Workspace(this.mainEl, this.session, this.settings, this.status);
+    this.ws = new Workbench(this.mainEl, this.session, this.settings, this.status, { runSlot: this.runSlot });
     this.ws.onEdit(() => {
       this.status.set({ edits: this.session.editCount });
       this.syncDownload();
@@ -392,14 +403,15 @@ export class App {
     const split = dot > 0 ? dot : file.name.length;
     this.fileHead.textContent = file.name.slice(0, split);
     this.fileTail.textContent = file.name.slice(split);
-    this.fileBtn.hidden = false;
+    this.fileName.hidden = false;
     this.fileMeta.textContent = S.fileMeta(file.size);
     this.fileMeta.hidden = false;
     this.paletteBtn.hidden = false;
     this.printBtn.hidden = false;
-    this.exportBtn.hidden = false;
+    this.changesBtn.hidden = false;
+    this.changesSplit.hidden = false;
+    this.runSlot.hidden = false;
     this.moreBtn.hidden = false;
-    this.downloadBtn.hidden = false;
     this.status.set({ counts: S.fileCounts(next.queries.length, next.modules.length) });
     this.ws.renderRail();
     this.ws.selectFirst();
@@ -431,15 +443,45 @@ export class App {
     if (!ws) return;
     const count = this.session ? this.session.editCount : 0;
     const wide = ws.presetsAvailable();
+    const theme = this.settings.theme === 'dark' ? S.themeDark : this.settings.theme === 'light' ? S.themeLight : S.themeSystem;
+    const density = this.settings.density === 'compact' ? S.densityCompact : S.densityComfortable;
     menu(this.moreBtn, [
+      { label: S.moreOpenFile, run: () => this.input.click() },
+      { label: S.moreDetails, run: () => this.showDetails() },
+      { label: S.moreFind, run: () => ws.openFind(false) },
       { heading: true, label: S.moreLayout },
+      { label: S.moreTheme(theme), run: () => {
+        const next = this.settings.theme === 'system' ? 'light' : this.settings.theme === 'light' ? 'dark' : 'system';
+        Object.assign(this.settings, { theme: next });
+        applyTheme(next);
+      } },
+      { label: S.moreDensity(density), run: () => {
+        const next = this.settings.density === 'comfortable' ? 'compact' : 'comfortable';
+        Object.assign(this.settings, { density: next });
+        applyDensity(next);
+      } },
       ...PRESET_ORDER.map((id) => ({ label: S.presets[id], run: () => ws.applyPreset(id), disabled: !wide })),
       { heading: true, label: S.sourcesUi.title },
       { label: S.menuSources, run: () => ws.openSources() },
+      { label: S.settings, run: () => this.openSettings() },
+      { label: S.moreShortcuts, run: () => this.openShortcuts() },
+      { label: S.moreAbout, run: () => this.openAbout() },
       { heading: true, label: S.moreChanges },
-      { label: count ? S.moreReview(count) : S.moreNone, run: () => ws.openChangesTab(), disabled: !count },
       { label: S.moreRevert, run: () => ws.revertAllConfirmed(), disabled: !count }
     ]);
+  }
+
+  openChangesMenu() {
+    const count = this.session ? this.session.editCount : 0;
+    menu(this.changesSplit, [
+      { label: S.moreReview(count), run: () => this.openChanges(), disabled: count === 0 },
+      { label: S.saveCopy, run: () => this.openExport() },
+      { label: S.download, run: () => this.openDownload(), disabled: count === 0 }
+    ]);
+  }
+
+  openAbout() {
+    detailsDialog([[S.appName, S.aboutBody]]);
   }
 
   openSettings() {
@@ -468,12 +510,14 @@ export class App {
     const msg = h('p', { class: 'warn', role: 'alert', hidden: true });
     const blocked = s.vbaProblems();
     const firstBlocked = blocked.size ? [...blocked][0] : null;
+    const structure = (this.ws ? this.ws.structureRows(s.moduleEdits) : []).slice(0, 5);
     const go = h('button', { class: 'btn btn-primary', type: 'button', disabled: qn + mn === 0 || signed || blocked.size > 0 }, S.download);
     const content = h('div', { class: 'popover-body' },
       h('p', null, qn + mn === 0 ? S.downloadNone : S.changedSummary(qn, mn)),
       qn ? h('label', { class: 'check', for: 'dl-refresh' }, refresh, S.refreshOnOpen) : null,
       qn ? h('p', { class: 'note' }, S.cacheNote) : null,
       firstBlocked ? h('p', { class: 'warn', role: 'alert' }, S.vbaBlocked(firstBlocked[0], errorMessage(firstBlocked[1][0].code, firstBlocked[1][0]))) : null,
+      structure.length ? h('div', { class: 'note structure-note' }, h('p', null, S.structure.title(structure.length)), h('ul', { class: 'structure-list' }, ...structure.map((p) => h('li', null, `${p.item.name}: ${S.problem[p.code] ? S.problem[p.code](p.args) : p.code}`)))) : null,
       signed ? h('p', { class: 'warn' }, S.signedNote) : null,
       signed ? h('label', { class: 'check', for: 'dl-ack' }, ack, S.understand) : null,
       msg,
@@ -481,7 +525,7 @@ export class App {
         pop.close();
         this.openChanges();
       } }, S.reviewChanges), go));
-    const pop = popover(this.downloadBtn, content, null, S.download);
+    const pop = popover(this.changesSplit, content, null, S.download);
     ack.addEventListener('change', () => {
       go.disabled = !ack.checked || qn + mn === 0 || blocked.size > 0;
     });
@@ -537,6 +581,12 @@ export class App {
       return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
     };
     const problems = (this.ws ? this.ws.problemRows : []).filter((p) => names.has(p.item.name) && (p.severity === 'error' || p.severity === 'warning'));
+    if (this.ws) {
+      const seen = new Set(problems.map((p) => `${p.code}:${p.item.name}:${p.line}`));
+      for (const p of this.ws.structureRows(this.session.moduleEdits)) {
+        if (names.has(p.item.name) && !seen.has(`${p.code}:${p.item.name}:${p.line}`)) problems.push(p);
+      }
+    }
     changesDialog(changes, {
       summaries: summariesFor(changes, moduleKind),
       problems,
@@ -595,7 +645,7 @@ export class App {
         this.settings.csvGuard = v;
       } }
     ];
-    menu(this.exportBtn, entries);
+    menu(this.changesSplit, entries);
   }
 
   saveCode(item) {

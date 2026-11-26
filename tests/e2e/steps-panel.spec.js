@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile } from './helpers.js';
+import { ext, openApp, loadFile, changesButton } from './helpers.js';
 
 const editorText = (page) => page.locator('.editor-wrap textarea').inputValue();
 
@@ -55,16 +55,16 @@ test('T-WB-14: rename from the keyboard rewrites the definition and its reader, 
 test('T-WB-14: delete, bypass and restore, duplicate change the query text and the dirty state', async ({ page }) => {
   await open(page);
   const before = await editorText(page);
-  await expect(page.locator('.topbar button', { hasText: 'Download' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(changesButton(page)).toHaveAttribute('aria-disabled', 'true');
   await page.locator('.step-row').nth(1).focus();
   await page.keyboard.press('b');
   await expect(page.locator('.step-row').nth(1)).toHaveClass(/is-bypassed/);
   expect(await editorText(page)).toContain('Table.AddColumn(Source,');
-  await expect(page.locator('.topbar button', { hasText: 'Download' })).toHaveAttribute('aria-disabled', 'false');
+  await expect(changesButton(page)).toHaveAttribute('aria-disabled', 'false');
   await page.locator('.step-row').nth(1).focus();
   await page.keyboard.press('b');
   expect(await editorText(page)).toBe(before);
-  await expect(page.locator('.topbar button', { hasText: 'Download' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(changesButton(page)).toHaveAttribute('aria-disabled', 'true');
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Control+d');
   await expect(page.locator('.step-row')).toHaveCount(4);
@@ -75,23 +75,37 @@ test('T-WB-14: delete, bypass and restore, duplicate change the query text and t
   expect(await editorText(page)).toBe(before);
 });
 
-test('T-WB-14: moving a linear step asks to rewire, and cancelling changes nothing', async ({ page }) => {
+test('T-WB-15: moving a linear step previews the rewiring, and cancelling changes nothing', async ({ page }) => {
   await open(page);
   const before = await editorText(page);
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
-  const dlg = page.locator('dialog[open]');
-  await expect(dlg).toBeVisible();
-  await expect(dlg).toContainText('Added Custom');
-  await dlg.getByRole('button', { name: 'Cancel' }).click();
+  const pop = page.locator('.step-preview');
+  await expect(pop).toBeVisible();
+  await expect(pop).toContainText('Added Custom');
+  await expect(pop.locator('p').first()).toHaveText('6 lines of code change in more than one step.');
+  const diff = pop.locator('.step-preview-diff');
+  await expect(diff.locator(':scope > div')).toHaveCount(6);
+  await expect(diff.locator('.diff-add')).toHaveCount(3);
+  await expect(diff.locator('.diff-del')).toHaveCount(3);
+  const blank = await diff.locator(':scope > div').evaluateAll((els) => els.filter((e) => !e.textContent.trim()).length);
+  expect(blank).toBe(0);
+  const actionsInside = await page.evaluate(() => {
+    const inside = (el) => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight; };
+    const buttons = [...document.querySelectorAll('.step-preview .dialog-actions .btn')];
+    return buttons.length === 2 && buttons.every(inside);
+  });
+  expect(actionsInside).toBe(true);
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await editorText(page)).toBe(before);
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
-  await page.locator('dialog[open]').getByRole('button', { name: 'Move and rewire' }).click();
+  await expect(pop).toBeVisible();
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.locator('.step-row').nth(1)).toContainText('Added Custom');
   const after = await editorText(page);
   expect(after.indexOf('#"Added Custom" =')).toBeLessThan(after.indexOf('#"Changed Type" ='));
   expect(after).toContain('#"Changed Type" = Table.TransformColumnTypes(#"Added Custom"');
-  await expect(page.locator('.step-row').nth(1)).toContainText('Added Custom');
 });
 
 test('T-WB-14: a refused edit says why and changes nothing', async ({ page }) => {

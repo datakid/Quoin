@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, item, editor, downloadButton } from './helpers.js';
+import { ext, openApp, loadFile, item, editor, changesButton, openDownload } from './helpers.js';
 
 async function editAndOpenPopover(page) {
   await loadFile(page, ext('pq_vba_complex.xlsm'));
   await item(page, 'RawInput').click();
   await editor(page).fill(`${await editor(page).inputValue()}\n// saved`);
-  await downloadButton(page).click();
+  await openDownload(page);
   const ack = page.locator('.popover input[type=checkbox]');
   if (await ack.count()) await ack.check();
 }

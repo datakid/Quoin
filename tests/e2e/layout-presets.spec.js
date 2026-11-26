@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, ext, item, editor } from './helpers.js';
+import { openApp, ext, item, editor, changesButton } from './helpers.js';
 
 const width = (page, sel) => page.locator(sel).evaluate((el) => Math.round(el.getBoundingClientRect().width));
 const more = (page) => page.getByRole('button', { name: 'More actions' });
@@ -21,7 +21,7 @@ async function preset(page, name) {
   await page.getByRole('menuitem', { name, exact: true }).click();
 }
 
-test('T-WB-10: the More menu lists the three layouts and the changes actions, and is hidden until a workbook is open', async ({ page }) => {
+test('T-WB-10: the More menu lists the file and view entries, the layouts and the changes actions, and is hidden until a workbook is open', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await openApp(page);
   await expect(more(page)).toBeHidden();
@@ -29,8 +29,21 @@ test('T-WB-10: the More menu lists the three layouts and the changes actions, an
   await page.waitForSelector('.nav-list [role=treeitem][data-type=query]');
   await more(page).click();
   const names = await page.getByRole('menuitem').allTextContents();
-  expect(names).toEqual(['Write', 'Debug', 'Review', 'Sources\u2026', 'No changes to review', 'Revert all changes']);
-  await expect(page.getByRole('menuitem', { name: 'No changes to review' })).toBeDisabled();
+  expect(names).toEqual([
+    'Open file',
+    'File details',
+    'Find in the workbook',
+    expect.stringMatching(/^Theme: /),
+    expect.stringMatching(/^Density: /),
+    'Write',
+    'Debug',
+    'Review',
+    'Sources\u2026',
+    'Settings',
+    'Shortcut sheet',
+    'About',
+    'Revert all changes',
+  ]);
   await expect(page.getByRole('menuitem', { name: 'Revert all changes' })).toBeDisabled();
 });
 
@@ -78,22 +91,22 @@ test('T-WB-10: the layouts are palette commands too', async ({ page }) => {
   expect(await top(page)).toBe('50fr');
 });
 
-test('T-WB-10: with edits, Review changes opens the Changes tab and Revert all asks and then reverts', async ({ page }) => {
+test('T-WB-10: with edits, the Changes button opens the Changes tab and Revert all asks and then reverts', async ({ page }) => {
   await open(page);
   const original = await editor(page).inputValue();
   await editor(page).fill(`${original.replace(/\s+$/, '')}\n// edited`);
-  await more(page).click();
-  const review = page.getByRole('menuitem', { name: 'Review 1 change' });
-  await expect(review).toBeEnabled();
-  await review.click();
+  await expect(changesButton(page)).toHaveAccessibleName('Changes 1');
+  await changesButton(page).click();
   await expect(page.getByRole('tab', { name: /^Changes/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.dock-panel[data-panel=changes] .change-item')).toHaveCount(1);
   await more(page).click();
   await page.getByRole('menuitem', { name: 'Revert all changes' }).click();
   await page.getByRole('dialog', { name: 'Revert all changes' }).getByRole('button', { name: 'Revert all' }).click();
   await expect.poll(() => editor(page).inputValue()).toBe(original);
+  await expect(changesButton(page)).toHaveAccessibleName('Changes 0');
+  await expect(changesButton(page)).toHaveAttribute('aria-disabled', 'true');
   await more(page).click();
-  await expect(page.getByRole('menuitem', { name: 'No changes to review' })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: 'Revert all changes' })).toBeDisabled();
 });
 
 test('T-WB-10: on a narrow window the layouts are disabled and the palette command says why', async ({ page }) => {

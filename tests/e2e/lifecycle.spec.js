@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, fx, openApp, loadFile, item, editor, runButton } from './helpers.js';
+import { ext, fx, openApp, loadFile, item, editor, runButton, openSettings } from './helpers.js';
 
 const cancelButton = (page) => page.getByRole('button', { name: 'Cancel' });
 
@@ -50,7 +50,7 @@ test('T-E-05: done, error, parse error, cancelled and timeout each end idle with
   await item(page, 'StudentResults').click();
   await rerunWorks(page);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.locator('#set-timeout').fill('1');
   await page.locator('dialog[open]').getByRole('button', { name: 'Save' }).click();
   await item(page, 'Slow').click();

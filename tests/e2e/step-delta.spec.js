@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, item, editor } from './helpers.js';
+import { ext, openApp, loadFile, item, editor, openSettings } from './helpers.js';
 
 const QUERY = [
   'let',
@@ -104,7 +104,7 @@ test('T-WB-14: Pin this result is disabled for a step with no table result', asy
 });
 
 async function setSetting(page, label, on) {
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   const box = page.getByRole('dialog', { name: 'Settings' }).getByLabel(label);
   if (on) await box.check();
   else await box.uncheck();
@@ -141,10 +141,16 @@ async function shortSetup(page) {
   await expect(page.locator('.result-line')).toContainText('2 rows');
 }
 
+const applyPreview = async (page) => {
+  await expect(page.locator('.step-preview')).toBeVisible();
+  await page.locator('.step-preview').getByRole('button', { name: 'Apply' }).click();
+};
+
 test('T-WB-15: without Auto-run the result stays as it was after a structural edit, and a manual run brings it up to date', async ({ page }) => {
   await shortSetup(page);
   await page.locator('.step-row', { hasText: 'Oslo' }).focus();
   await page.keyboard.press('Delete');
+  await applyPreview(page);
   await expect(page.locator('.step-row')).toHaveCount(2);
   await page.waitForTimeout(500);
   await expect(page.locator('.result-line')).toContainText('2 rows');
@@ -157,6 +163,7 @@ test('T-WB-15: with Auto-run on, a structural edit, its Undo and a restore run t
   await setSetting(page, 'Run the steps again after structural edits', true);
   await page.locator('.step-row', { hasText: 'Oslo' }).focus();
   await page.keyboard.press('Delete');
+  await applyPreview(page);
   await expect(page.locator('.step-row')).toHaveCount(2);
   await expect(page.locator('.result-line')).toContainText('4 rows');
   await page.getByRole('button', { name: /^Undo/ }).click();

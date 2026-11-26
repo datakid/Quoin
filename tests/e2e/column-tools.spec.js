@@ -156,6 +156,7 @@ test('T-WB-16: the profile of a text column reports its length range and kinds',
 test('T-WB-16: Add as a step shows the exact M, inserts it after the shown step, reruns, and the new step equals the view', async ({ page }) => {
   await setup(page);
   await filterByCondition(page, 'City', 'equals', 'Oslo');
+  await expect(chip(page)).toContainText('3 of 6 rows');
   const viewRows = await gridRows(page);
   expect(viewRows.length).toBe(3);
   await menuItem(page, 'City', 'Add as a step…');

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, item, editor, downloadButton } from './helpers.js';
+import { ext, openApp, loadFile, item, editor, changesButton, openDownload } from './helpers.js';
 
 test('T-E-04b: a character outside the code page blocks the save with a specific message', async ({ page }) => {
   await openApp(page);
@@ -9,14 +9,14 @@ test('T-E-04b: a character outside the code page blocks the save with a specific
   await editor(page).fill(original.replace('Option Explicit', "Option Explicit\n' arrow \u2192 here"));
   await expect(page.locator('.info-strip.problem')).toContainText('Line 2, column 9: \u2192 cannot be saved in code page 1252.');
   await expect(page.locator('.gutter .gutter-err')).toHaveText('● 2');
-  await downloadButton(page).click();
+  await openDownload(page);
   await expect(page.locator('.popover .warn:not([hidden])')).toContainText('Sheet1 cannot be saved.');
   await expect(page.locator('.popover .warn:not([hidden])')).toContainText('code page 1252');
   await expect(page.locator('.popover .btn-primary')).toBeDisabled();
   await page.keyboard.press('Escape');
   await editor(page).fill(original.replace('Option Explicit', "Option Explicit\n' euro \u20AC here"));
   await expect(page.locator('.info-strip.problem')).toHaveCount(0);
-  await downloadButton(page).click();
+  await openDownload(page);
   await expect(page.locator('.popover .warn:not([hidden])')).toHaveCount(0);
   await expect(page.locator('.popover .btn-primary')).toBeEnabled();
 });

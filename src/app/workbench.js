@@ -16,7 +16,7 @@ import { mountProblems } from '../ui/wb/problems-view.js';
 import { Dock } from '../ui/wb/dock.js';
 import { renderPinned, renderQueue, renderCompare, renderChanges, pinLabel } from '../ui/wb/dock-views.js';
 import { summariesFor } from './change-summary.js';
-import { openFind } from '../ui/wb/find-dialog.js';
+import { buildFindPanel } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
 import { insertViewSteps } from '../core/wb/view-steps.js';
 import { OpHistory } from '../core/wb/op-history.js';
@@ -26,7 +26,14 @@ import { sourcesDialog, unboundDialog } from '../ui/wb/sources-dialog.js';
 import { DEFAULT_LIMITS } from '../core/limits.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection, unboundFor } from '../core/wb/sources.js';
-import { supportedNames } from '../core/wb/lib-names.js';
+import { M_NAMES, supportedNames } from '../ui/wb/m-names.js';
+import { attachCompletion } from '../ui/wb/autocomplete.js';
+import { attachSignature } from '../ui/wb/signature.js';
+import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
+import { analyseCalls, definitionOf } from '../core/vba/refs.js';
+import { structureProblems } from '../core/vba/structure.js';
+import { literal, numberLiteral, textLiteral } from '../core/wb/m-gen.js';
+import { diffLines } from '../core/diff.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -46,11 +53,34 @@ function loadLabel(load) {
   return S.connectionOnly;
 }
 
-export class Workspace {
-  constructor(host, session, settings, status) {
+function invokeArg(p, raw) {
+  if (raw === '') return p.optional ? { omit: true } : { missing: true };
+  const t = p.type && p.type.name ? String(p.type.name).toLowerCase() : null;
+  if (t === 'number') {
+    const n = Number(raw);
+    return Number.isFinite(n) ? { m: numberLiteral(n) } : { bad: true };
+  }
+  if (t === 'logical') {
+    if (/^true$/i.test(raw)) return { m: 'true' };
+    if (/^false$/i.test(raw)) return { m: 'false' };
+    return { bad: true };
+  }
+  if (t === 'date' || t === 'time' || t === 'datetime' || t === 'datetimezone') {
+    try {
+      return { m: literal({ [t]: raw }) };
+    } catch (e) {
+      return { bad: true };
+    }
+  }
+  return { m: textLiteral(raw) };
+}
+
+export class Workbench {
+  constructor(host, session, settings, status, { runSlot = null } = {}) {
     this.session = session;
     this.settings = settings;
     this.status = status;
+    this.runSlot = runSlot;
     this.runner = new Runner();
     this.item = null;
     this.tabs = new TabModel();
@@ -101,6 +131,7 @@ export class Workspace {
     this.lastRunErrors = new Map();
     this.onProblems = null;
     this.stepResults = new Map();
+    this.shownStepName = null;
     this.stepsHost = h('div', { class: 'inspector-section steps-host' });
     this.outlineHost = h('div', { class: 'inspector-section outline-host' });
     this.inspector.append(this.stepsHost, this.outlineHost);
@@ -108,6 +139,7 @@ export class Workspace {
     this.depsPanel = new DepsPanel(this.stepsHost, { open: (n) => this.select({ type: 'query', name: n }), graph: () => this.openGraph() });
     this.outlinePanel = new OutlinePanel(this.outlineHost, {
       go: (line) => this.editor.goto(line, 1),
+      goCall: (key) => this.openProc(key),
       revert: (key, name) => this.revertProc(key, name, false),
       putBack: (key, name) => this.revertProc(key, name, true),
       runLinked: (name, names) => this.runLinked(name, names)
@@ -182,8 +214,13 @@ export class Workspace {
     this.groupsEl.append(this.dropSplit);
     this.addGroup();
     this.editor = this.groups[0].editor;
-    this.runBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.run() }, S.run, h('span', { class: 'item-meta' }, '⌘↵'));
-    this.moreRunBtn = h('button', { class: 'btn btn-quiet more-run', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.panes.moreRun, onclick: () => this.openRunMenu() }, '\u25be');
+    this.runBtn = h('button', { class: 'btn btn-primary run-main', type: 'button', onclick: () => this.run() }, S.run, h('span', { class: 'item-meta' }, '⌘↵'));
+    this.runSplitBtn = h('button', { class: 'btn btn-primary run-split', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.panes.moreRun, title: S.panes.moreRun, onclick: () => this.openRunMenu(this.runSplitBtn) }, '\u2304');
+    if (this.runSlot) {
+      this.runSplit = h('span', { class: 'split-run' }, this.runBtn, this.runSplitBtn);
+      this.runSlot.append(this.runSplit);
+    }
+    this.moreRunBtn = this.runSplitBtn;
     this.dockToggle = h('button', { class: 'btn btn-quiet dock-toggle', type: 'button', 'aria-expanded': 'true', 'aria-label': S.panes.collapseDock, onclick: () => this.toggleDock() }, '\u2304');
     this.cancelBtn = h('button', { class: 'btn', type: 'button', hidden: true, onclick: () => this.cancel() }, S.cancel);
     this.steps = h('div', { class: 'steps', role: 'group', 'aria-label': S.stepsLabel });
@@ -192,7 +229,7 @@ export class Workspace {
     this.diffBox.addEventListener('change', () => this.applyDiffs());
     this.diffBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.showDifferences() }, S.viewDifferences);
     this.splitter = h('div', { class: 'splitter', role: 'separator', 'aria-orientation': 'horizontal', tabindex: '0', 'aria-label': S.resizeSplit, 'aria-valuemin': '15', 'aria-valuemax': '85', 'aria-valuenow': '45' });
-    this.runbar = h('div', { class: 'runbar' }, this.splitter, this.runBtn, this.moreRunBtn, this.cancelBtn, this.steps, h('span', { class: 'spacer' }), this.diffLabel, this.diffBtn, this.dockToggle);
+    this.runbar = h('div', { class: 'runbar' }, this.splitter, this.cancelBtn, this.steps, h('span', { class: 'spacer' }), this.diffLabel, this.diffBtn, this.dockToggle);
     this.progress = h('div', { class: 'progress', hidden: true, role: 'progressbar', 'aria-label': S.running });
     this.crumbs = h('div', { class: 'crumbs', hidden: true });
     this.capNotice = h('div', { class: 'result-notice', hidden: true });
@@ -267,13 +304,14 @@ export class Workspace {
   findItems() {
     const s = this.session;
     const cur = this.item;
+    const picked = new Set(this.nav ? this.nav.selectedItems().map((i) => `${i.type}:${i.name}`) : []);
     const queries = s.queries.map((q) => {
       const ed = s.queryEditable();
-      return { type: 'query', name: q.name, text: s.textOf({ type: 'query', name: q.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), current: !!cur && cur.type === 'query' && cur.name === q.name };
+      return { type: 'query', name: q.name, text: s.textOf({ type: 'query', name: q.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), selected: picked.has(`query:${q.name}`), current: !!cur && cur.type === 'query' && cur.name === q.name };
     });
     const modules = s.modules.map((m) => {
       const ed = s.moduleEditable(m.name);
-      return { type: 'module', name: m.name, text: s.textOf({ type: 'module', name: m.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), current: !!cur && cur.type === 'module' && cur.name === m.name };
+      return { type: 'module', name: m.name, text: s.textOf({ type: 'module', name: m.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), selected: picked.has(`module:${m.name}`), current: !!cur && cur.type === 'module' && cur.name === m.name };
     });
     if (this.item && this.item.type === 'query') {
       const live = queries.find((q) => q.current);
@@ -288,19 +326,27 @@ export class Workspace {
 
   openFind(replace) {
     const sel = this.editor.getSelectionText ? this.editor.getSelectionText() : '';
-    openFind({ items: () => this.findItems() }, {
-      onOpen: (item, m) => {
-        this.select(item);
-        this.editor.goto(m.line, m.col);
-      },
-      onApply: (changes, message) => {
-        for (const c of changes) {
-          this.select(c.item);
-          this.editor.replaceDiff(c.text);
-        }
-        this.status.set({ note: message });
-      }
-    }, { replace, initial: sel && !/[\r\n]/.test(sel) ? sel : '' });
+    if (!this.findPanel) {
+      this.findPanel = buildFindPanel({ items: () => this.findItems() }, {
+        onOpen: (item, m) => {
+          this.select(item);
+          this.editor.goto(m.line, m.col);
+        },
+        onApply: (changes, message) => {
+          for (const c of changes) {
+            this.select(c.item);
+            this.editor.replaceDiff(c.text);
+          }
+          this.status.set({ note: message });
+        },
+        onDismiss: () => this.dock.show('result')
+      });
+      this.dock.panel('find').append(this.findPanel.el);
+    }
+    this.findPanel.setMode(replace);
+    this.dock.show('find');
+    this.findPanel.focus();
+    this.findPanel.setQuery(sel && !/[\r\n]/.test(sel) ? sel : '');
     return true;
   }
 
@@ -321,7 +367,10 @@ export class Workspace {
     const open = isQuery || this.dock.current !== 'result';
     this.resultPanel.hidden = !open;
     this.main.dataset.dockOpen = String(!isQuery && open);
-    if (!isQuery) this.pinBtn.hidden = true;
+    if (!isQuery) {
+      this.pinBtn.hidden = true;
+      if (this.dock.current === 'graph') this.mountGraphPanel();
+    }
   }
 
   onDockShow(id) {
@@ -544,6 +593,191 @@ export class Workspace {
     return found || model.steps[0].name;
   }
 
+  completionContext() {
+    const columns = new Map();
+    for (const [name, r] of this.stepResults) {
+      if (!r || r.status !== 'ok' || !r.result) continue;
+      const t = r.result.value && Array.isArray(r.result.value.columns) ? r.result.value : r.result;
+      if (Array.isArray(t.columns)) columns.set(name, t.columns.map((c) => (typeof c === 'string' ? c : c.name)));
+    }
+    return { library: M_NAMES, queries: this.session.queries.map((q) => q.name), self: this.item ? this.item.name : null, columns };
+  }
+
+  nameAtCaret() {
+    return resolveNameAt(this.editor.getText(), this.editor.caretOffset(), { queries: this.session.queries.map((q) => q.name), library: M_NAMES });
+  }
+
+  goToDefinition() {
+    if (!this.item) return false;
+    if (this.item.type === 'module') {
+      const found = this.vbaNameAtCaret();
+      if (!found) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      const def = this.vbaDefinitionOf(found);
+      if (!def) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      if (def.module !== this.item.name) this.select({ type: 'module', name: def.module });
+      this.editor.goto(def.startLine, 1);
+      return true;
+    }
+    if (this.item.type !== 'query') return false;
+    const res = this.nameAtCaret();
+    if (!res) {
+      this.status.set({ note: S.editor.noName });
+      return true;
+    }
+    if (res.kind === 'step') {
+      const text = this.editor.getText();
+      const place = lineColAt(text, res.binding.start);
+      this.editor.goto(place.line, place.col);
+      return true;
+    }
+    if (res.kind === 'query') {
+      const item = this.items().find((i) => i.type === 'query' && i.name.toLowerCase() === res.name.toLowerCase());
+      if (item) this.select(item);
+      return true;
+    }
+    if (res.kind === 'library') {
+      this.editor.signature.showEntry(res.library);
+      return true;
+    }
+    return false;
+  }
+
+  findReferences() {
+    if (!this.item) return false;
+    if (this.item.type === 'module') {
+      const found = this.vbaNameAtCaret();
+      if (!found) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      const def = this.vbaDefinitionOf(found);
+      if (!def) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      const textOf = (mod) => (this.item.name === mod ? this.editor.getText() : this.session.textOf({ type: 'module', name: mod }));
+      const rows = (this.callGraph().refs.get(def.key) || []).map((r) => {
+        const raw = textOf(r.module).split(/\r\n|\r|\n/)[r.line - 1] || '';
+        return { item: r.module, line: r.line, col: r.col, excerpt: raw.trim(), kind: 'reference' };
+      });
+      this.openReferences(def.name, rows);
+      return true;
+    }
+    if (this.item.type !== 'query') return false;
+    const res = this.nameAtCaret();
+    if (!res) return false;
+    if (res.kind === 'library') {
+      this.status.set({ note: S.editor.libraryName(res.name) });
+      return true;
+    }
+    if (res.kind === 'unknown') {
+      this.status.set({ note: S.editor.unknownName });
+      return true;
+    }
+    const queries = this.session.queries.map((q) => ({ name: q.name, text: this.session.textOf({ type: 'query', name: q.name }) }));
+    this.openReferences(res.name, referencesOf(queries, res.name));
+    return true;
+  }
+
+  openReferences(name, rows) {
+    const panel = this.dock.panel('references');
+    clear(panel);
+    const items = new Set(rows.map((r) => r.item));
+    const list = h('ul', { class: 'refs-list', 'aria-label': S.dock.tabs.references });
+    for (const r of rows) {
+      const item = this.items().find((i) => i.name.toLowerCase() === r.item.toLowerCase());
+      list.append(h('li', null, h('button', { class: 'btn btn-quiet ref-row', type: 'button', onclick: () => {
+        if (item) this.select(item);
+        this.editor.goto(r.line, r.col);
+      } },
+      h('span', { class: 'ref-item' }, r.item),
+      h('span', { class: 'ref-place item-meta' }, S.refs.at(r.line, r.col)),
+      r.kind === 'definition' ? h('span', { class: 'ref-kind item-meta' }, S.refs.definition) : null,
+      h('span', { class: 'ref-code' }, r.excerpt))));
+    }
+    if (!rows.length) list.append(h('li', { class: 'refs-empty item-meta' }, S.refs.empty(name)));
+    panel.append(h('div', { class: 'refs-head item-meta' }, S.refs.title(name, rows.length, items.size)), list);
+    this.dock.badge('references', rows.length || null);
+    this.dock.show('references');
+    if (window.matchMedia('(max-width: 639px)').matches) this.setPane('result');
+  }
+
+  renameAtCaret() {
+    if (!this.item || this.item.type !== 'query') return false;
+    const res = this.nameAtCaret();
+    if (!res) return false;
+    if (res.kind === 'query') {
+      this.status.set({ note: S.editor.renameQuery });
+      return true;
+    }
+    if (res.kind !== 'step' || !res.binding.topLevel) {
+      this.status.set({ note: S.editor.renameNested });
+      return true;
+    }
+    const model = stepsOf(this.editor.getText(), 0, { members: new Set(this.session.queries.map((q) => q.name)) });
+    if (model.shape !== 'let') return false;
+    const st = model.steps.find((s) => s.name.toLowerCase() === res.name.toLowerCase());
+    if (!st) return false;
+    this.startEditorRename(st);
+    return true;
+  }
+
+  startEditorRename(st) {
+    this.closeEditorRename();
+    const r = this.editor.caretRect();
+    const input = h('input', { class: 'step-rename', type: 'text', value: st.name, 'aria-label': S.stepsPanel.renameLabel });
+    const note = h('p', { class: 'rename-note item-meta' });
+    const pop = h('div', { class: 'popover rename-pop' }, input, note);
+    pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 360))}px`;
+    pop.style.top = `${r.top + r.height + 2}px`;
+    document.body.append(pop);
+    this.renamePop = pop;
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      const value = input.value.trim();
+      if (commit && value && value !== st.name) {
+        const res = renameStep(this.editor.getText(), st.index, value);
+        if (!res.ok) {
+          done = false;
+          note.textContent = res.reason;
+          input.focus();
+          return;
+        }
+        this.applySteps(res, S.stepsPanel.done.rename(value), value);
+      }
+      this.closeEditorRename();
+      this.editor.focus();
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        finish(true);
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(false);
+      }
+    });
+    input.addEventListener('blur', () => finish(false));
+    input.focus();
+    input.select();
+  }
+
+  closeEditorRename() {
+    if (this.renamePop) {
+      this.renamePop.remove();
+      this.renamePop = null;
+    }
+  }
+
   refreshSteps(focusName = null) {
     if (!this.item || this.item.type !== 'query') {
       this.stepsPanel.render(null);
@@ -556,7 +790,9 @@ export class Workspace {
     this.stepsPanel.setCountOptions({ countRows: this.settings.countRows, limit: DEFAULT_LIMITS.stepCountRows });
     this.stepsPanel.setResults(this.stepResults);
     this.stepsPanel.setRefreshedBy(this.item && this.item.type === 'query' ? this.refreshedByFor(this.item.name) : []);
-    this.stepsPanel.render(model, this.caretStep(model));
+    if (model.shape === 'function' || model.shape === 'function-let') this.renderInvoke(model);
+    else this.stepsPanel.render(model, this.caretStep(model));
+    this.paintStepBand();
     this.refreshDeps();
     if (focusName) this.stepsPanel.focusStep(focusName);
   }
@@ -591,13 +827,35 @@ export class Workspace {
   }
 
   mountGraphPanel() {
+    if (this.item && this.item.type === 'module') {
+      const graph = this.callGraph();
+      this.graphView = mountGraph(this.dock.panel('graph'), {
+        nodes: () => [...graph.procs.keys()],
+        edges: () => [...graph.procs.keys()].flatMap((k) => [...(graph.calls.get(k) || [])].map((t) => [k, t])),
+        statuses: () => new Map(),
+        upstream: (n) => [...(graph.calledBy.get(n) || [])],
+        downstream: (n) => [...(graph.calls.get(n) || [])]
+      }, {
+        open: (n) => this.openProc(n),
+        run: () => {},
+        runDownstream: () => {}
+      }, { start: null, runs: false });
+      return;
+    }
     const index = this.orchestrator.refresh();
     const cur = this.graphStart || (this.item && this.item.type === 'query' ? this.item.name : null);
     this.graphStart = null;
     this.graphView = mountGraph(this.dock.panel('graph'), {
       nodes: () => index.members.map((m) => m.name),
       edges: () => index.members.flatMap((m) => [...(index.refs.get(m.name) || [])].map((d) => [d, m.name])),
-      statuses: () => this.orchestrator.statuses(),
+      statuses: () => {
+        const st = this.orchestrator.statuses();
+        const rows = this.problemRows || [];
+        if (!rows.length) return st;
+        const marked = new Map(st);
+        for (const p of rows) if (p.item && p.item.type === 'query' && p.severity === 'error' && !marked.get(p.item.name)) marked.set(p.item.name, 'error');
+        return marked;
+      },
       upstream: (n) => [...upstreamOf(index, [n], { transitive: false })],
       downstream: (n) => [...downstreamOf(index, [n], { transitive: false })]
     }, {
@@ -656,6 +914,49 @@ export class Workspace {
     this.status.set({ note: `${S.pqLinks.forMacro(procName)}: ${S.batch.summary(this.orchestrator.counts())}` });
   }
 
+  callGraph() {
+    const modules = this.session.modules.map((m) => ({
+      name: m.name,
+      kind: this.moduleKindOf({ name: m.name }),
+      text: this.item && this.item.type === 'module' && this.item.name === m.name ? this.editor.getText() : this.session.textOf({ type: 'module', name: m.name })
+    }));
+    const sig = modules.map((m) => `${m.name}:${m.kind}:${m.text.length}:${m.text}`).join('|');
+    if (this.callCache && this.callCache.sig === sig) return this.callCache.graph;
+    const graph = analyseCalls(modules);
+    this.callCache = { sig, graph };
+    return graph;
+  }
+
+  openProc(key) {
+    const p = this.callGraph().procs.get(key);
+    if (!p) return;
+    this.select({ type: 'module', name: p.module });
+    this.editor.goto(p.startLine, 1);
+  }
+
+  vbaNameAtCaret() {
+    const text = this.editor.getText();
+    const at = this.editor.caretOffset();
+    const lineStart = Math.max(text.lastIndexOf('\n', at - 1), text.lastIndexOf('\r', at - 1)) + 1;
+    const m = /([A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(text.slice(lineStart, at));
+    if (!m) return null;
+    const parts = m[1].split('.').map((x) => x.trim()).filter(Boolean);
+    if (!parts.length || parts.length > 2) return null;
+    return parts.length === 2 ? { module: parts[0], name: parts[1] } : { module: null, name: parts[0] };
+  }
+
+  vbaDefinitionOf(found) {
+    const graph = this.callGraph();
+    if (found.module) {
+      const direct = graph.procs.get(`${found.module}.${found.name}`);
+      if (direct) return direct;
+      const lower = found.module.toLowerCase();
+      for (const p of graph.procs.values()) if (p.module.toLowerCase() === lower && p.name.toLowerCase() === found.name.toLowerCase()) return p;
+      return null;
+    }
+    return definitionOf(graph, found.name, this.item.name);
+  }
+
   moduleKindOf(item) {
     const m = this.session.module(item.name);
     return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
@@ -678,7 +979,18 @@ export class Workspace {
       const resolved = resolveLinks(ls, ctx);
       links.set(pname, { plan: runPlanOf(resolved), hasAll: resolved.some((r) => r.kind === 'all'), reads: [...new Set(resolved.filter((r) => r.kind === 'read' && !r.dynamic && r.name).map((r) => r.name))] });
     }
-    this.outlinePanel.render(outline, match, line, links);
+    const graph = this.callGraph();
+    const calls = new Map();
+    for (const p of outline.procedures) {
+      const key = `${this.item.name}.${p.name}`;
+      if (!graph.procs.has(key)) continue;
+      calls.set(p.name, {
+        calls: [...(graph.calls.get(key) || [])].sort(),
+        calledBy: [...(graph.calledBy.get(key) || [])].sort(),
+        noCallers: graph.noCallers.includes(key)
+      });
+    }
+    this.outlinePanel.render(outline, match, line, links, calls);
     this.updateCrumb(outline, line);
   }
 
@@ -712,6 +1024,127 @@ export class Workspace {
     if (!this.stepsModel || this.item === null || this.item.type !== 'query') return;
     const name = this.caretStep(this.stepsModel);
     if (name !== this.stepsPanel.caret) this.stepsPanel.render(this.stepsModel, name);
+    this.paintStepBand();
+    this.followCaret();
+  }
+
+  renderInvoke(model) {
+    if (!this.invokeArgs) this.invokeArgs = new Map();
+    const params = model.params || [];
+    this.stepsPanel.renderInvoke({
+      params,
+      values: this.invokeArgs.get(this.item.name) || {},
+      onInvoke: (raw) => {
+        const texts = [];
+        for (const p of params) {
+          const arg = invokeArg(p, raw[p.name] === undefined ? '' : String(raw[p.name]));
+          if (arg.missing || arg.bad) {
+            const note = arg.missing ? S.stepsPanel.invokeNeed(p.name) : S.stepsPanel.invokeBad(p.name);
+            this.stepsPanel.announce(note);
+            this.status.set({ note });
+            return;
+          }
+          if (!arg.omit) texts.push(arg.m);
+        }
+        this.invokeArgs.set(this.item.name, raw);
+        this.invokeQuery(this.item.name, texts);
+      }
+    });
+  }
+
+  async invokeQuery(name, argTexts) {
+    if (this.runner.running) return false;
+    const s = this.session;
+    const token = ++this.runToken;
+    this.setPane('result');
+    this.setRunning(true);
+    const set = this.settings;
+    const res = await this.runner.run({
+      sectionText: `${s.currentSectionText()} shared __Invoke = ${quoteIdent(name)}(${argTexts.join(', ')});`,
+      queryName: '__Invoke',
+      snapshot: await s.snapshot(),
+      bindings: [...s.bindings].map(([k, b]) => [k, { bytes: b.bytes, workbook: b.workbook }]),
+      culture: set.culture,
+      limits: { timeoutMs: set.timeoutS * 1000, maxRows: set.rowCap },
+      useUpstream: set.useUpstream,
+      previewRows: 200,
+      now: new Date().toISOString(),
+      localOffsetMin: -new Date().getTimezoneOffset()
+    }, { onNeedBinding: (kind, key) => this.askBinding(kind, key) });
+    if (token !== this.runToken) return false;
+    this.setRunning(false);
+    this.renderResult(res, false, res.resultId || null);
+    return true;
+  }
+
+  needsStepPreview(res) {
+    if (!res.ok || !this.stepsModel || this.stepsModel.shape !== 'let') return false;
+    const steps = this.stepsModel.steps;
+    const touched = new Set();
+    for (const e of res.changes || []) {
+      for (const st of steps) if (e.start < st.span.end && e.end > st.span.start) touched.add(st.name);
+    }
+    return touched.size > 1;
+  }
+
+  previewSteps(res, done, focusName) {
+    const lines = diffLines(this.editor.getText(), res.text).filter((l) => l.kind !== 'same');
+    const count = new Set(lines.map((l) => l.text)).size;
+    const apply = h('button', { class: 'btn btn-primary', type: 'button' }, S.stepsPanel.apply);
+    const cancel = h('button', { class: 'btn', type: 'button' }, S.stepsPanel.cancel);
+    const content = h('div', { class: 'popover-body step-preview' },
+      h('p', null, S.stepsPanel.previewNote(count)),
+      h('pre', { class: 'step-preview-diff' }, ...lines.slice(0, 16).map((l) => h('div', { class: l.kind === 'add' ? 'diff-add' : 'diff-del' }, l.text))),
+      h('div', { class: 'dialog-actions' }, cancel, apply));
+    const pop = popover(this.stepsHost, content, null, S.stepsPanel.previewTitle);
+    apply.addEventListener('click', () => {
+      pop.close();
+      this.applySteps(res, done, focusName);
+    });
+    cancel.addEventListener('click', () => pop.close());
+  }
+
+  stepEdit(res, done, focusName) {
+    if (!res.ok) {
+      this.stepsPanel.announce(res.reason);
+      this.status.set({ note: res.reason });
+      return false;
+    }
+    if (this.needsStepPreview(res)) {
+      this.previewSteps(res, done, focusName);
+      return true;
+    }
+    return this.applySteps(res, done, focusName);
+  }
+
+  gutterStep(line) {
+    if (!this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return false;
+    const text = this.editor.getText();
+    const st = this.stepsModel.steps.find((x) => this.lineOfOffset(text, x.span.start) <= line && line <= this.lineOfOffset(text, x.span.end));
+    if (!st) return false;
+    this.stepActions().go(st);
+    this.syncCaretStep();
+    return true;
+  }
+
+  paintStepBand() {
+    const st = this.item && this.item.type === 'query' && this.stepsModel && this.stepsModel.shape === 'let' ? this.stepsModel.steps.find((x) => x.name === this.stepsPanel.caret) : null;
+    if (!st) {
+      this.editor.setStepBand(null);
+      return;
+    }
+    const text = this.editor.getText();
+    this.editor.setStepBand(this.lineOfOffset(text, st.span.start), this.lineOfOffset(text, st.span.end));
+  }
+
+  followCaret() {
+    clearTimeout(this.followTimer);
+    if (!this.settings.followCaret || !this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return;
+    this.followTimer = setTimeout(() => {
+      if (!this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return;
+      const name = this.caretStep(this.stepsModel);
+      if (name && name !== this.shownStepName) this.showStepResult(name);
+    }, 600);
   }
 
   applySteps(res, done, focusName, rerun = true) {
@@ -790,8 +1223,9 @@ export class Workspace {
       go: (st) => {
         this.editor.goto(this.lineOfOffset(text(), st.parts.coreStart), 1);
         this.showStepResult(st.name);
+        this.paintStepBand();
       },
-      move: async (st, to) => {
+      move: (st, to) => {
         const model = stepsOf(text(), 0);
         const can = canMove(model, st.index, to);
         if (!can.ok) {
@@ -799,22 +1233,15 @@ export class Workspace {
           this.status.set({ note: can.reason });
           return;
         }
-        if (can.mode === 'rewire') {
-          const yes = await confirmDialog({ title: S.stepsPanel.rewireTitle, body: S.stepsPanel.rewireBody(st.name), confirmLabel: S.stepsPanel.rewireConfirm, cancelLabel: S.stepsPanel.cancel });
-          if (!yes) {
-            this.stepsPanel.focusStep(st.name);
-            return;
-          }
-        }
-        this.applySteps(moveStep(text(), st.index, to, { rewire: can.mode === 'rewire' }), S.stepsPanel.done.move(st.name), st.name);
+        this.stepEdit(moveStep(text(), st.index, to, { rewire: can.mode === 'rewire' }), S.stepsPanel.done.move(st.name), st.name);
       },
       rename: (st, name) => this.applySteps(renameStep(text(), st.index, name), S.stepsPanel.done.rename(name), name),
       del: (st) => {
         const next = this.stepsModel.steps[st.index + 1] || this.stepsModel.steps[st.index - 1];
-        this.applySteps(deleteStep(text(), st.index), S.stepsPanel.done.delete(st.name), next ? next.name : null);
+        this.stepEdit(deleteStep(text(), st.index), S.stepsPanel.done.delete(st.name), next ? next.name : null);
       },
-      bypass: (st) => this.applySteps(st.bypassed ? unbypassStep(text(), st.index) : bypassStep(text(), st.index), (st.bypassed ? S.stepsPanel.done.restore : S.stepsPanel.done.bypass)(st.name), st.name),
-      duplicate: (st) => this.applySteps(duplicateStep(text(), st.index), S.stepsPanel.done.duplicate(st.name), st.name),
+      bypass: (st) => this.stepEdit(st.bypassed ? unbypassStep(text(), st.index) : bypassStep(text(), st.index), (st.bypassed ? S.stepsPanel.done.restore : S.stepsPanel.done.bypass)(st.name), st.name),
+      duplicate: (st) => this.stepEdit(duplicateStep(text(), st.index), S.stepsPanel.done.duplicate(st.name), st.name),
       runTo: (st) => this.runSteps(st.name),
       pin: (st) => this.pinStep(st),
       runSteps: () => this.runSteps(null),
@@ -1092,6 +1519,39 @@ export class Workspace {
     return this.nav ? this.nav.selectedItems().filter((i) => i.type === 'query').map((i) => i.name) : [];
   }
 
+  navSelection() {
+    return this.nav ? this.nav.selectedItems() : [];
+  }
+
+  revertSelection() {
+    const items = this.navSelection().filter((i) => i.edited);
+    if (!items.length) return false;
+    this.revertItems(items.map((i) => ({ type: i.type, name: i.name })));
+    return true;
+  }
+
+  graphSelection() {
+    const first = this.navSelection().find((i) => i.type === 'query');
+    if (!first) return false;
+    this.openGraph(first.name);
+    return true;
+  }
+
+  async copySelectionNames() {
+    const items = this.navSelection();
+    if (!items.length) return false;
+    const names = items.map((i) => i.name);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(names.join('\n'));
+      ok = true;
+    } catch {
+      ok = false;
+    }
+    this.status.set({ note: ok ? S.nav.copied(names.length) : S.nav.copyFailed });
+    return true;
+  }
+
   runSelected(downstream) {
     const names = this.selectedQueryNames();
     if (!names.length) {
@@ -1102,7 +1562,7 @@ export class Workspace {
     return true;
   }
 
-  openRunMenu() {
+  openRunMenu(anchor = this.runSplitBtn) {
     const isQuery = !!this.item && this.item.type === 'query';
     const entries = [
       { label: S.panes.runSelectedItems, disabled: !this.selectedQueryNames().length, run: () => this.runSelected(false) },
@@ -1110,8 +1570,8 @@ export class Workspace {
       { label: S.panes.runStaleItems, run: () => this.runBatch('run-stale') },
       { label: S.panes.runAllItems, run: () => this.runBatch('run-all') }
     ];
-    this.moreRunBtn.setAttribute('aria-expanded', 'true');
-    menu(this.moreRunBtn, entries, () => this.moreRunBtn.setAttribute('aria-expanded', 'false'));
+    anchor.setAttribute('aria-expanded', 'true');
+    menu(anchor, entries, () => anchor.setAttribute('aria-expanded', 'false'));
   }
 
   splitterSetup() {
@@ -1176,7 +1636,14 @@ export class Workspace {
         }));
       },
       modules: () => s.modules.map((m) => ({ name: m.name, edited: s.isEdited({ type: 'module', name: m.name }) })),
-      statuses: () => this.orchestrator.statuses(),
+      statuses: () => {
+        const st = this.orchestrator.statuses();
+        const rows = this.problemRows || [];
+        if (!rows.length) return st;
+        const marked = new Map(st);
+        for (const p of rows) if (p.item && p.item.type === 'query' && p.severity === 'error') marked.set(p.item.name, 'error');
+        return marked;
+      },
       record: (name) => this.orchestrator.book.record(name),
       textOf: (item) => s.textOf(item),
       stepNames: (name) => {
@@ -1367,6 +1834,8 @@ export class Workspace {
     const text = s.textOf(item);
     let loaded = false;
     if (group.shownKey !== key || ed.getText() !== text) {
+      group.completion.close();
+      group.editor.signature.close();
       ed.setText(text);
       loaded = true;
     }
@@ -1382,7 +1851,26 @@ export class Workspace {
     group.strip = new TabStrip(S.tabs.group(this.groups.length + 1), this.stripActions(group));
     const host = h('div', { class: 'editor-host' });
     group.el = h('div', { class: 'editor-group', 'data-group': String(this.groups.length) }, group.strip.el, host);
-    group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
+    group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t), onGutterLine: (line) => this.gutterStep(line) });
+    group.completion = attachCompletion(group.editor, () => this.completionContext());
+    group.editor.signature = attachSignature(group.editor, () => this.completionContext());
+    group.editor.textarea.addEventListener('click', (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && this.item) {
+        ev.preventDefault();
+        this.goToDefinition();
+      }
+    });
+    group.editor.textarea.addEventListener('contextmenu', (ev) => {
+      if (!this.item) return;
+      ev.preventDefault();
+      group.editor.textarea.setSelectionRange(group.editor.positionAt(ev), group.editor.textarea.selectionEnd);
+      const entries = [];
+      if (this.item.type === 'query') entries.push({ label: S.editor.complete, run: () => group.completion.open() });
+      entries.push({ label: S.cmd.definition, run: () => this.goToDefinition() });
+      entries.push({ label: S.cmd.references, run: () => this.findReferences() });
+      if (this.item.type === 'query') entries.push({ label: S.cmd.renameEditor, run: () => this.renameAtCaret() });
+      menu(ev.currentTarget, entries);
+    });
     group.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
     group.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());
     group.el.addEventListener('focusin', () => this.focusGroup(this.groups.indexOf(group)));
@@ -1627,9 +2115,20 @@ export class Workspace {
     for (const fn of this.onEditCallbacks) fn();
   }
 
+  structureRows(names) {
+    const out = [];
+    for (const m of this.session.modules) {
+      if (names && !names.has(m.name)) continue;
+      const text = this.item && this.item.type === 'module' && this.item.name === m.name ? this.editor.getText() : this.session.textOf({ type: 'module', name: m.name });
+      for (const p of structureProblems(text)) out.push({ item: { type: 'module', name: m.name }, code: p.code, severity: 'error', line: p.line, col: p.col, args: p.args });
+    }
+    return out;
+  }
+
   checkModule(text) {
     if (!this.item || this.item.type !== 'module') return;
     const problems = this.session.validateModule(this.item.name, text);
+    this.editor.setMarkers(structureProblems(text).map((p) => p.line));
     clear(this.info);
     if (!problems.length) {
       this.editor.setError(null);
@@ -1709,6 +2208,7 @@ export class Workspace {
     const active = document.activeElement;
     this.progress.hidden = !on;
     this.runBtn.hidden = on;
+    this.runSplitBtn.hidden = on;
     this.cancelBtn.hidden = !on;
     if (on && active === this.runBtn) this.cancelBtn.focus();
     else if (!on && active === this.cancelBtn) this.runBtn.focus();
@@ -1874,10 +2374,15 @@ export class Workspace {
 
   stepOfResult(resultId) {
     const model = this.stepsModel;
-    if (!this.hasSteps() || !model || !model.steps.length) return null;
+    if (!this.hasSteps() || !model || !model.steps.length) {
+      this.shownStepName = null;
+      return null;
+    }
     let name = null;
     if (resultId) for (const [n, r] of this.stepResults) if (r && r.resultId === resultId) name = n;
-    const at = name ? model.steps.findIndex((x) => x.name === name) : model.steps.length - 1;
+    if (!name) name = model.steps[model.steps.length - 1].name;
+    this.shownStepName = name;
+    const at = model.steps.findIndex((x) => x.name === name);
     return at < 0 ? null : { index: at + 1, total: model.steps.length };
   }
 
@@ -2212,3 +2717,4 @@ export class Workspace {
 }
 
 export { svgImg };
+

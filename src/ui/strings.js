@@ -32,6 +32,9 @@ export const S = {
   revert: 'Revert',
   download: 'Download',
   downloadCount: (n) => ` — ${n} ${n === 1 ? 'change' : 'changes'}`,
+  changesLabel: 'Changes',
+  changesN: (n) => `Changes ${n}`,
+  saveCopy: 'Save a copy…',
   downloadNone: 'No changes yet.',
   export: 'Export',
   settings: 'Settings',
@@ -191,6 +194,14 @@ export const S = {
   },
   menuSources: 'Sources\u2026',
   more: 'More actions',
+  moreOpenFile: 'Open file',
+  moreDetails: 'File details',
+  moreFind: 'Find in the workbook',
+  moreTheme: (t) => `Theme: ${t}`,
+  moreDensity: (d) => `Density: ${d}`,
+  moreShortcuts: 'Shortcut sheet',
+  moreAbout: 'About',
+  aboutBody: 'quoin reads and edits Power Query inside Excel workbooks, entirely on this device. No query, no data and no file ever leaves the browser.',
   moreLayout: 'Layout',
   moreChanges: 'Changes',
   presets: { write: 'Write', debug: 'Debug', review: 'Review' },
@@ -201,6 +212,7 @@ export const S = {
   moreNone: 'No changes to review',
   countRowsLabel: 'Count rows for every step',
   autoRunLabel: 'Run the steps again after structural edits',
+  followCaretLabel: 'Follow the caret through the query steps',
   upstreamLabel: 'Use upstream query results instead of cached cells',
   settingsNote: 'Only the theme is remembered.',
   exportResult: 'Result',
@@ -317,6 +329,14 @@ export const S = {
     runSteps: 'Evaluate steps',
     empty: 'This query has no steps.',
     fn: 'A function has no steps to run. Its body is shown in the editor.',
+    invokeTitle: 'Invoke this function',
+    invokeRun: 'Invoke',
+    invokeOptional: 'optional',
+    invokeNeed: (name) => `${name} needs a value before the function can run.`,
+    invokeBad: (name) => `${name} does not fit the type of that parameter.`,
+    previewTitle: 'Preview the change',
+    previewNote: (n) => `${n === 1 ? '1 line' : `${n} lines`} of code change in more than one step.`,
+    apply: 'Apply',
     invalid: 'Fix the syntax error to see the steps.',
     notEditable: 'This query is not a let block, so there are no steps to edit.',
     bypassed: 'Bypassed',
@@ -466,7 +486,7 @@ export const S = {
     regex: 'Regular expression',
     codeOnly: 'Code only',
     scope: 'Where',
-    scopes: { all: 'All queries and macros', queries: 'Queries', modules: 'Macros', current: 'This item' },
+    scopes: { all: 'All queries and macros', queries: 'Queries', modules: 'Macros', current: 'This item', selection: 'The selected items' },
     searching: 'Searching…',
     none: 'No matches.',
     results: (n, items) => `${n === 1 ? '1 match' : `${n} matches`} in ${items === 1 ? '1 item' : `${items} items`}`,
@@ -502,7 +522,11 @@ export const S = {
     decl: { dim: 'Variable', const: 'Constant', type: 'Type', enum: 'Enum', declare: 'Declare', event: 'Event' },
     params: (n) => (n === 1 ? '1 parameter' : `${n} parameters`),
     done: { revert: (n) => `Reverted ${n}.`, putBack: (n) => `Put back ${n}.` },
-    problemsHint: 'Problems'
+    problemsHint: 'Problems',
+    calls: 'Calls',
+    calledBy: 'Called by',
+    noCallers: 'No callers found',
+    noCallersNote: 'It may be run from a button, a shape, another workbook or the Macros dialog.'
   },
   problems: {
     title: 'Problems',
@@ -530,7 +554,7 @@ export const S = {
       return 'The structure of this module does not balance.';
     },
     'vba.duplicate': (a) => `${a.name} is already defined on line ${a.firstLine}.`,
-    'vba.exit': (a) => `${a.exit} inside a ${a.inside}.`,
+    'vba.exit': (a) => `${a.exit} inside a ${a.inside[0].toUpperCase()}${a.inside.slice(1)}.`,
     'vba.noExplicit': () => 'The module has no Option Explicit, so a misspelled variable is not caught.',
     'vba.encoding': (a) => `${a.char || 'A character'} cannot be stored in this project's code page.`,
     'vba.lineLength': (a) => `This line is ${a.n} characters long; the limit is ${a.max}.`,
@@ -591,7 +615,14 @@ export const S = {
     focusPrev: 'Go to the previous region',
     stepNext: 'Go to the next step',
     stepPrev: 'Go to the previous step',
-    runSelected: 'Run the selected queries'
+    runSelected: 'Run the selected queries',
+    runSelectedDownstream: 'Run the selected queries with downstream',
+    revertSelection: 'Revert the selected items',
+    graphSelection: 'Show the first selected query in the graph',
+    copySelectionNames: 'Copy the selected names',
+    definition: 'Go to the definition of the name under the caret',
+    references: 'Find the references of the name under the caret',
+    renameEditor: 'Rename the step under the caret'
   },
   resultHead: {
     label: 'Result details',
@@ -681,7 +712,7 @@ export const S = {
   },
   dock: {
     label: 'Result dock',
-    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', problems: 'Problems', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
+    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', find: 'Find', problems: 'Problems', references: 'References', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
     pin: 'Pin this result',
     unpin: 'Unpin',
     show: 'Show',
@@ -753,13 +784,43 @@ export const S = {
   palette: {
     label: 'Search and commands',
     placeholder: 'Search queries, modules, steps and commands',
-    trigger: 'Search',
+    trigger: 'Search queries, steps, procedures, commands',
     kbd: 'Ctrl K',
     empty: 'Nothing matches.',
     group: { queries: 'Queries', modules: 'Macros', commands: 'Commands', procedures: 'Procedures', steps: 'Steps', lines: 'Go to line' },
     hint: 'Type > for commands, @ for procedures, # for steps, : for a line',
     count: (n) => (n === 1 ? '1 result' : `${n} results`),
     disabled: (why) => `Not available: ${why}`
+  },
+  completion: {
+    label: 'Suggestions',
+    count: (n) => `${n === 1 ? '1 suggestion' : `${n} suggestions`}. Up and Down choose, Enter inserts, Escape closes.`,
+    none: 'No suggestions.',
+    kind: { step: 'Step', query: 'Query', column: 'Column', keyword: 'Keyword', library: 'Library', literal: 'Literal' },
+    libraryKind: { function: 'Function', type: 'Type', value: 'Value', getter: 'Value' },
+    unsupported: 'Not supported by this engine',
+    partial: 'Partly supported'
+  },
+  signature: {
+    current: (i, n) => `Parameter ${i} of ${n}`,
+    hint: 'Signature'
+  },
+  refs: {
+    title: (name, n, items) => `References to ${name}: ${n === 1 ? '1 place' : `${n} places`} in ${items === 1 ? '1 item' : `${items} items`}`,
+    definition: 'Definition',
+    empty: (name) => `No references to ${name} in the workbook.`,
+    at: (line, col) => `Line ${line}, column ${col}`
+  },
+  structure: {
+    title: (n) => `${n === 1 ? '1 structure check' : `${n} structure checks`}. These checks do not block saving.`
+  },
+  editor: {
+    renameQuery: 'A query is named in the workbook, so F2 cannot rename it from the editor. F2 renames a step instead.',
+    renameNested: 'Only the steps of the query can be renamed, not names inside a step.',
+    libraryName: (name) => `${name} is a library function. References list where a step or a query name is used.`,
+    unknownName: 'Put the caret on a step or a query name to find its references.',
+    complete: 'Complete at the caret',
+    noName: 'Put the caret on a name first.'
   },
   shortcutNotes: [
     ['Ctrl/Cmd+F', 'Find in the editor'],

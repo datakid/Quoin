@@ -66,7 +66,7 @@ test('T-WB-13: commands report why they are unavailable instead of hiding', () =
   assert.equal(none.find((c) => c.id === 'run').enabled, false);
   assert.match(none.find((c) => c.id === 'run').reason, /Open a workbook/);
   assert.equal(none.find((c) => c.id === 'openFile').enabled, true);
-  const some = reg.list({ ws: { runner: { running: false }, canCloseTab: () => 'This is the only open tab.', canSplit: () => true, selectedQueryNames: () => [], hasSteps: () => false } });
+  const some = reg.list({ ws: { runner: { running: false }, canCloseTab: () => 'This is the only open tab.', canSplit: () => true, selectedQueryNames: () => [], navSelection: () => [{ type: 'query', name: 'Sales_Clean' }], hasSteps: () => false } });
   assert.equal(some.find((c) => c.id === 'run').enabled, true);
   assert.equal(some.find((c) => c.id === 'cancel').enabled, false);
   assert.equal(some.find((c) => c.id === 'closeTab').enabled, false);
@@ -76,6 +76,8 @@ test('T-WB-13: commands report why they are unavailable instead of hiding', () =
   assert.equal(some.find((c) => c.id === 'stepNext').reason, 'Open a query with steps first.');
   assert.equal(some.find((c) => c.id === 'runSelected').enabled, false);
   assert.equal(some.find((c) => c.id === 'runSelected').reason, 'Select queries in the list first.');
+  assert.equal(some.find((c) => c.id === 'copySelectionNames').enabled, true);
+  assert.equal(some.find((c) => c.id === 'copySelectionNames').reason, null);
 });
 
 const source = {

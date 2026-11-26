@@ -25,10 +25,13 @@ function compose(text, pieces, decos) {
 }
 
 export class Editor {
-  constructor(host, { language = 'm', label = '', readOnly = false, onChange = null, forceFallbackUndo = false } = {}) {
+  constructor(host, { language = 'm', label = '', readOnly = false, onChange = null, forceFallbackUndo = false, onGutterLine = null } = {}) {
     this.language = language;
     this.onChange = onChange;
+    this.onGutterLine = onGutterLine;
     this.error = null;
+    this.markers = new Set();
+    this.stepBand = null;
     this.findState = { open: false, query: '', matchCase: false, matches: [], current: -1 };
     this.fallback = forceFallbackUndo || typeof document.execCommand !== 'function';
     this.forceFallback = forceFallbackUndo;
@@ -110,6 +113,10 @@ export class Editor {
 
   bind() {
     const ta = this.textarea;
+    this.gutter.addEventListener('click', (ev) => {
+      const el = ev.target.closest('[data-line]');
+      if (el && this.onGutterLine) this.onGutterLine(Number(el.dataset.line));
+    });
     ta.addEventListener('input', () => {
       if (this.fallback) this.pushHistory();
       this.afterEdit();
@@ -259,6 +266,21 @@ export class Editor {
     return this.textarea.selectionStart;
   }
 
+  caretRect() {
+    const ta = this.textarea;
+    const at = ta.selectionStart;
+    const li = Math.max(0, this.offsets.findIndex((o) => at >= o.start && at <= o.end));
+    const line = this.offsets[li] || { start: 0, end: 0 };
+    const prefix = ta.value.slice(line.start, at);
+    const cols = prefix.length + 3 * (prefix.match(/\t/g) || []).length;
+    const rect = ta.getBoundingClientRect();
+    return {
+      left: rect.left + this.padLeft + cols * this.charWidth - ta.scrollLeft,
+      top: rect.top + this.padTop + li * this.lineHeight - ta.scrollTop,
+      height: this.lineHeight
+    };
+  }
+
   setText(text) {
     this.textarea.value = text;
     this.history = [{ value: text, start: 0, end: 0 }];
@@ -288,6 +310,21 @@ export class Editor {
 
   focus() {
     this.textarea.focus();
+  }
+
+  setStepBand(fromLine, toLine) {
+    const next = fromLine === null ? null : [fromLine, toLine];
+    const same = !next && !this.stepBand || next && this.stepBand && next[0] === this.stepBand[0] && next[1] === this.stepBand[1];
+    if (same) return;
+    this.stepBand = next;
+    this.paint();
+  }
+
+  setMarkers(lines) {
+    const next = new Set(lines);
+    if (next.size === this.markers.size && [...next].every((l) => this.markers.has(l))) return;
+    this.markers = next;
+    this.paint();
   }
 
   setError(err) {
@@ -358,7 +395,12 @@ export class Editor {
     clear(this.gutterInner);
     const nums = [];
     const errLine = this.error ? this.error.line - 1 : -1;
-    for (let li = first; li <= last; li++) nums.push(li === errLine ? h('div', { class: 'gutter-err' }, `● ${li + 1}`) : h('div', null, String(li + 1)));
+    for (let li = first; li <= last; li++) {
+      const line = li + 1;
+      const band = this.stepBand && line >= this.stepBand[0] && line <= this.stepBand[1];
+      const cls = li === errLine ? 'gutter-err' : this.markers.has(line) ? 'gutter-mark' : band ? `gutter-step${line === this.stepBand[0] ? ' gutter-step-start' : ''}` : null;
+      nums.push(h('div', cls ? { class: cls, 'data-line': String(line) } : { 'data-line': String(line) }, cls === 'gutter-err' || cls === 'gutter-mark' ? `● ${line}` : String(line)));
+    }
     for (const n of nums) {
       n.style.height = `${this.lineHeight}px`;
       this.gutterInner.append(n);

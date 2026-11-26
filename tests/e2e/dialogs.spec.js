@@ -7,26 +7,29 @@ async function openWith(page, locator) {
   await expect(page.locator('dialog[open]')).toBeVisible();
 }
 
-test('T-B-14: the settings dialog returns focus to its opener on Escape and on Close', async ({ page }) => {
+test('T-B-14: the settings dialog returns focus to the More button on Escape and on Close', async ({ page }) => {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
-  const opener = page.getByRole('button', { name: 'Settings' });
-  await openWith(page, opener);
+  const opener = page.getByRole('button', { name: 'More actions' });
+  await opener.click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
   await expect(page.locator('dialog[open]')).toHaveAttribute('aria-labelledby', 'set-title');
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog')).toHaveCount(0);
   await expect(opener).toBeFocused();
-  await openWith(page, opener);
+  await opener.click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
   await page.locator('dialog[open]').getByRole('button', { name: 'Close' }).click();
   await expect(page.locator('dialog')).toHaveCount(0);
   await expect(opener).toBeFocused();
 });
 
-test('T-B-14: the file details dialog returns focus to the file name button', async ({ page }) => {
+test('T-B-14: the file details dialog returns focus to the More button', async ({ page }) => {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
-  const opener = page.locator('.topbar .file-name');
-  await openWith(page, opener);
+  const opener = page.getByRole('button', { name: 'More actions' });
+  await opener.click();
+  await page.getByRole('menuitem', { name: 'File details' }).click();
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog')).toHaveCount(0);
   await expect(opener).toBeFocused();
@@ -47,7 +50,8 @@ test('T-B-14: the shortcuts dialog opened with the question mark returns focus t
 test('T-B-14: every dialog gets focus inside it on open and has an accessible name', async ({ page }) => {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
-  await openWith(page, page.getByRole('button', { name: 'Settings' }));
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
   const inside = await page.evaluate(() => document.querySelector('dialog[open]').contains(document.activeElement));
   expect(inside).toBe(true);
   await expect(page.getByRole('dialog')).toHaveAccessibleName('Settings');

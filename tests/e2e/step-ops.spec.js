@@ -82,7 +82,8 @@ test('T-WB-15: dragging a step by its grip moves it, with the drop position chec
   await expect(page.locator('.step-drop-note')).toBeHidden();
   expect(await names(page)).toEqual(before);
   await dragStep(page, 2, 1, 'top');
-  await page.getByRole('button', { name: 'Move and rewire' }).click();
+  await expect(page.locator('.step-preview')).toBeVisible();
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect.poll(() => names(page)).toEqual(['Source', 'Added Custom', 'Changed Type']);
   expect(await text(page)).toContain('Table.TransformColumnTypes(#"Added Custom"');
 });

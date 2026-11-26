@@ -8,7 +8,7 @@ async function open(page) {
   return problems;
 }
 
-const dlg = (page) => page.locator('dialog.find');
+const dlg = (page) => page.locator('#dock-panel-find');
 const area = (page) => page.locator('.editor-wrap textarea');
 
 test('T-WB-21: find lists matches grouped by item with line previews and opens one at its position', async ({ page }) => {
@@ -21,7 +21,7 @@ test('T-WB-21: find lists matches grouped by item with line previews and opens o
   const row = dlg(page).locator('.find-row', { hasText: 'Raw = RawInput' });
   await expect(row).toContainText('2:');
   await row.click();
-  await expect(dlg(page)).toHaveCount(0);
+  await expect(dlg(page)).toBeVisible();
   await expect(page.locator('.item-title')).toContainText('FinalTable');
   const line = await page.evaluate(() => {
     const ta = document.querySelector('.editor-wrap textarea');
@@ -59,7 +59,7 @@ test('T-WB-21: replace in three of five matches changes exactly those three', as
   await expect(dlg(page).getByRole('button', { name: 'Replace 3 selected' })).toBeVisible();
   await expect(dlg(page).locator('.find-diff').first()).toContainText('Bar');
   await dlg(page).getByRole('button', { name: 'Replace 3 selected' }).click();
-  await expect(dlg(page)).toHaveCount(0);
+  await expect(dlg(page)).toBeVisible();
   const text = await area(page).inputValue();
   expect(text).toBe('let\n  a = Bar,\n  b = Foo,\n  c = Bar,\n  d = Foo,\n  e = Bar\nin e');
   await expect(page.locator('.statusbar')).toContainText('Replaced 3 matches in 1 item');
@@ -88,4 +88,17 @@ test('T-WB-21: replacing works across queries and macros and the palette offers 
   await dlg(page).locator('select').selectOption('modules');
   await expect(dlg(page).locator('.find-item', { hasText: 'RawInput' })).toHaveCount(0);
   await expect(dlg(page).locator('.find-item', { hasText: 'Sheet1' })).toBeVisible();
+});
+
+test('T-WB-21: the selection scope limits find to the navigator selection', async ({ page }) => {
+  await open(page);
+  await page.locator('[role=treeitem][data-name="FinalTable"]').click();
+  await page.locator('[role=treeitem][data-name="RawInput"]').click({ modifiers: ['Control'] });
+  await page.keyboard.press('Control+Shift+f');
+  await dlg(page).locator('select').selectOption('selection');
+  await page.locator('.find-input').first().fill('RawInput');
+  await expect(dlg(page).locator('.find-item')).toHaveCount(2);
+  await expect(dlg(page).locator('.find-item', { hasText: 'RawInput' })).toBeVisible();
+  await expect(dlg(page).locator('.find-item', { hasText: 'FinalTable' })).toBeVisible();
+  await expect(dlg(page).locator('.find-item', { hasText: 'Sheet1' })).toHaveCount(0);
 });

@@ -151,6 +151,32 @@ export class StepsPanel {
     if (first) first.focus();
   }
 
+  renderInvoke({ params, values, onInvoke }) {
+    clear(this.list);
+    this.count.textContent = String(params.length);
+    this.results = new Map();
+    this.caret = null;
+    this.note.hidden = true;
+    this.refreshed.hidden = true;
+    this.dropNote.hidden = true;
+    if (!params.length) {
+      this.note.hidden = false;
+      this.note.textContent = S.stepsPanel.fn;
+      return;
+    }
+    const inputs = new Map();
+    for (const p of params) {
+      const input = h('input', { class: 'invoke-input', type: p.type && p.type.name === 'number' ? 'number' : 'text', value: values[p.name] === undefined ? '' : String(values[p.name]) });
+      input.setAttribute('aria-label', p.optional ? `${p.name} (${S.stepsPanel.invokeOptional})` : p.name);
+      inputs.set(p.name, input);
+    }
+    const run = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => onInvoke(Object.fromEntries([...inputs].map(([n, i]) => [n, i.value]))) }, S.stepsPanel.invokeRun);
+    this.list.append(h('li', { class: 'step-item invoke-item' },
+      h('div', { class: 'outline-label' }, S.stepsPanel.invokeTitle),
+      ...params.map((p) => h('label', { class: 'invoke-row' }, h('span', { class: 'invoke-name' }, p.name), inputs.get(p.name))),
+      h('div', { class: 'dialog-actions' }, run)));
+  }
+
   announce(text) {
     this.live.textContent = '';
     this.live.textContent = text;

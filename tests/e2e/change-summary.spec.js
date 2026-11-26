@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, downloadButton } from './helpers.js';
+import { ext, openApp, loadFile, changesButton, openDownload } from './helpers.js';
 
 async function open(page) {
   await page.setViewportSize({ width: 1400, height: 900 });
@@ -12,13 +12,15 @@ test('T-WB-26: after reorder, insert and bypass the summary lists exactly those 
   await open(page);
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
-  await page.locator('dialog[open]').getByRole('button', { name: 'Move and rewire' }).click();
+  const apply = page.locator('.step-preview').getByRole('button', { name: 'Apply' });
+  await expect(apply).toBeVisible({ timeout: 5000 });
+  await apply.click();
   await page.locator('.step-row').nth(0).focus();
   await page.keyboard.press('Control+d');
   await expect(page.locator('.step-row')).toHaveCount(4);
   await page.locator('.step-row').nth(3).focus();
   await page.keyboard.press('b');
-  await downloadButton(page).click();
+  await openDownload(page);
   await page.getByRole('button', { name: 'Review changes' }).click();
   const dlg = page.locator('dialog[open]');
   const lines = await dlg.locator('.change-line').allTextContents();
@@ -38,7 +40,7 @@ test('T-WB-26: a changed macro lists its procedures and an error in a changed qu
   await page.locator('[role=treeitem][data-name="Sheet1"]').click();
   const m = await page.locator('.editor-wrap textarea').inputValue();
   await page.locator('.editor-wrap textarea').fill(m.replace('On Error GoTo ExitSub', 'On Error GoTo ExitSub\n    Debug.Print 1'));
-  await downloadButton(page).click();
+  await openDownload(page);
   await page.getByRole('button', { name: 'Review changes' }).click();
   const dlg = page.locator('dialog[open]');
   await expect(dlg.locator('.change-problems')).toContainText('RawInput');

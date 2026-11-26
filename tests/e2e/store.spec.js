@@ -64,20 +64,26 @@ test('T-WB-08: cancelling a batch drops the store, old results report as evicted
     const r = new Runner();
     const text = 'section Section1;\r\n\r\nshared A = #table({"x"}, {{1}});\r\n\r\nshared Slow = List.Count(List.Generate(() => 0, each true, each _ + 1));';
     const events = [];
-    const p = r.runMany({ sectionText: text, names: ['A', 'Slow'], culture: 'en-US', limits: {}, previewRows: 5 }, { onEvent: (m) => events.push(m), onNeedBinding: async () => null });
-    await new Promise((res) => setTimeout(res, 600));
-    const gen = r.generation;
-    const keptId = events[0] && events[0].resultId;
-    const t0 = performance.now();
-    r.cancel();
+    let t0 = 0;
+    let gen = null;
+    const p = r.runMany({ sectionText: text, names: ['A', 'Slow'], culture: 'en-US', limits: {}, previewRows: 5 }, { onEvent: (m) => {
+      events.push(m);
+      if (m.status === 'ok' && m.resultId && gen === null) {
+        gen = r.generation;
+        t0 = performance.now();
+        r.cancel();
+      }
+    }, onNeedBinding: async () => null });
     const res = await p;
-    const ms = performance.now() - t0;
+    const ms = t0 ? performance.now() - t0 : -1;
+    const keptId = events[0] && events[0].resultId;
     const old = await r.rowsOf(keptId, 0, 5, gen);
     const again = await r.run({ sectionText: 'section Section1;\r\n\r\nshared Q = #table({"a"}, {{7}});', queryName: 'Q', culture: 'en-US', limits: {}, previewRows: 5 }, { onNeedBinding: async () => null });
     const rows = await r.rowsOf(again.resultId, 0, 5, r.generation);
     return { status: res.status, ms, kept: !!keptId, old, rows: rows.rows };
   });
   expect(out.status).toBe('cancelled');
+  expect(out.ms).toBeGreaterThanOrEqual(0);
   expect(out.ms).toBeLessThan(200);
   expect(out.kept).toBe(true);
   expect(out.old).toEqual({ rows: [], evicted: true });

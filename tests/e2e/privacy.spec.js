@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fx, ext, openApp, loadFile, item, editor, runButton, downloadButton } from './helpers.js';
+import { fx, ext, openApp, loadFile, item, editor, runButton, changesButton, openDownload, openSettings } from './helpers.js';
 import { root } from '../unit/helpers.js';
 
 test.beforeEach(async ({ page }) => {
@@ -46,7 +46,7 @@ test('T-PRIV-2: with network primitives disabled after load, every core flow sti
   await page.locator('#bind-file').setInputFiles(fx('sales.csv'));
   await expect(page.locator('.grid-cell:not(.grid-index)').first()).toHaveText('North');
   await editor(page).fill(`${await editor(page).inputValue()}\n// x`);
-  await downloadButton(page).click();
+  await openDownload(page);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.popover .btn-primary').click()]);
   expect((await dl.path()) !== null).toBe(true);
 });
@@ -54,7 +54,7 @@ test('T-PRIV-2: with network primitives disabled after load, every core flow sti
 test('T-PRIV-3: no cookies, no web storage except the theme, no IndexedDB databases', async ({ page, context }) => {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.getByLabel('Theme').selectOption('dark');
   await page.getByRole('button', { name: 'Save' }).click();
   expect(await context.cookies()).toEqual([]);

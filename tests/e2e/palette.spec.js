@@ -73,11 +73,10 @@ test('T-WB-13: # lists the steps of the current query and jumps to the one chose
   await page.keyboard.type('#added');
   await expect(page.locator('.palette-row').first()).toContainText('Added Custom');
   await page.keyboard.press('Enter');
-  const line = await page.evaluate(() => {
+  await expect.poll(() => page.evaluate(() => {
     const ta = document.querySelector('.editor-wrap textarea');
     return ta.value.slice(0, ta.selectionStart).split(/\r\n|\r|\n/).length;
-  });
-  expect(line).toBe(4);
+  })).toBe(4);
 });
 
 test('T-WB-13: the shortcut sheet is generated from the registry and lists the palette', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, editor, runButton } from './helpers.js';
+import { ext, openApp, editor, runButton, openSettings } from './helpers.js';
 
 const notBody = async (page, step) => {
   const tag = await page.evaluate(() => (document.activeElement ? document.activeElement.tagName : 'NONE'));
@@ -8,8 +8,10 @@ const notBody = async (page, step) => {
 
 test('T-E-12: open, select, edit, run and save without touching the mouse, focus never on the body', async ({ page }) => {
   await openApp(page);
+  const chooserReady = page.waitForEvent('filechooser');
   await page.locator('.dropzone button').focus();
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+o')]);
+  await page.keyboard.press('Control+o');
+  const chooser = await chooserReady;
   await chooser.setFiles(ext('pq_vba_complex.xlsm'));
   await expect(page.locator('.workspace')).toHaveCount(1);
   await notBody(page, 'open');
@@ -43,7 +45,7 @@ test('T-E-12: open, select, edit, run and save without touching the mouse, focus
 test('T-E-12: shortcuts are ignored while a dialog is open, except Escape', async ({ page }) => {
   await openApp(page);
   await page.setInputFiles('input[type=file]', ext('pq_vba_complex.xlsm'));
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await expect(page.locator('dialog[open]')).toBeVisible();
   await page.keyboard.press('Control+Enter');
   await expect(runButton(page)).toBeVisible();
@@ -59,7 +61,7 @@ test('T-E-12: the shortcut sheet lists every shortcut and F3 steps through match
   await page.setInputFiles('input[type=file]', ext('pq_vba_complex.xlsm'));
   await page.keyboard.press('?');
   const rows = await page.locator('dialog[open] dt').allTextContents();
-  for (const k of ['Ctrl/Cmd+O', 'Ctrl/Cmd+S', 'Ctrl/Cmd+Enter', 'Esc', 'Ctrl/Cmd+F', 'F3 / Shift+F3', 'Alt+Up / Alt+Down']) expect(rows).toContain(k);
+  for (const k of ['Ctrl/Cmd+O', 'Ctrl/Cmd+S', 'Ctrl/Cmd+Enter', 'Esc', 'Ctrl/Cmd+F', 'F3 / Shift+F3', 'Alt+Up', 'Alt+Down']) expect(rows).toContain(k);
   await page.keyboard.press('Escape');
   await page.locator('[role=treeitem][data-type=query]').nth(1).click();
   await editor(page).focus();

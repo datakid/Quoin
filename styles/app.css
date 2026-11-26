@@ -874,6 +874,7 @@ textarea {
   padding: var(--s-4);
   width: 340px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s-3);
 }
 
@@ -891,6 +892,21 @@ textarea {
   color: var(--ochre-ink);
   padding: var(--s-2) var(--s-3);
   border-radius: var(--r-2);
+}
+
+.step-preview-diff {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+  line-height: var(--t-code-lh);
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.step-preview-diff div {
+  padding: 0 var(--s-2);
 }
 
 .check {

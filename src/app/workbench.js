@@ -33,7 +33,7 @@ import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
 import { analyseCalls, definitionOf } from '../core/vba/refs.js';
 import { structureProblems } from '../core/vba/structure.js';
 import { literal, numberLiteral, textLiteral } from '../core/wb/m-gen.js';
-import { diffLines, hunkLines } from '../core/diff.js';
+import { diffLines } from '../core/diff.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -1088,7 +1088,7 @@ export class Workbench {
   }
 
   previewSteps(res, done, focusName) {
-    const lines = hunkLines(diffLines(this.editor.getText(), res.text), 2).filter((l) => l.kind !== 'same');
+    const lines = diffLines(this.editor.getText(), res.text).filter((l) => l.kind !== 'same');
     const count = new Set(lines.map((l) => l.text)).size;
     const apply = h('button', { class: 'btn btn-primary', type: 'button' }, S.stepsPanel.apply);
     const cancel = h('button', { class: 'btn', type: 'button' }, S.stepsPanel.cancel);

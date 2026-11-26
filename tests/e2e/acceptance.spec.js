@@ -90,8 +90,7 @@ test('T-WB-28: the acceptance story', async ({ page }) => {
     await page.keyboard.press('Alt+Shift+ArrowUp');
     const apply = page.locator('.step-preview').getByRole('button', { name: 'Apply' });
     await expect(apply).toBeVisible({ timeout: 5000 });
-    await apply.focus();
-    await page.keyboard.press('Enter');
+    await apply.click();
     await expect.poll(async () => (await stepNames(page)).indexOf(newName)).toBeLessThan(at);
     await idle();
   }
@@ -102,8 +101,7 @@ test('T-WB-28: the acceptance story', async ({ page }) => {
   await page.keyboard.press('Alt+Shift+ArrowUp');
   const apply2 = page.locator('.step-preview').getByRole('button', { name: 'Apply' });
   await expect(apply2).toBeVisible({ timeout: 5000 });
-  await apply2.focus();
-  await page.keyboard.press('Enter');
+  await apply2.click();
   await expect.poll(async () => (await stepNames(page)).indexOf('Added Margin')).toBeLessThan(margin);
   await idle();
 

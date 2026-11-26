@@ -3,7 +3,7 @@
   "moreMenu": ["Open file", "File details", "Find in the workbook", "Theme:", "Density:", "Write", "Debug", "Review", "Sources", "Settings", "Shortcut sheet", "About", "Revert all changes"],
   "changesMenu": ["Review", "Save a copy", "Download"],
   "runMenu": ["Run the selected queries", "Run this query and what depends on it", "Run the queries that are out of date", "Run every query"],
-  "dockTabs": ["Result", "Pinned", "Compare", "Find", "Problems", "Graph", "Changes"],
+  "dockTabs": ["Result", "Pinned", "Compare", "Find", "Problems", "References", "Queue", "Graph", "Changes"],
   "navigatorSearch": "Search queries",
   "navigatorSelects": ["Group by", "Sort by"],
   "primaryChips": ["Edited", "Errors", "Stale", "Never run"],

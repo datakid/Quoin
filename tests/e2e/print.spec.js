@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, fx, openApp, loadFile, item, editor, runButton } from './helpers.js';
+import { ext, fx, openApp, loadFile, item, editor, runButton, openExport } from './helpers.js';
 
 const THOUSAND = 'Table.FromColumns({List.Numbers(1, 1000), List.Transform(List.Numbers(1, 1000), each _ * 2)}, {"N", "Double"})';
 const WIDE = '#table(List.Transform({1..30}, each "Column" & Text.From(_)), {{1..30}})';
@@ -231,7 +231,8 @@ test('T-P-09: on a phone the Print command lives in the Export menu', async ({ p
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
   await expect(page.locator('.print-button')).toBeHidden();
-  await page.getByRole('button', { name: 'Export' }).click();
+  await expect(page.getByRole('button', { name: 'More actions' })).toBeVisible();
+  await openExport(page);
   await page.getByRole('menuitem', { name: 'Print preview' }).click();
   await expect(page.locator('.print-root')).toBeVisible();
 });

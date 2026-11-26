@@ -28,15 +28,15 @@ test('T-E-01: the Download button follows one dirty model, including a hand reve
   await expect(page.locator('[data-name=RawInput] .dot-edited')).toHaveCount(0);
 });
 
-test('T-E-01: a clean Changes button opens no menu and Ctrl+S does not either', async ({ page }) => {
+test('T-E-01: on a clean workbook the Download menu disables Review and Download, and Ctrl+S opens nothing', async ({ page }) => {
   await openApp(page);
   await loadFile(page, ext('pq_vba_complex.xlsm'));
   await page.getByRole('button', { name: 'Download', exact: true }).click();
   const menu = page.locator('.menu');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Review changes' })).toBeDisabled();
+  await expect(menu.getByRole('menuitem', { name: 'Review 0 changes' })).toBeDisabled();
   await expect(menu.getByRole('menuitem', { name: 'Save a copy…' })).toBeEnabled();
-  await expect(menu.getByRole('menuitem', { name: 'Download' })).toBeDisabled();
+  await expect(menu.getByRole('menuitem', { name: 'Download', exact: true })).toBeDisabled();
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+s');
   await expect(page.locator('.popover')).toHaveCount(0);

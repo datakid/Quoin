@@ -17,12 +17,12 @@ async function runItem(page, name) {
   await expect(page.locator('.dock-panel[data-panel=result] .grid, .dock-panel[data-panel=result] [role=grid]').first()).toBeVisible();
 }
 
-test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Find, Problems, Queue, Graph and Changes that the arrows walk', async ({ page }) => {
+test('T-WB-16: the dock is a tablist with Result, Pinned, Compare, Find, Problems, References, Queue, Graph and Changes that the arrows walk', async ({ page }) => {
   await open(page);
   const list = page.locator('.dock-tabs');
   await expect(list).toHaveAttribute('role', 'tablist');
   const names = await list.getByRole('tab').evaluateAll((els) => els.map((e) => e.dataset.tab));
-  expect(names).toEqual(['result', 'pinned', 'compare', 'find', 'problems', 'queue', 'graph', 'changes']);
+  expect(names).toEqual(['result', 'pinned', 'compare', 'find', 'problems', 'references', 'queue', 'graph', 'changes']);
   await expect(tab(page, 'Result')).toHaveAttribute('aria-selected', 'true');
   await tab(page, 'Result').focus();
   await page.keyboard.press('ArrowRight');

@@ -241,6 +241,7 @@ test('T-E2E-14: the run and edit flows work from the keyboard alone', async ({ p
 
 test('T-E2E-16: the theme persists across a reload and the system theme follows the emulated preference', async ({ page }) => {
   await openApp(page);
+  await loadFile(page, ext('pq_simple.xlsx'));
   await openSettings(page);
   await page.getByLabel('Theme').selectOption('dark');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -248,6 +249,7 @@ test('T-E2E-16: the theme persists across a reload and the system theme follows 
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate(() => localStorage.getItem('quoin.theme'))).toBe('dark');
+  await loadFile(page, ext('pq_simple.xlsx'));
   await openSettings(page);
   await page.getByLabel('Theme').selectOption('system');
   await page.getByRole('button', { name: 'Save' }).click();

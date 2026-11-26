@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, item, editor } from './helpers.js';
+import { ext, openApp, loadFile, item, editor, openDownload } from './helpers.js';
 
 const tab = (page) => page.getByRole('tab', { name: /^Changes/ });
 const panel = (page) => page.locator('.dock-panel[data-panel=changes]');
@@ -41,11 +41,11 @@ test('T-WB-16: Revert all in the Changes tab asks first, and reverting restores 
   expect(await editor(page).inputValue()).toBe(original);
 });
 
-test('T-WB-16: the Changes dialog from Download still opens and lists the same edit', async ({ page }) => {
+test('T-WB-16: the Changes dialog from the Download popover still opens and lists the same edit', async ({ page }) => {
   await setup(page);
   const original = await editor(page).inputValue();
   await editor(page).fill(original.replace(/\s+$/, '') + '\n// edited');
-  await page.getByRole('button', { name: /^Download/ }).click();
+  await openDownload(page);
   await page.getByRole('button', { name: 'Review changes' }).click();
   const dlg = page.getByRole('dialog', { name: 'Changes' });
   await expect(dlg.locator('.change-item')).toHaveCount(1);

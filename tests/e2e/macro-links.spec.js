@@ -18,6 +18,10 @@ const MACRO = [
 
 const dot = (page, name) => page.locator(`[role=treeitem][data-name="${name}"] .dot-loaded, [role=treeitem][data-name="${name}"] .dot-conn`);
 
+const refreshes = (page, name) => page.locator('.outline-proc')
+  .filter({ has: page.locator('.step-name', { hasText: new RegExp(`\\b${name}\\b`) }) })
+  .locator('.outline-links:not(.outline-calls)');
+
 async function open(page) {
   await page.setViewportSize({ width: 1400, height: 900 });
   const problems = await openApp(page);
@@ -29,22 +33,21 @@ async function open(page) {
 
 test('T-WB-25: a procedure with links lists the queries it refreshes, what it cannot resolve, and nothing for the others', async ({ page }) => {
   const problems = await open(page);
-  const proc = page.locator('.outline-proc', { hasText: 'RefreshSales' });
-  await expect(proc.locator('.outline-links')).toBeVisible();
-  await expect(proc.locator('.outline-link').nth(0)).toHaveText('FinalTable');
-  await expect(proc.locator('.outline-link').nth(1)).toHaveText('RawInput');
-  await expect(proc.locator('.outline-links')).toContainText('Not in this workbook: Ghost');
-  await expect(proc.locator('.outline-links')).toContainText('1 call cannot be resolved');
-  await expect(page.locator('.outline-proc', { hasText: 'Other' }).locator('.outline-links')).toHaveCount(0);
+  const links = refreshes(page, 'RefreshSales');
+  await expect(links).toBeVisible();
+  await expect(links.locator('.outline-link').nth(0)).toHaveText('FinalTable');
+  await expect(links.locator('.outline-link').nth(1)).toHaveText('RawInput');
+  await expect(links).toContainText('Not in this workbook: Ghost');
+  await expect(links).toContainText('1 call cannot be resolved');
+  await expect(refreshes(page, 'Other')).toHaveCount(0);
   expect(problems).toEqual([]);
 });
 
 test('T-WB-25: Run these queries runs exactly the resolved queries and says that the rest of the macro does not run', async ({ page }) => {
   await open(page);
   await expect(dot(page, 'FinalTable')).toHaveAttribute('data-status', 'never');
-  const proc = page.locator('.outline-proc', { hasText: 'RefreshSales' });
-  await expect(proc.locator('.outline-links')).toBeVisible();
-  await proc.getByRole('button', { name: 'Run these queries' }).click();
+  await expect(refreshes(page, 'RefreshSales')).toBeVisible();
+  await refreshes(page, 'RefreshSales').getByRole('button', { name: 'Run these queries' }).click();
   await expect(dot(page, 'RawInput')).toHaveAttribute('data-status', 'ok');
   await expect(dot(page, 'FinalTable')).toHaveAttribute('data-status', 'ok');
   await expect(page.locator('.statusbar')).toContainText('Queries refreshed by RefreshSales');

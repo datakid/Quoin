@@ -15,6 +15,11 @@ const row = (page, name) => page.locator('.step-row').filter({ has: page.locator
 const undo = (page) => page.getByRole('button', { name: /^Undo/ });
 const names = (page) => page.locator('.step-row .step-name').allTextContents();
 
+const applyPreview = async (page) => {
+  await expect(page.locator('.step-preview')).toBeVisible();
+  await page.locator('.step-preview').getByRole('button', { name: 'Apply' }).click();
+};
+
 async function setup(page, file = 'pq_simple.xlsx', name = 'StudentResults') {
   await page.setViewportSize({ width: 1400, height: 900 });
   await openApp(page);
@@ -30,6 +35,7 @@ test('T-WB-15: Undo appears after a step operation and puts the text back exactl
   await expect(undo(page)).toBeHidden();
   await row(page, 'Sorted').focus();
   await page.keyboard.press('Delete');
+  await applyPreview(page);
   await expect(page.locator('.step-row')).toHaveCount(2);
   expect(await editor(page).inputValue()).not.toContain('Sorted');
   await expect(undo(page)).toBeVisible();
@@ -55,6 +61,7 @@ test('T-WB-15: Undo refuses when the text was edited by hand after the operation
   await setup(page);
   await row(page, 'Sorted').focus();
   await page.keyboard.press('Delete');
+  await applyPreview(page);
   await expect(page.locator('.step-row')).toHaveCount(2);
   await editor(page).focus();
   await page.keyboard.press('Control+End');
@@ -82,6 +89,7 @@ test('T-WB-15: the History popover lists the operations newest first and restore
   texts.push(await editor(page).inputValue());
   await row(page, dup).focus();
   await page.keyboard.press('Delete');
+  await applyPreview(page);
   await expect(page.locator('.step-row')).toHaveCount(3);
   texts.push(await editor(page).inputValue());
   await row(page, 'Sorted').focus();
@@ -117,6 +125,7 @@ test('T-WB-15: History appears once a query has an operation, and each query kee
   await expect(history).toBeHidden();
   await row(page, 'Sorted').focus();
   await page.keyboard.press('Delete');
+  await applyPreview(page);
   await expect(page.locator('.step-row')).toHaveCount(2);
   await expect(undo(page)).toBeVisible();
   await expect(history).toBeVisible();

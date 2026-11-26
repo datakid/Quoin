@@ -1,0 +1,14 @@
+# Notes: safety lane
+
+Written by the safety lane only. The integrator reads this and moves what matters into PROGRESS.md and MANAGER.md.
+
+Brief: docs/fable/lanes/safety.md
+
+## Changes
+
+| Item | File | Commit | Verified |
+|---|---|---|---|
+
+## Open
+
+## Needed from another owner

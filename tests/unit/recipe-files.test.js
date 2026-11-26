@@ -110,8 +110,8 @@ test('code-like text in a recipe stays text', async () => {
   assert.equal(out.recipe.query.m, '${alert(1)} <script>');
 });
 
-test('a file that cannot be read gives recipe.invalid rather than throwing', async () => {
+test('a file that cannot be read gives recipe.unreadable rather than throwing', async () => {
   const broken = { name: 'x.quoin-recipe.json', size: 10, arrayBuffer: async () => { throw new Error('gone'); } };
   const out = await loadRecipeFile(broken);
-  assert.deepEqual([out.ok, out.code], [false, 'recipe.invalid']);
+  assert.deepEqual([out.ok, out.code], [false, 'recipe.unreadable']);
 });

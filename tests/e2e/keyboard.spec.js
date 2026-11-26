@@ -8,8 +8,10 @@ const notBody = async (page, step) => {
 
 test('T-E-12: open, select, edit, run and save without touching the mouse, focus never on the body', async ({ page }) => {
   await openApp(page);
+  const chooserReady = page.waitForEvent('filechooser');
   await page.locator('.dropzone button').focus();
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Control+o')]);
+  await page.keyboard.press('Control+o');
+  const chooser = await chooserReady;
   await chooser.setFiles(ext('pq_vba_complex.xlsm'));
   await expect(page.locator('.workspace')).toHaveCount(1);
   await notBody(page, 'open');

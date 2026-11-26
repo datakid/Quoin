@@ -61,12 +61,12 @@ A recipe file dropped together with a folder or workbooks loads the recipe, inde
 - It does not read the data model (`xl/model`).
 - It opens `.xlsx`, `.xlsm`, `.xltx` and `.xltm`. It refuses `.xls`, `.xlsb`, OpenDocument, Strict Open XML and password-protected workbooks, each with a specific message.
 - A VBA project that is locked for viewing, uses an unsupported code page, or does not parse cleanly is shown read-only. Editing a signed project removes its signature, after you confirm.
-- It has not been run against real Excel. The checks that need Excel are listed in [`docs/observations.md`](docs/observations.md), and none has been run. Opening an edited file in Excel is the step still to confirm.
+- Real Excel has been tried only informally. On 2026-11-24 a person opened the 13 files of the Excel pack in desktop Excel: none showed a repair message, and the queries and macros they tried ran without errors. They did not review what the outputs contained and did not tick the checklist, so the checks in [`docs/observations.md`](docs/observations.md) are still listed as not run. Nothing has been tried in Excel for in-place output or Excel computing on open, which is why neither is built.
 - Only Chromium has been tested. Firefox and WebKit have not been run.
 
 ## Privacy
 
-Your file never leaves the tab. Quoin makes no network requests after the page and its assets load, sets a Content Security Policy that forbids them, and stores three small things in local storage: your theme choice (`quoin.theme`), recipes you choose to save (`quoin.recipes`, the recipe text only) and the names of sets you opened recently (`quoin.recent`, a short name and never a path). It never stores a workbook, a query from a workbook, or a file path. There are no cookies, no analytics, and no databases.
+Your file never leaves the tab. Quoin makes no network requests after the page and its assets load, sets a Content Security Policy that forbids them, and stores two small things in local storage: your theme choice (`quoin.theme`) and recipes you choose to save (`quoin.recipes`, the recipe text only). A third key, `quoin.recent`, is allowed for a list of recently opened set names (a short name and never a path), but nothing writes it yet. It never stores a workbook, a query from a workbook, or a file path. There are no cookies, no analytics, and no databases.
 
 ## Built with
 

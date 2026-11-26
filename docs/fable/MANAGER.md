@@ -10,8 +10,8 @@ Written 2026-11-21 by the integrator (Claude on `fable`). The user has told all 
 | F1 Collect and Variants | Done on `fable`, gate recorded (F1-08) |
 | F2 Inject and Replace | Done on `fable`, gate recorded (F2-16) except the real-Excel check, which only the user can do |
 | F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit), F3-06 (a new sheet in a copy) and F3-07 (one combined workbook) are wired in the app: Preview and Get work. F3-10 (section 9) passes with three differences waiting on the person. F3-08 (in place) and F3-09 (Excel computes on open) are held: no real-Excel case exists for them |
-| F4 Recipes | F4-01 to F4-04 are wired: load, Save in this browser, Download, Saved recipes (Use, Delete), a recipe dropped with a folder going straight to Preview, and the Tokens list with unknown tokens flagged. Recent sets are deliberately not wired (see PROGRESS). The F4 gate is next |
-| F5 Trust | Not started |
+| F4 Recipes | Done through the gate (F4-05). Load, Save, Download, Saved recipes, a recipe dropped with a folder going straight to Preview, and the Tokens list with unknown tokens flagged. Recent sets are deliberately not wired |
+| F5 Trust | F5-02 (performance, with a quadratic indexing fault fixed), F5-02b (pool budget counts inflated bytes), F5-03 (memory) and F5-04 (Excel results in the docs) are done. F5-01 (Firefox and WebKit) is set up and waiting for its first CI run. F5-06 final gate is open |
 
 The merge of `fable-writer` and then `fable-scope` into `fable` is done. The only conflict was the first line of `executeFile` in `src/batch/execute/index.js`; both sides were kept (Writer's `shouldStop`, Scope's transform dispatch). `asset-manifest.json` was regenerated. Lint 0 findings; unit 1521 pass, 0 fail, 5 skipped. The trunk bug Writer found (`index.xlsx` ignoring the frozen time) is fixed with a test that fails without it.
 

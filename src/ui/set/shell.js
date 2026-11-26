@@ -5,6 +5,8 @@ import { VariantsPanel } from './variants.js';
 import { RecipePanel } from './recipe-panel.js';
 import { diffTable } from '../dialogs.js';
 
+const REDRAW_MS = 200;
+
 const SETTLED = ['ready', 'done', 'doneWithFailures'];
 const BUSY = ['previewing', 'running'];
 
@@ -79,7 +81,7 @@ export class SetShell {
     this.query = '';
     this.scheduled = false;
     this.build();
-    this.off = session.subscribe(() => this.schedule());
+    this.off = session.subscribe((event) => this.schedule(event));
     this.render();
   }
 
@@ -110,16 +112,31 @@ export class SetShell {
     this.container.append(this.root);
   }
 
-  schedule() {
+  schedule(event) {
+    const gentle = event && (event.type === 'file' || event.type === 'progress');
+    if (gentle && this.lastRender !== undefined) {
+      const wait = REDRAW_MS - (performance.now() - this.lastRender);
+      if (wait > 0) {
+        if (this.timer === null || this.timer === undefined) this.timer = setTimeout(() => this.draw(), wait);
+        return;
+      }
+    }
     if (this.scheduled) return;
     this.scheduled = true;
     queueMicrotask(() => {
       this.scheduled = false;
-      if (this.root.isConnected) this.render();
+      this.draw();
     });
   }
 
+  draw() {
+    if (this.root.isConnected) this.render();
+  }
+
   render() {
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.lastRender = performance.now();
     const all = this.session.list();
     const shown = this.query ? all.filter((f) => f.relPath.toLowerCase().includes(this.query)) : all;
     this.root.dataset.state = this.session.state;
@@ -298,6 +315,7 @@ export class SetShell {
 
   destroy() {
     this.off();
+    clearTimeout(this.timer);
     this.root.remove();
   }
 }

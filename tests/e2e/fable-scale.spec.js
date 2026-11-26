@@ -59,14 +59,29 @@ async function dropGenerated(page) {
   }, { payloads, count: COUNT });
 }
 
-test('fable scale: 500 generated workbooks are indexed in under a minute, drift is grouped by content hash, and nothing stalls the page', async ({ page }) => {
+test('fable scale: 500 generated workbooks are indexed in under a minute, the list is redrawn a few times a second and not once for each file, drift is grouped by content hash, and nothing stalls the page', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
   await startLongTaskLog(page);
+  await page.evaluate(() => {
+    window.__listBatches = 0;
+    const count = new MutationObserver(() => window.__listBatches++);
+    const attach = () => {
+      const list = document.querySelector('.set-list');
+      if (list) count.observe(list, { childList: true });
+      return !!list;
+    };
+    if (!attach()) {
+      const wait = new MutationObserver(() => attach() && wait.disconnect());
+      wait.observe(document.body, { childList: true, subtree: true });
+    }
+  });
   const started = Date.now();
   await dropGenerated(page);
   await waitForSet(page);
-  expect(Date.now() - started).toBeLessThan(60000);
+  const indexMs = Date.now() - started;
+  expect(indexMs).toBeLessThan(60000);
+  expect(await page.evaluate(() => window.__listBatches)).toBeLessThanOrEqual(Math.ceil(indexMs / 150) + 20);
   await expect(page.locator('.set-file')).toHaveCount(COUNT);
   await expect(page.locator('.set-run-text')).toHaveText(`${COUNT} ready`);
   expect(await longest(page)).toBeLessThan(150);

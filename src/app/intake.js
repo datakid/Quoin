@@ -7,9 +7,12 @@ const byRelPath = (a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath 
 const refOf = (file, relPath) => ({ name: file.name, relPath, size: file.size, lastModified: file.lastModified, file });
 
 export function snapshotDrop(dt) {
-  const items = [...(dt.items || [])].filter((it) => it.kind === 'file');
+  const items = Array.from(dt.items || []).filter((it) => it.kind === 'file');
   const entries = items.map((it) => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null));
-  return { entries: entries.length && entries.every(Boolean) ? entries : null, files: [...(dt.files || [])] };
+  const files = Array.from(dt.files || []);
+  const usable = entries.length > 0 && entries.every(Boolean);
+  const needed = usable && (files.length === 0 || entries.some((e) => e.isDirectory));
+  return { entries: needed ? entries : null, files };
 }
 
 export function splitRecipe(snapshot) {

@@ -13,6 +13,7 @@ function shell(meta, status, refused, format) {
     name: meta.name,
     relPath: meta.relPath,
     size: meta.size,
+    inflated: 0,
     status,
     refused,
     format,
@@ -74,6 +75,7 @@ export async function indexWorkbook(bytes, meta, { limits = DEFAULT_LIMITS } = {
     return refusedIndex(meta, code);
   }
   const ix = shell(meta, 'ready', null, wb.format);
+  ix.inflated = wb.inflatedBytes;
   ix.sheets = wb.sheets.map((s, i) => ({ name: s.name, index: i, state: s.state, type: s.type, part: s.part, nonEmpty: null }));
   ix.tables = wb.tables.map((t) => ({ name: t.displayName, sheet: t.sheet, ref: t.ref, headerRowCount: t.headerRowCount, tableType: t.tableType }));
   ix.queries = await queriesOf(wb);

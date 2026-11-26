@@ -60,6 +60,27 @@ test('a drop with no entry support still lists its files', () => {
   assert.equal(hasFolder(snapshotDrop({ files: [file('a.xlsx')] })), false);
 });
 
+test('a drop of files only is read from the file list, whatever the entries do', async () => {
+  const hung = (name) => ({ isFile: true, isDirectory: false, name, fullPath: `/${name}`, file: () => {} });
+  const snap = snapshotDrop(drop([hung('b.xlsx'), hung('a.xlsx')], [file('b.xlsx'), file('a.xlsx')]));
+  assert.equal(snap.entries, null);
+  const { files, unreadable } = await collectFiles(snap);
+  assert.deepEqual(files.map((f) => f.relPath), ['a.xlsx', 'b.xlsx']);
+  assert.deepEqual(unreadable, []);
+});
+
+test('entries are kept when a folder is among the items or the file list is empty', () => {
+  assert.equal(snapshotDrop(drop([dirEntry('/books', []), fileEntry('/a.xlsx')], [file('books'), file('a.xlsx')])).entries.length, 2);
+  assert.equal(snapshotDrop(drop([fileEntry('/a.xlsx')], [])).entries.length, 1);
+});
+
+test('a drop whose items are not iterable still lists its files', () => {
+  const items = { length: 1, 0: { kind: 'file', webkitGetAsEntry: () => fileEntry('/a.xlsx') } };
+  const snap = snapshotDrop({ items, files: [file('a.xlsx')] });
+  assert.equal(snap.files.length, 1);
+  assert.equal(snap.entries, null);
+});
+
 test('files dropped at the top level use their name as the relative path', async () => {
   const snap = snapshotDrop(drop([fileEntry('/b.xlsx'), fileEntry('/a.xlsx')]));
   const { files, unreadable } = await collectFiles(snap);

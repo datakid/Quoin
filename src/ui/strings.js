@@ -490,6 +490,8 @@ export const ERRORS = {
   'recipe.newer': 'This recipe is from a newer version of Quoin and was not opened.',
   'recipe.token': 'Unknown token {token}.',
   'recipe.invalid': 'This recipe could not be read. {detail}',
+  'recipe.tooLarge': S.recipeTooLarge,
+  'recipe.unreadable': S.recipeUnreadable,
   'recipe.binary': 'This is not a text file, so it was not opened as a recipe.',
   'recipe.name': 'Give the recipe a name before saving it.',
   'recipe.storeFull': 'Quoin cannot keep more recipes in this browser. Delete one, or download it as a file.',

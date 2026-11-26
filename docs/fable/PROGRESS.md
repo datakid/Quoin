@@ -564,5 +564,71 @@ Decisions made inside the plan's gaps (log, not yet confirmed):
 - Copy rather than insert, for the reason above.
 - The note at load time is in addition to the refusal at Preview, so the problem shows before the person presses Preview.
 
+### F5-01 Firefox and WebKit (set up, first results pending)
+Layer: tests, CI
+Files: playwright.config.js, package.json, .github/workflows/browsers.yml
+Do: `playwright.config.js` has `firefox` and `webkit` projects beside `chromium`, leaving out the visual specs (screenshots are made in Chromium) and the two Chromium-only specs (`fable-memory`, `fable-perf`, which use the DevTools protocol). `npm run test:browser` runs Chromium only, as before; `npm run test:browsers` runs the other two. A new workflow `browsers` runs both engines on every push to `fable` that touches source, styles or tests, and on request. It is not a gate yet: the browser downloads are blocked in the build sandbox, so CI is the only place these engines can run and the first run will say what fails.
+Test that fails without it: the workflow itself, run by CI.
+Result: Not yet run
+Fails without: n/a
+Changed expectations: none.
+Deviations: none yet. Failures found will be fixed, or recorded here as Blocked with the engine and the reason.
+
+### F5-02 Performance (done on one machine)
+Layer: tests, app, docs
+Files: tests/e2e/fable-perf.spec.js, .github/workflows/perf.yml, docs/fable/performance.md, src/ui/set/shell.js, tests/e2e/fable-scale.spec.js
+Do: the numbers are in `docs/fable/performance.md`. Measuring found a real fault: indexing was quadratic because the Files list was rebuilt in full after every file (14.0 s for 500 files and 195.7 s for 2,000 on the build machine). The set shell now redraws progress at most five times a second and still redraws at once for a state change or an action by the person. Indexing 500 files takes 2.7 s and 2,000 files 17.3 s. Preview and Get are linear (75 to 96 files per second with one worker).
+Test that fails without it: `fable-scale.spec.js` counts how often the list is rebuilt while 500 files index and allows one rebuild per 150 ms. With the old shell that test failed.
+Result: Done
+Fails without: yes
+Changed expectations: none. The 500-file test also keeps its 60 s limit.
+Deviations: Preview at 2,000 files stalls the page for 484 ms (about a quarter of a millisecond per file). It is linear, the cause is not found, and it is recorded as a known limit in `performance.md`. Nothing above 2,000 files was tried.
+
+### F5-02b The pool budget counts inflated bytes (done)
+Layer: core, batch, app, tests
+Files: src/core/zip-read.js, src/core/workbook.js, src/batch/index/file-index.js, src/app/set-indexes.js, src/app/plan-run.js, src/app/collect-run.js, src/app/variant-text.js, tests/unit/batch-index.test.js, tests/unit/set-indexes.test.js, tests/unit/plan-run.test.js
+Do: Q4 defines the in-flight budget in inflated bytes, but jobs were charged the size of the file on disk. A workbook of a few megabytes can inflate to 1 GiB within the limits, so a few of them at once could hold several gigabytes while the pool believed it held a few megabytes. The index now carries `inflated`, the uncompressed size the zip declares (0 for a file that was refused), and every job is charged `max(file size, inflated)`.
+Test that fails without it: `plan-run.test.js` (each job is charged at the index's inflated size), `set-indexes.test.js` (3), `batch-index.test.js` (the index carries it).
+Result: Done
+Fails without: yes
+Changed expectations: the list of keys of a file index in `batch-index.test.js` gains `inflated`, between `size` and `status`.
+Deviations: none. The fixtures inflate to about their own size, so no browser test comes near the budget; the budget is exercised by the pool's own unit tests.
+
+### F5-03 Memory (done)
+Layer: tests
+Files: tests/e2e/fable-memory.spec.js
+Do: two tests. After a warm-up run, four more 50-file Previews and Gets leave the main-thread heap (JS heap plus array-buffer backing) within 10% of its baseline, and the pool reports nothing in flight, running, queued or leased, with every worker idle. A Preview alone keeps no output bytes. Retaining each downloaded zip made the first test fail; keeping bytes in the preview made the second fail. The first test passed six runs in a row.
+Result: Done
+Fails without: yes
+Deviations: the baseline is taken after one warm-up run, not before the first run, because the first run loads and compiles the batch modules (about a quarter of a 3 MiB heap). A worker's own heap cannot be read from Playwright; the test checks the pool's accounting instead, and `performance.md` says so.
+
+### F5-04 Pack and Excel results in the docs (done)
+Layer: docs
+Files: README.md, docs/observations.md
+Do: the pack was already complete. The README no longer says nothing has been run in Excel, and `observations.md` records exactly what happened: the person's informal pass on 2026-11-24 (13 files open with no repair message, queries and macros ran without errors, contents not reviewed, checklist not ticked) and the static check on 2026-11-25. No line of the MX table was changed, because no check was ticked. In-place output and compute in Excel stay unbuilt.
+Result: Done
+
+### F4-05 Phase F4 gate
+Checked 2026-11-26 against section 9 of the plan.
+- [x] Lint 0 findings (T-LINT-1 included), 1,719 unit tests (5 skipped, as before), and the Chromium browser suite: 372 passed and 0 failed locally (visual specs run in CI, where their baselines are made). CI evidence is in the commit that follows this entry.
+- [x] Every new test was shown to fail without its change: recipe drop (auto-Preview removed, trigger widened), tokens (marks, notes and hint removed), recipes (file-name fallback, focus move, skipped note), memory (retained bytes), scale (old shell).
+- [x] No existing test weakened, skipped or deleted. Changed expectations are logged: the home footnote (F4-01 and F4-03), the unknown-token refusal text (F4-04), the `dropTree` helper (F4-02), and the file-index key list (F5-02b).
+- [x] New surfaces (Save, Download, Saved recipes, Tokens list) have keyboard paths, axe checks in both themes, and visual baselines at three sizes in both themes. No new colour was introduced, so `pairs.json` is unchanged.
+- [x] No new dependency, no network call. Storage: only `quoin.theme` and `quoin.recipes`, checked by a test that lists every key after use; the recipe is stored as text and no workbook, query or path is stored. The README says so, and says `quoin.recent` is allowed but not written.
+- [x] The slice drop (recipe and folder together), Preview, Get works in Chromium by test (`fable-recipe-drop.spec.js`); nobody has tried it by hand.
+- [x] README, `docs/decisions.md`, PROGRESS.md and MANAGER.md updated.
+- [x] F4 gate: a recipe plus a folder reaches Preview in one action. The allowlist and the README agree.
+Not part of the gate and still open: F4-01's hand-authoring gap (there is no recipe editor).
+
+### F4-01 merged with the integrator's wiring (trunk agent, CI green)
+Layer: app, ui/set, tests
+Files: src/ui/strings.js, tests/e2e/fable-recipe-files.spec.js, asset-manifest.json
+Do: merged `origin/fable` (`79c3b8c`) into the trunk handover branch. The integrator had already wired Save in this browser, Download recipe file and Saved recipes, so `main.js`, `recipe-panel.js` and `shell.js` are theirs unchanged. What stays from the trunk agent is `src/app/recipe-files.js` (the read failure code is `recipe.unreadable`) and its `recipe.tooLarge` and `recipe.unreadable` error entries.
+Test that fails without it: `tests/e2e/fable-recipe-files.spec.js` now has five tests (Download recipe file shown only while a recipe is held, download after a Preview keeps the Preview, a binary file is refused, a byte order mark with Windows line endings loads, an invalid and a newer recipe say so).
+Result: lint 0 findings and 1714 unit tests pass locally. CI on `10b69cf` (branch `fable-trunk-handover`) is green: lint, unit and the Chromium browser tests. The earlier run on `3f801f1`, before the merge, failed. No browser can be installed in the trunk agent's environment, so nothing browser-side was run by hand.
+Fails without: not checked, for the same reason.
+Changed expectations: the removed Save recipe button is now Download recipe file, and the binary refusal sentence is the integrator's.
+Deviations: two of my tests (save under the loaded name, a file over 256 KB) are dropped because `fable-recipes.spec.js` covers both on the integrator's UI.
+
 ### Next
-The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. Then the F4 gate (F4-05), and F5. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.
+The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. F4 is through its gate. F5 is waiting on the first Firefox and WebKit run in CI, the final gate, and the open decisions on section 9. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.

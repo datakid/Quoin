@@ -1,0 +1,27 @@
+name: perf
+on:
+  push:
+    branches: [fable]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  measure:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[perf]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Measure
+        run: |
+          set +e
+          QUOIN_PERF=1 npx playwright test tests/e2e/fable-perf.spec.js --project=chromium 2>&1 | tee perf.log
+          code=${PIPESTATUS[0]}
+          sh scripts/ci-annotate.sh "perf" perf.log -E '^PERF '
+          exit $code

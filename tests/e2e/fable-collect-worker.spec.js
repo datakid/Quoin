@@ -4,7 +4,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { resolvePlan } from '../../src/batch/resolve/resolve.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 import { executeFilePlan } from '../../src/batch/execute/collect.js';
-import { openApp, fx } from './helpers.js';
+import { openApp, fx, expectSameOutput } from './helpers.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
 const recipe = parseRecipe(JSON.stringify({ recipe: 'collect', v: 1 })).recipe;
@@ -34,13 +34,13 @@ const applyInPage = (page, { url, name, filePlan, extraBytes }) =>
       const first = await send(1);
       const second = await send(2);
       worker.terminate();
-      const view = async (m) => ({ type: m.type, fileId: m.fileId, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
+      const view = async (m) => ({ type: m.type, fileId: m.fileId, bytes: m.result.bytes ? Array.from(m.result.bytes) : null, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
       return { first: await view(first), second: await view(second) };
     },
     { url, name, filePlan, extraBytes }
   );
 
-test('fable collect worker: apply returns the same zip, hash and rows as Node, twice in a row on one worker', async ({ page }) => {
+test('fable collect worker: apply returns the same zip content, hash and rows as Node, twice in a row on one worker', async ({ page, browserName }) => {
   await openApp(page);
   const bytes = new Uint8Array(readFileSync(fx('mixed.xlsm')));
   const { meta, filePlan } = await planFor(bytes, 'mixed.xlsm');
@@ -49,9 +49,7 @@ test('fable collect worker: apply returns the same zip, hash and rows as Node, t
   for (const got of [first, second]) {
     expect(got.type).toBe('applied');
     expect(got.fileId).toBe('f0001');
-    expect(got.bytesLength).toBe(expected.bytes.length);
-    expect(got.sha256).toBe(expected.sha256);
-    expect(got.bytesHash).toBe(expected.sha256);
+    await expectSameOutput(got, { bytes: expected.bytes, bytesLength: expected.bytes.length, sha256: expected.sha256 }, browserName);
     expect(got.rows).toEqual(expected.rows.map((r) => ({ ...r, duration_ms: 0 })));
   }
 });

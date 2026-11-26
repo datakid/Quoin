@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { expect } from '@playwright/test';
+import { readZip } from '../../src/core/zip-read.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +15,7 @@ export async function openApp(page, path = '/index.html') {
     if (m.type() === 'error' || m.type() === 'warning') problems.push(`${m.type()}: ${m.text()}`);
   });
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+  page.__problems = problems;
   await page.addInitScript(() => {
     delete window.showSaveFilePicker;
   });
@@ -80,11 +84,11 @@ export async function dropTree(page, nodes) {
         };
       }
       const bin = Uint8Array.from(atob(node.data), (c) => c.charCodeAt(0));
-      return { isFile: true, isDirectory: false, name: node.name, fullPath, file: (ok) => ok(new File([bin], node.name)) };
+      return { isFile: true, isDirectory: false, name: node.name, fullPath, file: (ok) => ok(new File([bin], node.name, { lastModified: 1700000000000 })) };
     };
     const entries = nodes.map((n) => toEntry(n, ''));
     const dt = new DataTransfer();
-    for (const n of nodes) dt.items.add(new File(n.children ? [] : [Uint8Array.from(atob(n.data), (c) => c.charCodeAt(0))], n.name));
+    for (const n of nodes) dt.items.add(new File(n.children ? [] : [Uint8Array.from(atob(n.data), (c) => c.charCodeAt(0))], n.name, { lastModified: 1700000000000 }));
     const carrier = { files: dt.files, items: entries.map((e) => ({ kind: 'file', webkitGetAsEntry: () => e })), types: ['Files'] };
     const ev = new DragEvent('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(ev, 'dataTransfer', { value: carrier });
@@ -100,4 +104,29 @@ export const setSnapshot = (page) =>
     counts: window.__quoin.set.counts()
   }));
 
-export const waitForSet = (page, state = 'ready') => page.waitForFunction((s) => window.__quoin && window.__quoin.set.state === s, state, { timeout: 45000 });
+export const waitForSet = async (page, state = 'ready') => {
+  try {
+    await page.waitForFunction((s) => window.__quoin && window.__quoin.set.state === s, state, { timeout: 45000 });
+  } catch (e) {
+    const seen = await page.evaluate(() => (window.__quoin ? { state: window.__quoin.set.state, files: window.__quoin.set.list().map((f) => `${f.relPath}:${f.status}`), alert: (document.querySelector('#alert') || {}).textContent || '' } : null)).catch(() => null);
+    throw new Error(`${e.message}\nset: ${JSON.stringify(seen)}\npage problems: ${JSON.stringify(page.__problems || [])}`);
+  }
+};
+
+export async function zipDigest(bytes) {
+  const zip = readZip(Uint8Array.from(bytes));
+  const out = [];
+  for (const e of zip.entries) out.push([e.name, e.isDirectory ? '' : createHash('sha256').update(await e.read()).digest('hex')]);
+  return out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+export async function expectSameOutput(got, expected, browserName) {
+  expect(got.bytesHash).toBe(got.sha256);
+  if (browserName === 'chromium') {
+    expect(got.sha256).toBe(expected.sha256);
+    expect(got.bytesLength).toBe(expected.bytesLength);
+    return;
+  }
+  expect(got.bytes.length).toBeGreaterThan(0);
+  expect(await zipDigest(got.bytes)).toEqual(await zipDigest(expected.bytes));
+}

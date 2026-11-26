@@ -178,5 +178,6 @@ export function readZip(bytes, limits = DEFAULT_LIMITS) {
     archive.byLowerName.set(lower, entry);
     o += 46 + nameLen + extraLen + commentLen;
   }
+  archive.declaredBytes = declaredTotal;
   return archive;
 }

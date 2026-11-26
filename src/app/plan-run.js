@@ -4,7 +4,7 @@ import { failedResult } from '../batch/execute/index.js';
 import { reportRows } from './outputs.js';
 import { combineOutputs, labelCombined } from '../batch/execute/combine.js';
 import { zipClock } from '../batch/execute/collect.js';
-import { indexesOf } from './set-indexes.js';
+import { indexesOf, inflatedEstimate } from './set-indexes.js';
 import { sha256Text } from '../batch/index/hash.js';
 
 const WRITE_RECIPES = ['inject', 'replace', 'align'];
@@ -88,7 +88,7 @@ export function startPlanRun({ session, pool, recipe, now, runId, mode, preview 
       const rec = session.file(filePlan.fileId);
       const meta = { id: rec.id, name: rec.name, relPath: rec.relPath, size: rec.size };
       const fileRef = { ...meta, lastModified: rec.lastModified, file: rec.file };
-      const reply = await pool.submit({ message: applyMessage(fileRef, filePlan, options), estimate: rec.size });
+      const reply = await pool.submit({ message: applyMessage(fileRef, filePlan, options), estimate: inflatedEstimate(rec) });
       const fail = (code) => failedResult(filePlan, code, { recipe, meta, runId });
       let result = null;
       if (reply.status === 'done' && reply.message.type === 'applied') result = reply.message.result;

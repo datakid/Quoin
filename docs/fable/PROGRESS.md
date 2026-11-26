@@ -479,3 +479,14 @@ Why: the person has no Excel today, so every output in the pack was checked with
 ### Next
 Real-Excel check of the pack (a person). Then F3-06 (new sheet in a copy) is wired the same way, then F3-07 (combined, which also needs a combined step across files in the run), each after its own check. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged.
 >>>>>>> origin/fable
+
+### F4-01 wired: Save recipe, and loading through the pure module
+Layer: app, ui/set
+Files: src/app/main.js, src/ui/set/recipe-panel.js, src/ui/set/shell.js, src/ui/strings.js, src/app/recipe-files.js, tests/e2e/fable-recipe-files.spec.js, asset-manifest.json
+Do: loading a recipe file now goes through `src/app/recipe-files.js`, so the size check, binary detection, byte order mark and `parseRecipe` live in one tested place. The Recipe region gets a Save recipe button, shown while a recipe is held, that downloads the canonical recipe under the loaded file's name (or one made from the recipe name). The three codes the module can return that were not yet in the error table (`recipe.tooLarge`, `recipe.binary`, `recipe.unreadable`) are added; the first and third reuse the integrator's existing sentences.
+Test that fails without it: `tests/e2e/fable-recipe-files.spec.js` (7 tests in Chromium: the button appears and disappears with the recipe; the saved file is the canonical text under the loaded name and loads again to the same recipe; saving after a Preview keeps the Preview; a binary file is refused in words; a file over 256 KB is refused; a byte order mark with Windows line endings loads; an invalid and a newer recipe say so). The integrator's own recipe loading tests in `fable-preview.spec.js` pass unchanged.
+Result: Done locally; CI result is recorded when the run finishes.
+Fails without: yes
+Changed expectations: none.
+Deviations: the pure module's read-failure code is now `recipe.unreadable` instead of `recipe.invalid` so the existing sentence can be shown.
+

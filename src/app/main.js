@@ -22,11 +22,10 @@ import { startPlanRun, previewSupport } from './plan-run.js';
 import { rowDiff } from './row-diff.js';
 import { buildPlanOutput } from './outputs.js';
 import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
-import { parseRecipe } from '../batch/recipe/recipe.js';
+import { loadRecipeFile as readRecipeFile, saveRecipeFile, isRecipeFileName } from './recipe-files.js';
 import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
 
-const MAX_RECIPE_BYTES = 256 * 1024;
 
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
 
@@ -234,6 +233,7 @@ export class App {
       onCancel: () => this.cancelSetRun(),
       onOpen: (id) => this.openFromSet(id),
       onLoadRecipe: (file) => this.loadRecipeFile(file),
+      onSaveRecipe: () => this.saveRecipe(),
       onClearRecipe: () => this.clearRecipe(),
       onPreview: () => this.previewRecipe(),
       onGet: () => this.getRecipe({ folder: false }),
@@ -431,17 +431,17 @@ export class App {
     this.recipeHeld = null;
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
-    if (file.size > MAX_RECIPE_BYTES) return this.showRecipe(this.recipeView({ error: S.recipeTooLarge }));
-    let text;
-    try {
-      text = await file.text();
-    } catch {
-      return this.showRecipe(this.recipeView({ error: S.recipeUnreadable }));
-    }
-    const parsed = parseRecipe(text);
+    const parsed = await readRecipeFile(file);
     if (!parsed.ok) return this.showRecipe(this.recipeView({ error: errorMessage(parsed.code, { detail: parsed.detail }) }));
     this.recipeHeld = { name: file.name, recipe: parsed.recipe, warnings: parsed.warnings };
     this.showRecipe(this.recipeView());
+  }
+
+  saveRecipe() {
+    if (!this.recipeHeld) return;
+    const out = saveRecipeFile(this.recipeHeld.recipe);
+    if (!out.ok) return this.showRecipe(this.recipeView({ error: errorMessage(out.code, { detail: out.detail }) }));
+    saveBytes(out.bytes, isRecipeFileName(this.recipeHeld.name) ? this.recipeHeld.name : out.name, 'application/json');
   }
 
   clearRecipe() {

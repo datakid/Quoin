@@ -51,7 +51,7 @@ export async function loadRecipeFile(file) {
   try {
     bytes = new Uint8Array(await file.arrayBuffer());
   } catch {
-    return { ok: false, code: 'recipe.invalid', detail: 'the file could not be read' };
+    return { ok: false, code: 'recipe.unreadable', detail: 'the file could not be read' };
   }
   if (bytes.length > RECIPE_FILE_MAX) return { ok: false, code: 'recipe.tooLarge', detail: `${bytes.length}` };
   if (bytes.includes(0)) return { ok: false, code: 'recipe.binary', detail: 'not text' };

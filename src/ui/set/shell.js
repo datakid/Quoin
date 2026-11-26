@@ -50,7 +50,7 @@ function splitPath(relPath, name) {
 }
 
 export class SetShell {
-  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, onLoadRecipe = () => {}, onClearRecipe = () => {}, onPreview = () => {}, onGet = () => {}, onGetFolder = () => {}, canPickFolder = false, onPreviewCleared = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
+  constructor(container, session, { onSummary = () => {}, onCollect = () => {}, onCancel = () => {}, onOpen = () => {}, onLoadRecipe = () => {}, onSaveRecipe = () => {}, onClearRecipe = () => {}, onPreview = () => {}, onGet = () => {}, onGetFolder = () => {}, canPickFolder = false, onPreviewCleared = () => {}, loadVariantText = async () => '', groupVariants = () => ({ items: [], drifted: 0 }) } = {}) {
     this.container = container;
     this.session = session;
     this.onSummary = onSummary;
@@ -58,6 +58,7 @@ export class SetShell {
     this.onCancel = onCancel;
     this.onOpen = onOpen;
     this.onLoadRecipe = onLoadRecipe;
+    this.onSaveRecipe = onSaveRecipe;
     this.onClearRecipe = onClearRecipe;
     this.onPreview = onPreview;
     this.onGet = onGet;
@@ -95,7 +96,7 @@ export class SetShell {
     this.empty = h('p', { class: 'set-empty item-meta' });
     this.files = h('section', { class: 'set-pane set-files', 'aria-label': S.setFiles }, h('div', { class: 'set-pane-head' }, h('h2', { class: 'set-pane-title' }, S.setFiles), this.count), this.filter, this.list, this.empty);
     this.recipe = h('section', { class: 'set-pane set-recipe', 'aria-label': S.setRecipe, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setRecipe));
-    this.recipePanel = new RecipePanel(this.recipe, { onLoad: (file) => this.onLoadRecipe(file), onClear: () => this.onClearRecipe(), onPreview: () => this.onPreview(), onGet: () => this.onGet(), onGetFolder: () => this.onGetFolder(), canPickFolder: this.canPickFolder });
+    this.recipePanel = new RecipePanel(this.recipe, { onLoad: (file) => this.onLoadRecipe(file), onSave: () => this.onSaveRecipe(), onClear: () => this.onClearRecipe(), onPreview: () => this.onPreview(), onGet: () => this.onGet(), onGetFolder: () => this.onGetFolder(), canPickFolder: this.canPickFolder });
     this.result = h('section', { class: 'set-pane set-result', 'aria-label': S.setResult, tabindex: 0 }, h('h2', { class: 'set-pane-title' }, S.setResult));
     this.runText = h('span', { class: 'set-run-text' });
     this.bar = h('progress', { class: 'set-bar', hidden: true, 'aria-label': S.setRunRunning(0, 0) });

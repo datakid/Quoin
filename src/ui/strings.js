@@ -486,7 +486,7 @@ export const S = {
     regex: 'Regular expression',
     codeOnly: 'Code only',
     scope: 'Where',
-    scopes: { all: 'All queries and macros', queries: 'Queries', modules: 'Macros', current: 'This item' },
+    scopes: { all: 'All queries and macros', queries: 'Queries', modules: 'Macros', current: 'This item', selection: 'The selected items' },
     searching: 'Searching…',
     none: 'No matches.',
     results: (n, items) => `${n === 1 ? '1 match' : `${n} matches`} in ${items === 1 ? '1 item' : `${items} items`}`,
@@ -712,7 +712,7 @@ export const S = {
   },
   dock: {
     label: 'Result dock',
-    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', problems: 'Problems', references: 'References', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
+    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', find: 'Find', problems: 'Problems', references: 'References', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
     pin: 'Pin this result',
     unpin: 'Unpin',
     show: 'Show',

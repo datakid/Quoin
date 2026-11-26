@@ -589,3 +589,10 @@ State: overlays 4/4, visual 40/40 (twice, also after the label fix), a11y 18/18,
 - Fixed a pre-existing failure (present since the WB-13 registry change, masked by the later registry crash): the shortcut-sheet test expected the hand-written merged row `Alt+Up / Alt+Down`; the registry sheet lists one row per command, so the expectation is now the two separate rows.
 Tests: the new `navigator.spec.js` test covers the five palette rows (visible; the four non-Revert ones enabled on a two-query selection; Revert disabled until something is edited), `Copy the selected names` → `Copied 2 names.` in the status bar, and `Show the first selected query in the graph` → the graph panel. navigator+palette+keyboard 24/24.
 - The bypassed-steps count on a row stays deviated (recorded above: it needs the step model of every query on every refresh).
+
+#### WB-21 leftovers (2026-11-26)
+- Find and replace is now a **panel in the dock** (a `Find` tab between Compare and Problems), not a modal dialog. The panel is built once per workbook and re-opened by `Ctrl/Cmd+Shift+F` (find) and `Ctrl/Cmd+Alt+F` (replace); the mode toggles the replace field and the replace buttons in place. A match row navigates without closing the panel; *Replace selected* applies and re-runs the search in place; the *Close* button and Escape on an empty query return to the Result tab.
+- The **selection scope**: `The selected items` joins the scope list (the core already supported `scope: 'selection'`; the wiring was missing). `findItems()` marks items that are in the navigator's current selection, so find and replace can be limited to it.
+- Changed expectations: dock.spec's tablist now includes `find`; find.spec asserts the panel stays open after navigating a match and after applying a replacement.
+- Still deviated (unchanged): the locked-VBA-project e2e — no fixture can be produced here without generating a locked `vbaProject.bin`; the skip logic stays covered by the unit tests.
+Tests: find.spec 6/6 (a new selection-scope test included), dock.spec 7/7, visual baselines regenerated again (the dock strip gained a tab in every state), a11y suite green.

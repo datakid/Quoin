@@ -1,7 +1,7 @@
 import { h } from '../dom.js';
 import { S } from '../strings.js';
 
-export const DOCK_TABS = ['result', 'pinned', 'compare', 'problems', 'references', 'queue', 'graph', 'changes'];
+export const DOCK_TABS = ['result', 'pinned', 'compare', 'find', 'problems', 'references', 'queue', 'graph', 'changes'];
 
 export class Dock {
   constructor({ onShow }) {

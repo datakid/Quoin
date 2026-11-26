@@ -16,7 +16,7 @@ import { mountProblems } from '../ui/wb/problems-view.js';
 import { Dock } from '../ui/wb/dock.js';
 import { renderPinned, renderQueue, renderCompare, renderChanges, pinLabel } from '../ui/wb/dock-views.js';
 import { summariesFor } from './change-summary.js';
-import { openFind } from '../ui/wb/find-dialog.js';
+import { buildFindPanel } from '../ui/wb/find-dialog.js';
 import { filterDialog, stepDialog, profileSheet } from '../ui/wb/column-tools.js';
 import { insertViewSteps } from '../core/wb/view-steps.js';
 import { OpHistory } from '../core/wb/op-history.js';
@@ -304,13 +304,14 @@ export class Workspace {
   findItems() {
     const s = this.session;
     const cur = this.item;
+    const picked = new Set(this.nav ? this.nav.selectedItems().map((i) => `${i.type}:${i.name}`) : []);
     const queries = s.queries.map((q) => {
       const ed = s.queryEditable();
-      return { type: 'query', name: q.name, text: s.textOf({ type: 'query', name: q.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), current: !!cur && cur.type === 'query' && cur.name === q.name };
+      return { type: 'query', name: q.name, text: s.textOf({ type: 'query', name: q.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), selected: picked.has(`query:${q.name}`), current: !!cur && cur.type === 'query' && cur.name === q.name };
     });
     const modules = s.modules.map((m) => {
       const ed = s.moduleEditable(m.name);
-      return { type: 'module', name: m.name, text: s.textOf({ type: 'module', name: m.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), current: !!cur && cur.type === 'module' && cur.name === m.name };
+      return { type: 'module', name: m.name, text: s.textOf({ type: 'module', name: m.name }), readOnly: ed.editable ? null : errorMessage(ed.reason), selected: picked.has(`module:${m.name}`), current: !!cur && cur.type === 'module' && cur.name === m.name };
     });
     if (this.item && this.item.type === 'query') {
       const live = queries.find((q) => q.current);
@@ -325,19 +326,27 @@ export class Workspace {
 
   openFind(replace) {
     const sel = this.editor.getSelectionText ? this.editor.getSelectionText() : '';
-    openFind({ items: () => this.findItems() }, {
-      onOpen: (item, m) => {
-        this.select(item);
-        this.editor.goto(m.line, m.col);
-      },
-      onApply: (changes, message) => {
-        for (const c of changes) {
-          this.select(c.item);
-          this.editor.replaceDiff(c.text);
-        }
-        this.status.set({ note: message });
-      }
-    }, { replace, initial: sel && !/[\r\n]/.test(sel) ? sel : '' });
+    if (!this.findPanel) {
+      this.findPanel = buildFindPanel({ items: () => this.findItems() }, {
+        onOpen: (item, m) => {
+          this.select(item);
+          this.editor.goto(m.line, m.col);
+        },
+        onApply: (changes, message) => {
+          for (const c of changes) {
+            this.select(c.item);
+            this.editor.replaceDiff(c.text);
+          }
+          this.status.set({ note: message });
+        },
+        onDismiss: () => this.dock.show('result')
+      });
+      this.dock.panel('find').append(this.findPanel.el);
+    }
+    this.findPanel.setMode(replace);
+    this.dock.show('find');
+    this.findPanel.focus();
+    this.findPanel.setQuery(sel && !/[\r\n]/.test(sel) ? sel : '');
     return true;
   }
 

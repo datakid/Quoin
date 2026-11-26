@@ -1,18 +1,17 @@
 import { h, clear } from '../dom.js';
 import { S } from '../strings.js';
 import { findInItemsAsync, previewReplacement, applyReplacements, buildRegex } from '../../core/wb/find.js';
-import { openDialog } from '../dialogs.js';
 
 function highlighted(text, col, len) {
   const at = col - 1;
   return [text.slice(0, at), h('mark', null, text.slice(at, at + len)), text.slice(at + len)];
 }
 
-export function openFind(source, handlers, { replace = false, initial = '' } = {}) {
-  const state = { results: [], token: 0, selected: new Set(), busy: false };
+export function buildFindPanel(source, handlers) {
+  const state = { results: [], token: 0, selected: new Set(), busy: false, replace: false };
   const idp = `fd-${Math.random().toString(36).slice(2, 7)}`;
-  const find = h('input', { id: `${idp}-find`, type: 'text', class: 'find-input', value: initial, autocomplete: 'off', spellcheck: 'false' });
-  const repl = h('input', { id: `${idp}-repl`, type: 'text', class: 'find-input', autocomplete: 'off', spellcheck: 'false' });
+  const find = h('input', { id: `${idp}-find`, type: 'text', class: 'find-input', autocomplete: 'off', spellcheck: 'false' });
+  const repl = h('input', { id: `${idp}-repl`, type: 'text', class: 'find-input', hidden: true, autocomplete: 'off', spellcheck: 'false' });
   const box = (label, id) => {
     const cb = h('input', { type: 'checkbox', id: `${idp}-${id}` });
     cb.addEventListener('change', () => run());
@@ -27,13 +26,13 @@ export function openFind(source, handlers, { replace = false, initial = '' } = {
   const error = h('div', { class: 'find-error', role: 'alert' });
   const status = h('div', { class: 'find-status item-meta', role: 'status', 'aria-live': 'polite' });
   const list = h('div', { class: 'find-results' });
-  const applyBtn = h('button', { class: 'btn btn-primary', type: 'button', hidden: !replace, onclick: () => apply() }, S.find.replaceSelected(0));
-  const allBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: !replace, onclick: () => selectAll(true) }, S.find.selectAll);
-  const noneBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: !replace, onclick: () => selectAll(false) }, S.find.selectNone);
-  const close = h('button', { class: 'btn', type: 'button', onclick: () => dlg.close() }, S.close);
-  const dlg = h('dialog', { class: 'find', 'aria-labelledby': `${idp}-title` },
-    h('h2', { id: `${idp}-title` }, replace ? S.find.replaceTitle : S.find.findTitle),
-    h('div', { class: 'find-fields' }, h('label', { for: `${idp}-find` }, S.find.findLabel), find, replace ? h('label', { for: `${idp}-repl` }, S.find.replaceLabel) : null, replace ? repl : null, h('label', { for: `${idp}-scope` }, S.find.scope), scope),
+  const applyBtn = h('button', { class: 'btn btn-primary', type: 'button', hidden: true, onclick: () => apply() }, S.find.replaceSelected(0));
+  const allBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => selectAll(true) }, S.find.selectAll);
+  const noneBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => selectAll(false) }, S.find.selectNone);
+  const close = h('button', { class: 'btn', type: 'button', onclick: () => handlers.onDismiss() }, S.close);
+  const replLabel = h('label', { for: `${idp}-repl`, hidden: true }, S.find.replaceLabel);
+  const root = h('div', { class: 'find-panel' },
+    h('div', { class: 'find-fields' }, h('label', { for: `${idp}-find` }, S.find.findLabel), find, replLabel, repl, h('label', { for: `${idp}-scope` }, S.find.scope), scope),
     h('div', { class: 'find-options' }, cCase, lCase, cWord, lWord, cRe, lRe, cCode, lCode),
     error, status, list,
     h('div', { class: 'dialog-actions' }, allBtn, noneBtn, h('span', { class: 'spacer' }), applyBtn, close));
@@ -56,17 +55,14 @@ export function openFind(source, handlers, { replace = false, initial = '' } = {
       const head = h('div', { class: 'find-group' }, h('span', { class: 'find-item' }, r.item.name), h('span', { class: 'count-pill' }, String(r.matches.length)), r.skipped ? h('span', { class: 'item-meta' }, S.find.skipped(r.skipped)) : null);
       const rows = r.matches.map((m) => {
         const k = key(r, m);
-        const cb = replace && !r.skipped ? h('input', { type: 'checkbox', 'aria-label': `${r.item.name} ${m.line}:${m.col}`, checked: state.selected.has(k) }) : null;
+        const cb = state.replace && !r.skipped ? h('input', { type: 'checkbox', 'aria-label': `${r.item.name} ${m.line}:${m.col}`, checked: state.selected.has(k) }) : null;
         if (cb) cb.addEventListener('change', () => {
           if (cb.checked) state.selected.add(k);
           else state.selected.delete(k);
           updateApply();
         });
-        const body = h('button', { class: 'find-row', type: 'button', onclick: () => {
-          dlg.close();
-          setTimeout(() => handlers.onOpen(r.item, m), 0);
-        } }, h('span', { class: 'problem-pos item-meta' }, `${m.line}:${m.col}`), h('span', { class: 'find-line' }, ...highlighted(m.preview, m.col, m.text.length)));
-        const diff = replace && !r.skipped && state.selected.has(k) ? h('div', { class: 'find-diff item-meta' }, previewReplacement(m, template, { regex: cRe.checked }).after) : null;
+        const body = h('button', { class: 'find-row', type: 'button', onclick: () => handlers.onOpen(r.item, m) }, h('span', { class: 'problem-pos item-meta' }, `${m.line}:${m.col}`), h('span', { class: 'find-line' }, ...highlighted(m.preview, m.col, m.text.length)));
+        const diff = state.replace && !r.skipped && state.selected.has(k) ? h('div', { class: 'find-diff item-meta' }, previewReplacement(m, template, { regex: cRe.checked }).after) : null;
         return h('div', { class: 'find-match' }, cb, h('div', { class: 'find-body' }, body, diff));
       });
       list.append(h('section', { class: 'find-section' }, head, ...rows));
@@ -102,7 +98,7 @@ export function openFind(source, handlers, { replace = false, initial = '' } = {
     }
     state.results = r.results;
     state.selected.clear();
-    if (replace) for (const g of r.results) if (!g.skipped) for (const m of g.matches) state.selected.add(key(g, m));
+    if (state.replace) for (const g of r.results) if (!g.skipped) for (const m of g.matches) state.selected.add(key(g, m));
     status.textContent = r.total ? `${S.find.results(r.total, r.results.length)}${r.capped ? ` ${S.find.capped(r.total)}` : ''}` : S.find.none;
     paint();
   };
@@ -122,8 +118,8 @@ export function openFind(source, handlers, { replace = false, initial = '' } = {
       n += chosen.length;
       items++;
     }
-    dlg.close();
-    setTimeout(() => handlers.onApply(changes, S.find.replaced(n, items)), 0);
+    handlers.onApply(changes, S.find.replaced(n, items));
+    setTimeout(() => run(), 0);
   };
   let timer = null;
   const later = () => {
@@ -139,12 +135,28 @@ export function openFind(source, handlers, { replace = false, initial = '' } = {
       run();
     }
   });
-  dlg.addEventListener('close', () => {
-    state.token++;
-  });
-  openDialog(dlg);
-  find.focus();
-  find.select();
-  if (initial) run();
-  return dlg;
+  const setMode = (replace) => {
+    state.replace = replace;
+    repl.hidden = !replace;
+    replLabel.hidden = !replace;
+    applyBtn.hidden = !replace;
+    allBtn.hidden = !replace;
+    noneBtn.hidden = !replace;
+    if (replace) for (const r of state.results) if (!r.skipped) for (const m of r.matches) state.selected.add(key(r, m));
+    paint();
+  };
+  const focus = () => {
+    find.focus();
+    find.select();
+  };
+  const setQuery = (text) => {
+    find.value = text;
+    if (text) run();
+    else {
+      state.results = [];
+      status.textContent = '';
+      paint();
+    }
+  };
+  return { el: root, setMode, focus, setQuery };
 }

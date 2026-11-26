@@ -44,6 +44,16 @@
         "tests/unit/save-safety.test.js",
         "docs/fable/lanes/NOTES-safety.md"
       ]
+    },
+    "writer": {
+      "brief": "docs/fable/lanes/NOTES-writer.md",
+      "owns": [
+        "src/core/pq/members.js",
+        "src/core/pq/writeback.js",
+        "src/batch/execute/changes.js",
+        "tests/unit/batch-pq-members.test.js",
+        "docs/fable/lanes/NOTES-writer.md"
+      ]
     }
   }
 }

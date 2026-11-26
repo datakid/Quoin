@@ -12,7 +12,7 @@ Quoin opens an Excel `.xlsx` or `.xlsm` file in your browser and shows its Power
 
 **Read**
 - Lists every Power Query query in the workbook. Functions carry an ƒ badge, and each query shows where it loads: a table, the data model, or connection only.
-- Lists every VBA module (standard modules, classes, and the workbook and sheet modules).
+- Lists every VBA module (standard modules, classes, and the workbook and sheet modules), with an outline of its procedures and types. A macro's `.Connections("Query - ...").Refresh` references are listed with what they resolve to, and *Run these queries* runs the resolvable ones in order; the rest is never executed.
 - Shows file details: format, size, number of queries, modules, sheets and tables.
 
 **Edit**
@@ -23,8 +23,13 @@ Quoin opens an Excel `.xlsx` or `.xlsm` file in your browser and shows its Power
 - Downloads the workbook with only your edits applied. Where the browser offers a file picker, quoin writes through it, reads the file back and compares it byte for byte before it says the file was saved; elsewhere it downloads the file and says only that. Queries you edited are set to refresh when Excel opens the file, unless you turn that off.
 
 **Run**
+- Run modes: the open query (Ctrl+Enter), everything (Ctrl+Alt+Enter), only what is out of date (Ctrl+Shift+Enter), or a selection and its downstream. A batch fills a queue that shows each query's status, rows and time, and can be cancelled; what is left is marked cancelled.
+- The navigator groups queries by section, name or layer, sorts by name, last run, duration or row count, filters by chips (edited, errors, stale, never run, function, macro-linked), and searches fuzzily. A query with an error-level problem shows the error bead before it ever runs.
+- The dependency graph shows a query's upstream and downstream with status beads, and can run, pin or open from a node.
+- The Problems tab lists parse errors, unresolved names, reference cycles, structure findings and last-run mismatches, with counts in the status bar; clicking one opens the query at that line.
 - Runs queries in a worker with a purpose-built M interpreter: lexer, parser, lazy evaluator and a library of 545 entries (511 full, 2 partial, 32 unsupported). The list is in [`docs/m-coverage.md`](docs/m-coverage.md).
-- Shows the result as a grid, with the steps listed above it. You can sort, drill into records, lists and tables, and copy column names. Sorting is limited to 200,000 rows.
+- Shows the result as a grid, with the steps listed above it. You can sort, drill into records, lists and tables, and copy column names. A header's filter can be kept as a view or inserted as a step, and any view can be written out as steps with *Insert view steps*.
+- The steps panel above the editor lists each step with its kind and row delta, follows the caret, and peeks a step's stored result. F10 / Shift+F10 walk the stored step results without a new run. Steps can be renamed, duplicated, bypassed, deleted or moved (with a rewiring preview you confirm or cancel); moving a step rewires what it references. Structural edits mark the query and its downstream stale, and *Run stale* runs exactly those.. Sorting is limited to 200,000 rows.
 - Runs have a time limit and a row cap, and can be cancelled. The culture used for dates and numbers is a setting.
 - `Excel.CurrentWorkbook` reads the open workbook. `File.Contents` and `Web.Contents` stop the run and ask you to choose a local file.
 

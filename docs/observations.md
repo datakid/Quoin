@@ -75,3 +75,21 @@ Not possible from a page, in any browser: reading or setting the printer, tray, 
 | Background graphics | Requested with `printBackground`; the user's dialog decides in a real browser |
 | Printed on paper | Not run |
 | Firefox and WebKit | Not run |
+
+## Workbench on a 320-query workbook (Chromium on Linux, headless)
+
+Measured on `many-queries.xlsx` (320 queries, 4 layers, 12 staging tables):
+
+| Check | Result |
+| --- | --- |
+| Workbook opens, tree usable | Tree interactive in ~0.4 s; the full problems scan (4 rows) settles under 3 s |
+| Run all (after fixing the one parse error) | 310 ran, 3 failed (unresolved, unsupported, external), ~1.2 s in the e2e budget |
+| Steps panel, *Evaluate steps* on a 7-step query | Beads and deltas render in the same frame batch; F10 step results arrive without a new run |
+| Structural edits (insert + move) | Steps rerun up to the edited step; the move preview opens in a popover under the steps host |
+| Batch queue | The Queue tab paints a table (`queue-table`) progressively; the readout ends with counts |
+
+Known gaps from this phase:
+
+- The move-preview popover is placed below the steps host without a flip; in a 1400x900 window with the steps list near the bottom, its *Apply* button can sit outside the viewport (keyboard activation still works). Placement fix pending.
+- `Stale N` is not shown as a readout element; staleness surfaces on the navigator beads and the pinned-result *Out of date* chip only.
+- The acceptance story's macro step runs on `mixed.xlsm`: `many-queries.xlsx` cannot carry a VBA project, because no generator writes VBA project binaries.

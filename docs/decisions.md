@@ -112,3 +112,25 @@ A browser cannot repeat a footer row at the bottom of every printed page, cannot
 ## 23. Not built, so nobody tries it later
 
 No PDF library in the app (the browser's Save as PDF is the supported route and G-6 forbids a dependency); no control over the file name of a printed PDF; no duplex, tray, copies or printer choice; no CSS margin boxes; no replacement for the browser's own headers and footers (the panel tells the user to turn them off).
+
+## 24. Workbench: how editing and running behave
+
+- One engine worker, sequential members inside a batch (`evaluateMany` shares upstream work inside the run). Parallel workers (D-2) are not attempted: dependent queries make a single worker faster, not slower.
+- The engine refuses to run any query while one query in the M section does not parse. The batch asks once and offers *Run anyway*; a query that cannot resolve at run time is skipped with a dialog, and the rest continue.
+- The navigator is virtualised: rows render in a window (more than 10, fewer than 80) with `aria-setsize` carrying the true total. Counts, not windows, are asserted in tests.
+- A query with an error-severity problem shows the error bead and counts under *Errors* in the navigator even before it is ever run; an error problem always wins over the run status.
+- Structural edits (view-to-step inserts, moves, bypasses) mark the query stale and its transitive downstream stale; *Run stale* (Ctrl+Shift+Enter) runs exactly that set. Step-level reruns after a structural edit run only up to the edited step.
+- The step cursor (F10 / Shift+F10) shows a stored step result without a new run; breakpoints are not built — M is lazy and the cursor is the honest equivalent.
+- The *Evaluate steps* run stores per-step results; a plain run does not. The Steps panel beads, deltas and peek all read the step store.
+
+## 25. Not built in the workbench phase, so nobody tries it later
+
+- **Executing VBA** (G-4, D-3). VBA is read, parsed, linked, edited and saved; never run. *Run these queries* resolves the macro's query references and runs those queries.
+- **Adding, renaming or deleting queries and query groups** (D-4): DataMashup metadata and workbook parts are out of bounds for this phase.
+- **A visual query designer.** The grid's *Add as a step* and *Insert view steps* are the whole UI-generates-code surface.
+- **An M formatter.** Re-serialising M risks changing semantics and destroys the user's formatting; quoin rewrites only the lines it must.
+- **A cross-run value cache.** Sharing upstream work happens inside a batch; cross-run caching needs invalidation the engine does not track.
+- **Parallel workers** (D-2).
+- **Breakpoints.** M is lazy; the step cursor is the equivalent.
+- **Persisting new state** (layout, pane sizes, last selection) — D-1 stays *No* until the owner says otherwise.
+- **AI features, network sources, live data refresh** (G-2).

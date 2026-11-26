@@ -4,7 +4,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
 import { resolvePlan } from '../../src/batch/resolve/resolve.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
 import { runFilePlan } from '../../src/batch/execute/run-file.js';
-import { openApp, fx, ext } from './helpers.js';
+import { openApp, fx, ext, expectSameOutput } from './helpers.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
 const LIMITS = { timeoutMs: 30000, maxRows: 1000000 };
@@ -24,7 +24,7 @@ async function planFor(path, name, json) {
 
 const expectedOf = async ({ bytes, recipe, meta, filePlan }, extra = {}) => {
   const res = await runFilePlan(bytes, meta, filePlan, { now: NOW, dryRun: false, limits: LIMITS, culture: 'en-US', runId: 'r1', recipe, ...extra });
-  return { bytesLength: res.bytes ? res.bytes.length : null, sha256: res.sha256, rows: res.rows.map((r) => ({ ...r, duration_ms: 0 })) };
+  return { bytes: res.bytes, bytesLength: res.bytes ? res.bytes.length : null, sha256: res.sha256, rows: res.rows.map((r) => ({ ...r, duration_ms: 0 })) };
 };
 
 const talk = (page, { name, bytes, filePlan, optionsList }) =>
@@ -47,7 +47,7 @@ const talk = (page, { name, bytes, filePlan, optionsList }) =>
           replies.push({ type: m.type, code: m.code || null });
           continue;
         }
-        replies.push({ type: m.type, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
+        replies.push({ type: m.type, bytes: m.result.bytes ? Array.from(m.result.bytes) : null, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
       }
       worker.terminate();
       return replies;
@@ -55,7 +55,7 @@ const talk = (page, { name, bytes, filePlan, optionsList }) =>
     { name, bytes: Array.from(bytes), filePlan, optionsList }
   );
 
-test('fable apply worker: an inject replace gives the same bytes, hash and rows as Node, twice in a row', async ({ page }) => {
+test('fable apply worker: an inject replace gives the same content, hash and rows as Node, twice in a row', async ({ page, browserName }) => {
   await openApp(page);
   const planned = await planFor(ext('pq_simple.xlsx'), 'pq_simple.xlsx', injectReplace);
   const expected = await expectedOf(planned);
@@ -63,42 +63,40 @@ test('fable apply worker: an inject replace gives the same bytes, hash and rows 
   expect(expected.rows.map((r) => [r.recipe, r.action, r.verdict, r.verified])).toEqual([['inject', 'replace', 'changed', true]]);
   for (const got of [first, second]) {
     expect(got.type).toBe('applied');
-    expect(got.sha256).toBe(expected.sha256);
-    expect(got.bytesHash).toBe(expected.sha256);
-    expect(got.bytesLength).toBe(expected.bytesLength);
+    await expectSameOutput(got, expected, browserName);
     expect(got.rows).toEqual(expected.rows);
   }
 });
 
-test('fable apply worker: a replace in code recipe matches Node', async ({ page }) => {
+test('fable apply worker: a replace in code recipe matches Node', async ({ page, browserName }) => {
   await openApp(page);
   const planned = await planFor(fx('mixed.xlsm'), 'mixed.xlsm', replaceCode);
   const expected = await expectedOf(planned);
   const [got] = await talk(page, { name: 'mixed.xlsm', bytes: planned.bytes, filePlan: planned.filePlan, optionsList: [{ recipe: planned.recipe }] });
   expect(expected.rows.length).toBeGreaterThan(0);
-  expect(got.sha256).toBe(expected.sha256);
+  await expectSameOutput(got, expected, browserName);
   expect(got.rows).toEqual(expected.rows);
   expect(got.rows.some((r) => r.verdict === 'changed')).toBe(true);
 });
 
-test('fable apply worker: the signature confirmation travels in the options and changes the verdict', async ({ page }) => {
+test('fable apply worker: the signature confirmation travels in the options and changes the verdict', async ({ page, browserName }) => {
   await openApp(page);
   const planned = await planFor(fx('signed.xlsm'), 'signed.xlsm', moduleReplace);
   const [refused, confirmed] = await talk(page, { name: 'signed.xlsm', bytes: planned.bytes, filePlan: planned.filePlan, optionsList: [{ recipe: planned.recipe }, { recipe: planned.recipe, acknowledgeSignature: true }] });
   expect([refused.bytesLength, refused.rows.map((r) => [r.verdict, r.reason_code])]).toEqual([null, [['refused', 'vba.signature']]]);
   const expected = await expectedOf(planned, { acknowledgeSignature: true });
-  expect(confirmed.sha256).toBe(expected.sha256);
+  await expectSameOutput(confirmed, expected, browserName);
   expect(confirmed.rows.map((r) => [r.verdict, r.signature_removed, r.verified])).toEqual([['changed', true, true]]);
 });
 
-test('fable apply worker: a message with a bad recipe is refused and the worker keeps working', async ({ page }) => {
+test('fable apply worker: a message with a bad recipe is refused and the worker keeps working', async ({ page, browserName }) => {
   await openApp(page);
   const planned = await planFor(ext('pq_simple.xlsx'), 'pq_simple.xlsx', injectReplace);
   const expected = await expectedOf(planned);
   const [bad, good] = await talk(page, { name: 'pq_simple.xlsx', bytes: planned.bytes, filePlan: planned.filePlan, optionsList: [{ recipe: 'inject' }, { recipe: planned.recipe }] });
   expect(bad.type).toBe('refused');
   expect(good.type).toBe('applied');
-  expect(good.sha256).toBe(expected.sha256);
+  await expectSameOutput(good, expected, browserName);
 });
 
 test('fable apply worker: a file that cannot be opened is one failed row for the recipe and the worker keeps working', async ({ page }) => {

@@ -620,5 +620,15 @@ Checked 2026-11-26 against section 9 of the plan.
 - [x] F4 gate: a recipe plus a folder reaches Preview in one action. The allowlist and the README agree.
 Not part of the gate and still open: F4-01's hand-authoring gap (there is no recipe editor).
 
+### F4-01 merged with the integrator's wiring (trunk agent, CI result pending)
+Layer: app, ui/set, tests
+Files: src/ui/strings.js, tests/e2e/fable-recipe-files.spec.js, asset-manifest.json
+Do: merged `origin/fable` (`79c3b8c`) into the trunk handover branch. The integrator had already wired Save in this browser, Download recipe file and Saved recipes, so `main.js`, `recipe-panel.js` and `shell.js` are theirs unchanged. What stays from the trunk agent is `src/app/recipe-files.js` (the read failure code is `recipe.unreadable`) and its `recipe.tooLarge` and `recipe.unreadable` error entries.
+Test that fails without it: `tests/e2e/fable-recipe-files.spec.js` now has five tests (Download recipe file shown only while a recipe is held, download after a Preview keeps the Preview, a binary file is refused, a byte order mark with Windows line endings loads, an invalid and a newer recipe say so).
+Result: lint 0 findings and 1714 unit tests pass locally. No browser can be installed in this environment, so the browser tests were not run here; the first CI run on this branch is the check.
+Fails without: not checked here for the same reason.
+Changed expectations: the removed Save recipe button is now Download recipe file, and the binary refusal sentence is the integrator's.
+Deviations: two of my tests (save under the loaded name, a file over 256 KB) are dropped because `fable-recipes.spec.js` covers both on the integrator's UI.
+
 ### Next
 The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. F4 is through its gate. F5 is waiting on the first Firefox and WebKit run in CI, the final gate, and the open decisions on section 9. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.

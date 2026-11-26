@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, editor, runButton } from './helpers.js';
+import { ext, openApp, editor, runButton, openSettings } from './helpers.js';
 
 const notBody = async (page, step) => {
   const tag = await page.evaluate(() => (document.activeElement ? document.activeElement.tagName : 'NONE'));
@@ -43,7 +43,7 @@ test('T-E-12: open, select, edit, run and save without touching the mouse, focus
 test('T-E-12: shortcuts are ignored while a dialog is open, except Escape', async ({ page }) => {
   await openApp(page);
   await page.setInputFiles('input[type=file]', ext('pq_vba_complex.xlsm'));
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await expect(page.locator('dialog[open]')).toBeVisible();
   await page.keyboard.press('Control+Enter');
   await expect(runButton(page)).toBeVisible();

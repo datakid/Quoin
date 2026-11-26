@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { ext, fx, loadFile, item, editor, runButton } from './helpers.js';
+import { ext, fx, loadFile, item, editor, runButton, openSettings } from './helpers.js';
 
 export async function pick(page, name) {
   const toggle = page.locator('.rail-toggle');
@@ -87,7 +87,7 @@ export const STATES = [
     mask: false,
     run: async (page) => {
       await loadFile(page, ext('pq_vba_complex.xlsm'));
-      await page.getByRole('button', { name: 'Settings' }).click();
+      await openSettings(page);
       await expect(page.locator('dialog[open]')).toBeVisible();
     }
   },

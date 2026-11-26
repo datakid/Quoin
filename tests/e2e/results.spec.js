@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, fx, openApp, loadFile, item, editor, runButton } from './helpers.js';
+import { ext, fx, openApp, loadFile, item, editor, runButton, openSettings } from './helpers.js';
 
 async function runExpr(page, expr) {
   await item(page, 'StudentResults').click();
@@ -47,7 +47,7 @@ test('T-E-07: an error shows its message and a link that puts the caret at the e
 test('T-E-07: a run that reaches the row cap stops, names the cap and shows no half grid', async ({ page }) => {
   await openApp(page);
   await loadFile(page, fx('csv-query.xlsx'));
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.locator('#set-rows').fill('1000');
   await page.locator('dialog[open]').getByRole('button', { name: 'Save' }).click();
   await runExpr(page, 'Table.FromColumns({List.Numbers(1, 5000)}, {"N"})');

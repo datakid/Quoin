@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, editor, downloadButton } from './helpers.js';
+import { ext, openApp, loadFile, editor, openDownload } from './helpers.js';
 
 const MODULE = 'Public Sub Alpha()\r\n  Exit Function\r\nEnd Sub\r\nPublic Sub Alpha()\r\nEnd Sub';
 
@@ -22,9 +22,8 @@ test('T-WB-23: structure checks mark the gutter lines after the debounce', async
 
 test('T-WB-23: the Download tooltip lists the structure checks without blocking the save', async ({ page }) => {
   const problems = await open(page);
-  const btn = downloadButton(page);
-  await expect(btn).toHaveAttribute('aria-disabled', 'false');
-  await btn.click();
+  await expect(page.getByRole('button', { name: /^Changes \d+/ })).toHaveAttribute('aria-disabled', 'false');
+  await openDownload(page);
   const pop = page.locator('.popover');
   await expect(pop).toBeVisible();
   await expect(pop.locator('.structure-note')).toContainText('2 structure checks');

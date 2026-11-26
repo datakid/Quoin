@@ -76,10 +76,11 @@ function invokeArg(p, raw) {
 }
 
 export class Workspace {
-  constructor(host, session, settings, status) {
+  constructor(host, session, settings, status, { runSlot = null } = {}) {
     this.session = session;
     this.settings = settings;
     this.status = status;
+    this.runSlot = runSlot;
     this.runner = new Runner();
     this.item = null;
     this.tabs = new TabModel();
@@ -213,8 +214,13 @@ export class Workspace {
     this.groupsEl.append(this.dropSplit);
     this.addGroup();
     this.editor = this.groups[0].editor;
-    this.runBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.run() }, S.run, h('span', { class: 'item-meta' }, '⌘↵'));
-    this.moreRunBtn = h('button', { class: 'btn btn-quiet more-run', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.panes.moreRun, onclick: () => this.openRunMenu() }, '\u25be');
+    this.runBtn = h('button', { class: 'btn btn-primary run-main', type: 'button', onclick: () => this.run() }, S.run, h('span', { class: 'item-meta' }, '⌘↵'));
+    this.runSplitBtn = h('button', { class: 'btn btn-primary run-split', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.panes.moreRun, title: S.panes.moreRun, onclick: () => this.openRunMenu(this.runSplitBtn) }, '\u2304');
+    if (this.runSlot) {
+      this.runSplit = h('span', { class: 'split-run' }, this.runBtn, this.runSplitBtn);
+      this.runSlot.append(this.runSplit);
+    }
+    this.moreRunBtn = this.runSplitBtn;
     this.dockToggle = h('button', { class: 'btn btn-quiet dock-toggle', type: 'button', 'aria-expanded': 'true', 'aria-label': S.panes.collapseDock, onclick: () => this.toggleDock() }, '\u2304');
     this.cancelBtn = h('button', { class: 'btn', type: 'button', hidden: true, onclick: () => this.cancel() }, S.cancel);
     this.steps = h('div', { class: 'steps', role: 'group', 'aria-label': S.stepsLabel });
@@ -223,7 +229,7 @@ export class Workspace {
     this.diffBox.addEventListener('change', () => this.applyDiffs());
     this.diffBtn = h('button', { class: 'btn btn-quiet', type: 'button', hidden: true, onclick: () => this.showDifferences() }, S.viewDifferences);
     this.splitter = h('div', { class: 'splitter', role: 'separator', 'aria-orientation': 'horizontal', tabindex: '0', 'aria-label': S.resizeSplit, 'aria-valuemin': '15', 'aria-valuemax': '85', 'aria-valuenow': '45' });
-    this.runbar = h('div', { class: 'runbar' }, this.splitter, this.runBtn, this.moreRunBtn, this.cancelBtn, this.steps, h('span', { class: 'spacer' }), this.diffLabel, this.diffBtn, this.dockToggle);
+    this.runbar = h('div', { class: 'runbar' }, this.splitter, this.cancelBtn, this.steps, h('span', { class: 'spacer' }), this.diffLabel, this.diffBtn, this.dockToggle);
     this.progress = h('div', { class: 'progress', hidden: true, role: 'progressbar', 'aria-label': S.running });
     this.crumbs = h('div', { class: 'crumbs', hidden: true });
     this.capNotice = h('div', { class: 'result-notice', hidden: true });
@@ -1507,7 +1513,7 @@ export class Workspace {
     return true;
   }
 
-  openRunMenu() {
+  openRunMenu(anchor = this.runSplitBtn) {
     const isQuery = !!this.item && this.item.type === 'query';
     const entries = [
       { label: S.panes.runSelectedItems, disabled: !this.selectedQueryNames().length, run: () => this.runSelected(false) },
@@ -1515,8 +1521,8 @@ export class Workspace {
       { label: S.panes.runStaleItems, run: () => this.runBatch('run-stale') },
       { label: S.panes.runAllItems, run: () => this.runBatch('run-all') }
     ];
-    this.moreRunBtn.setAttribute('aria-expanded', 'true');
-    menu(this.moreRunBtn, entries, () => this.moreRunBtn.setAttribute('aria-expanded', 'false'));
+    anchor.setAttribute('aria-expanded', 'true');
+    menu(anchor, entries, () => anchor.setAttribute('aria-expanded', 'false'));
   }
 
   splitterSetup() {
@@ -2146,6 +2152,7 @@ export class Workspace {
     const active = document.activeElement;
     this.progress.hidden = !on;
     this.runBtn.hidden = on;
+    this.runSplitBtn.hidden = on;
     this.cancelBtn.hidden = !on;
     if (on && active === this.runBtn) this.cancelBtn.focus();
     else if (!on && active === this.cancelBtn) this.runBtn.focus();

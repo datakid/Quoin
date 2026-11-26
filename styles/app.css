@@ -84,20 +84,95 @@ textarea {
   display: inline-flex;
   min-width: 0;
   max-width: 40vw;
-  background: none;
-  border: 0;
   color: var(--ink);
-  padding: 0 var(--s-3);
-  border-radius: var(--r-2);
-  cursor: pointer;
+  padding: 0;
   min-height: var(--h-ctl);
   align-items: center;
   white-space: nowrap;
-  transition: background-color var(--dur-1) var(--ease);
 }
 
-.file-name:hover {
+.palette-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 360px;
+  max-width: 34vw;
+  min-height: var(--h-ctl);
+  padding: 0 var(--s-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-2);
+  background: var(--track);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+
+.palette-trigger:hover {
   background: var(--hover);
+  border-color: var(--line-strong);
+}
+
+.palette-trigger .glyph {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+
+.palette-trigger .palette-placeholder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: var(--t-sm);
+}
+
+.palette-trigger .kbd {
+  flex: none;
+}
+
+.split-run {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: stretch;
+}
+
+.split-run .run-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.split-run .run-split {
+  min-width: var(--h-ctl-sm);
+  padding: 0 var(--s-1);
+  border-left: 1px solid var(--celadon-edge);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.btn-secondary {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.btn-secondary:hover {
+  background: var(--hover);
+}
+
+.split-chevron {
+  min-width: var(--h-ctl-sm);
+  padding: 0 var(--s-1);
+}
+
+.changes-button {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.topbar .changes-split {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .fn-head {
@@ -952,26 +1027,28 @@ dialog h2 {
   .topbar {
     gap: var(--s-2);
     padding: 0 var(--s-3);
+    min-height: var(--h-bar-sm);
   }
   .file-name {
     flex: 1 1 0;
     max-width: none;
-    padding: var(--s-1) var(--s-2);
+    padding: 0 var(--s-1);
+    overflow: hidden;
   }
-  .topbar .spacer {
-    display: none;
-  }
+  .topbar .spacer,
+  .palette-trigger,
+  .changes-button,
   .print-button {
     display: none;
   }
-  .topbar .btn {
+  .run-slot {
+    display: contents;
+  }
+  .split-run .run-main {
     padding: 0 var(--s-3);
   }
-  .palette-button .kbd {
+  .split-run .run-split {
     display: none;
-  }
-  .file-name {
-    overflow: hidden;
   }
 }
 

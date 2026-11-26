@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, item, editor } from './helpers.js';
+import { ext, openApp, loadFile, item, editor, openSettings } from './helpers.js';
 
 const QUERY = [
   'let',
@@ -104,7 +104,7 @@ test('T-WB-14: Pin this result is disabled for a step with no table result', asy
 });
 
 async function setSetting(page, label, on) {
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   const box = page.getByRole('dialog', { name: 'Settings' }).getByLabel(label);
   if (on) await box.check();
   else await box.uncheck();

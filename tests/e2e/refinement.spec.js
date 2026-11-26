@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile } from './helpers.js';
+import { ext, openApp, loadFile, openSettings } from './helpers.js';
 
 async function openQuery(page) {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
   await page.locator('[role=treeitem][data-type=query]').first().click();
-  await page.locator('.runbar .btn-primary').click();
+  await page.locator('.topbar .btn-primary').click();
   await page.waitForSelector('.grid-row');
 }
 
@@ -16,7 +16,7 @@ test('T-V-08: comfortable density is the default and compact tightens rows for t
   await openQuery(page);
   expect(await px(page, '.tree-item', 'minHeight')).toBe(32);
   expect(await px(page, '.grid-row .grid-cell', 'height')).toBe(30);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.locator('#set-density').selectOption('compact');
   await page.getByRole('button', { name: 'Save' }).click();
   expect(await px(page, '.tree-item', 'minHeight')).toBe(28);

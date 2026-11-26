@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fx, ext, openApp, loadFile, dropFile, item, editor, runButton, status, downloadButton, runCurrent, saveDownload } from './helpers.js';
+import { fx, ext, openApp, loadFile, dropFile, item, editor, runButton, status, changesButton, runCurrent, saveDownload, openSettings, openDownload, openExport } from './helpers.js';
 import { readZip } from '../../src/core/zip-read.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'quoin-e2e-'));
@@ -59,7 +59,7 @@ test('T-E2E-5 and T-E2E-12: edit, run, differ, download, reopen, revert', async 
   await page.keyboard.press('Control+Enter');
   await expect(page.locator('.grid-cell:not(.grid-index)')).toHaveCount(0);
   await expect(status(page)).toContainText('Row count differs');
-  await downloadButton(page).click();
+  await openDownload(page);
   const target = join(tmp, 'edited.xlsm');
   const name = await saveDownload(page, page.locator('.popover .btn-primary'), target);
   expect(name).toBe('pq_vba_complex (edited).xlsm');
@@ -75,8 +75,8 @@ test('T-E2E-5 and T-E2E-12: edit, run, differ, download, reopen, revert', async 
   await item(page, 'RawInput').click();
   await page.getByRole('button', { name: 'Revert' }).click();
   await expect(page.locator('[data-name=RawInput] .dot-edited')).toHaveCount(0);
-  await expect(downloadButton(page)).toHaveAttribute('aria-disabled', 'true');
-  await expect(downloadButton(page)).toHaveAttribute('title', 'No changes yet.');
+  await expect(changesButton(page)).toHaveAttribute('aria-disabled', 'true');
+  await expect(changesButton(page)).toHaveAttribute('title', 'No changes yet.');
 });
 
 test('T-E2E-6: a VBA module edit survives download, and the export keeps the attribute lines', async ({ page }) => {
@@ -86,7 +86,7 @@ test('T-E2E-6: a VBA module edit survives download, and the export keeps the att
   const text = await editor(page).inputValue();
   expect(text).not.toMatch(/^Attribute /m);
   await editor(page).fill(`${text}\n' e2e marker\n`);
-  await downloadButton(page).click();
+  await openDownload(page);
   const target = join(tmp, 'vba.xlsm');
   await saveDownload(page, page.locator('.popover .btn-primary'), target);
   const reopened = await page.context().newPage();
@@ -95,7 +95,7 @@ test('T-E2E-6: a VBA module edit survives download, and the export keeps the att
   await item(reopened, 'Module1').click();
   await expect(editor(reopened)).toHaveValue(/' e2e marker/);
   await expect(editor(reopened)).not.toHaveValue(/Attribute VB_Name/);
-  await page.getByRole('button', { name: 'Export' }).click();
+  await openExport(page);
   const bas = join(tmp, 'Module1.bas');
   await saveDownload(page, page.getByRole('menuitem', { name: 'This module (.bas / .cls)' }), bas);
   const body = readFileSync(bas, 'latin1');
@@ -109,7 +109,7 @@ test('T-E2E-7: a signed VBA project gates the download behind an acknowledgement
   await loadFile(page, fx('signed.xlsm'));
   await item(page, 'Module1').click();
   await editor(page).fill(`${await editor(page).inputValue()}\n' x\n`);
-  await downloadButton(page).click();
+  await openDownload(page);
   await expect(page.locator('.popover')).toContainText('The VBA project was signed. Editing removes the signature.');
   const go = page.locator('.popover .btn-primary');
   await expect(go).toBeDisabled();
@@ -164,7 +164,7 @@ test('T-E2E-11: exports match their golden content', async ({ page }) => {
   await runButton(page).click();
   await expect(page.locator('.grid-cell:not(.grid-index)').first()).toHaveText('HELLO WORLD!');
   const exportAs = async (label, file) => {
-    await page.getByRole('button', { name: 'Export' }).click();
+    await openExport(page);
     const target = join(tmp, file);
     const name = await saveDownload(page, page.getByRole('menuitem', { name: label }), target);
     return { name, body: readFileSync(target) };
@@ -196,7 +196,7 @@ test('CSV formula-injection guard prefixes risky text', async ({ page }) => {
   await editor(page).fill('#table({"A"}, {{"=1+1"}, {"@x"}, {"safe"}})');
   await runButton(page).click();
   await expect(page.locator('.grid-cell:not(.grid-index)').first()).toHaveText('=1+1');
-  await page.getByRole('button', { name: 'Export' }).click();
+  await openExport(page);
   const target = join(tmp, 'guard.csv');
   await saveDownload(page, page.getByRole('menuitem', { name: 'CSV (UTF-8)' }), target);
   expect(readFileSync(target, 'utf8')).toBe("A\r\n'=1+1\r\n'@x\r\nsafe\r\n");
@@ -241,14 +241,14 @@ test('T-E2E-14: the run and edit flows work from the keyboard alone', async ({ p
 
 test('T-E2E-16: the theme persists across a reload and the system theme follows the emulated preference', async ({ page }) => {
   await openApp(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.getByLabel('Theme').selectOption('dark');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate(() => localStorage.getItem('quoin.theme'))).toBe('dark');
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.getByLabel('Theme').selectOption('system');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/);
@@ -272,7 +272,7 @@ test('T-E2E-17: the mobile layout offers a code and result switch and still down
   await expect(page.locator('.grid-cell:not(.grid-index)').first()).toHaveText('HELLO WORLD!');
   await page.getByRole('button', { name: 'Code', exact: true }).tap();
   await editor(page).fill(`${await editor(page).inputValue()}\n// m`);
-  await downloadButton(page).tap();
+  await openDownload(page);
   const target = join(tmp, 'mobile.xlsm');
   await saveDownload(page, page.locator('.popover .btn-primary'), target);
   expect(readFileSync(target).length).toBeGreaterThan(1000);
@@ -293,7 +293,7 @@ test('T-E2E-19: a post-write self-check failure refuses the download', async ({ 
   await loadFile(page, ext('pq_simple.xlsx'));
   await page.locator('[role=treeitem][data-type=query]').first().click();
   await editor(page).fill(`${await editor(page).inputValue()}\n// x`);
-  await downloadButton(page).click();
+  await openDownload(page);
   let downloaded = false;
   page.on('download', () => {
     downloaded = true;

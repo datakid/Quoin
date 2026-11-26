@@ -41,7 +41,22 @@ export const item = (page, name) => page.locator(`[role=treeitem][data-name="${n
 export const editor = (page) => page.locator('.editor-wrap textarea');
 export const runButton = (page) => page.getByRole('button', { name: /^Run/ });
 export const status = (page) => page.locator('.statusbar');
-export const downloadButton = (page) => page.locator('.topbar button[aria-haspopup="dialog"]');
+export async function openDownload(page) {
+  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Download' }).click();
+}
+
+export async function openSettings(page) {
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
+}
+
+export const changesButton = (page) => page.getByRole('button', { name: /^Changes \d+/ });
+
+export async function openExport(page) {
+  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save a copy\u2026' }).click();
+}
 
 export async function runCurrent(page) {
   await runButton(page).click();

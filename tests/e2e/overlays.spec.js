@@ -11,7 +11,7 @@ test('T-B-13: at 390 by 844 the export menu sits inside the viewport and Escape 
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   await loadFile(page, ext('pq_vba_complex.xlsm'));
-  const trigger = page.getByRole('button', { name: 'Export' });
+  const trigger = page.getByRole('button', { name: 'Download', exact: true });
   await trigger.focus();
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await trigger.click();
@@ -28,7 +28,7 @@ test('T-B-13: at 390 by 844 the export menu sits inside the viewport and Escape 
 test('T-B-13: clicking outside a menu closes it and returns focus to the trigger', async ({ page }) => {
   await openApp(page);
   await loadFile(page, ext('pq_vba_complex.xlsm'));
-  const trigger = page.getByRole('button', { name: 'Export' });
+  const trigger = page.getByRole('button', { name: 'Download', exact: true });
   await trigger.click();
   await expect(page.locator('.menu')).toBeVisible();
   await page.locator('.statusbar').click();

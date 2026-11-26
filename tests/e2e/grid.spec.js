@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile, item, editor, runButton } from './helpers.js';
+import { ext, openApp, loadFile, item, editor, runButton, openSettings } from './helpers.js';
 
 async function runExpression(page, expression) {
   await item(page, 'StudentResults').click();
@@ -89,7 +89,7 @@ test('a syntax error blocks the run, marks the editor and gives line and column'
 });
 
 test('the timeout stops a run and says so', async ({ page }) => {
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.getByLabel('M timeout (seconds)').fill('1');
   await page.getByRole('button', { name: 'Save' }).click();
   await runExpression(page, 'List.Accumulate({1..100000}, 0, (s, c) => s + List.Sum({1..c}))');
@@ -97,7 +97,7 @@ test('the timeout stops a run and says so', async ({ page }) => {
 });
 
 test('the row cap stops a run at the configured size', async ({ page }) => {
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await openSettings(page);
   await page.getByLabel('Row cap').fill('1000');
   await page.getByRole('button', { name: 'Save' }).click();
   await runExpression(page, 'List.Numbers(0, 5000)');

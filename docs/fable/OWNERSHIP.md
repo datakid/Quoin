@@ -47,6 +47,18 @@ Shared files and who changes them:
 - Local Chromium specs: `/home/claude/lanes/e2e-<lane>.sh tests/e2e/<spec>.spec.js`. Every lane has its own port, so lanes can run at the same time.
 - After a change under `src/` or `styles/` that a test reads the manifest for: `node scripts/build-manifest.mjs`, run the tests, then `git checkout -- asset-manifest.json`.
 
+## Earlier agents and work that has no lane yet
+
+The trunk, Writer and Scope agents were stopped by the user on 2026-11-26 and each left a handover: `docs/fable/handover/HANDOVER.md` (trunk), `docs/fable/HANDOVER-writer.md` on `fable-writer`, `docs/fable/HANDOVER-scope.md` on `fable-scope`. None of them runs now. If the user restarts one, it does not work until the integrator has given it a row in `ownership.json`, so it cannot land on a file a lane owns.
+
+| Open work | Proposed owner | Why it is not running now |
+|---|---|---|
+| Writer's connection for an added query (`docs/fable/handover/writer-connection-wip.patch` on `fable-writer`: one escaping test fails, `connect` stays opt-in) | a `writer` lane: `src/core/pq/members.js`, `src/core/pq/writeback.js`, `src/batch/execute/changes.js`, `tests/unit/batch-pq-members.test.js` | the user has not said whether to continue it; shipping it as default needs the real-Excel result for pack 3 case 02 |
+| Scope's carry-over to `fable`: inject tokens (D1), skipped missing-column rows (D3), the contract test, the worked-example generator | a `scope` lane: `src/batch/resolve/**`, `src/batch/execute/units.js`, `transform.js`, `excel-compute.js`, `combine.js`, its tests and generators | section 9 decision 1 (missing-column rows read `failed`, not `skipped`) is open with the user, and Scope's commits are interleaved with F3-08 and F3-09, which stay held, so each piece must be taken by hand |
+| Scope's lane violations (items 1 to 5 and 7 in `HANDOVER-scope.md`) | integrator decides keep, move or revert, one by one | `save.js` and `sheet/**` go to the safety lane now; the rest waits |
+| F4-03 wiring (`createRecipeStore` in `main.js`, Stored recipes list, `rememberSet`), F4-02, F4-04 | integrator, after the lanes are merged | `main.js` and `strings.js` are integrator files and the lanes are not allowed to touch them |
+| F3-08 in place, F3-09 Excel computes on open | nobody | held until real Excel results exist |
+
 ## What the integrator does
 
 - Merges each lane's commits into `fable` in the order they finish. The lanes touch different files, so these merges do not conflict. A conflict means a lane broke its list, and the lane's commit is sent back.

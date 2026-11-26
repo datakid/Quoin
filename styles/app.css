@@ -2986,6 +2986,12 @@ dialog.graph {
 
 @media (pointer: coarse) {
   .step-grip {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .step-grip {
     display: none;
   }
 }

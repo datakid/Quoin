@@ -4,7 +4,7 @@ import { indexSection } from '../../src/core/wb/deps.js';
 import { sourcesOfSection } from '../../src/core/wb/sources.js';
 import { problemsForQuery, problemsForModule, collectProblems, filterProblems, countProblems, lineCol } from '../../src/core/wb/problems.js';
 import { quoteIdent } from '../../src/core/wb/ident.js';
-import { supportedNames } from '../../src/core/wb/lib-names.js';
+import { supportedNames } from '../../src/ui/wb/m-names.js';
 
 const section = (members) => `section Section1;\r\n\r\n${members.map(([n, e]) => `shared ${quoteIdent(n)} = ${e};`).join('\r\n\r\n')}`;
 const ctxOf = (members, extra = {}) => {

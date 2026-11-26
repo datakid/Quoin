@@ -1,5 +1,5 @@
 {
-  "version": "b7860d6eaea5893b",
+  "version": "2551aded2bc4653d",
   "files": [
     "./",
     "index.html",
@@ -103,7 +103,6 @@
     "src/core/wb/ident.js",
     "src/core/wb/layout-presets.js",
     "src/core/wb/let-edit.js",
-    "src/core/wb/lib-names.js",
     "src/core/wb/m-gen.js",
     "src/core/wb/nav-model.js",
     "src/core/wb/op-history.js",
@@ -140,6 +139,7 @@
     "src/ui/wb/dock.js",
     "src/ui/wb/find-dialog.js",
     "src/ui/wb/graph-view.js",
+    "src/ui/wb/m-names.js",
     "src/ui/wb/navigator.js",
     "src/ui/wb/outline-panel.js",
     "src/ui/wb/palette.js",

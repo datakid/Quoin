@@ -26,7 +26,7 @@ import { sourcesDialog, unboundDialog } from '../ui/wb/sources-dialog.js';
 import { DEFAULT_LIMITS } from '../core/limits.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection, unboundFor } from '../core/wb/sources.js';
-import { supportedNames } from '../core/wb/lib-names.js';
+import { M_NAMES, supportedNames } from '../ui/wb/m-names.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';

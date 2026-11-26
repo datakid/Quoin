@@ -50,12 +50,15 @@ test('fable intake: workbooks that cannot be opened are skipped with their reaso
 test('fable intake: dropping more files adds to the set and a repeat of the same file is ignored', async ({ page }) => {
   await openApp(page);
   const one = { name: 'a.xlsx', data: b64(ext('pq_simple.xlsx')) };
-  await dropTree(page, [one]);
-  await page.waitForTimeout(0);
-  await dropTree(page, [one, { name: 'b.xlsx', data: b64(ext('pq_simple.xlsx')) }]);
+  const two = { name: 'b.xlsx', data: b64(ext('pq_simple.xlsx')) };
+  const three = { name: 'c.xlsx', data: b64(ext('pq_simple.xlsx')) };
+  await dropTree(page, [one, two]);
   await waitForSet(page);
+  expect((await setSnapshot(page)).files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx']);
+  await dropTree(page, [two, three]);
+  await page.waitForFunction(() => window.__quoin.set.list().length === 3 && window.__quoin.set.state === 'ready');
   const snap = await setSnapshot(page);
-  expect(snap.files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx']);
+  expect(snap.files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx', 'c.xlsx']);
 });
 
 test('fable intake: a lone dropped workbook still opens the workspace and makes no set', async ({ page }) => {

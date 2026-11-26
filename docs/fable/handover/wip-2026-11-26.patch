@@ -1,0 +1,288 @@
+diff --git a/.github/workflows/perf.yml b/.github/workflows/perf.yml
+index aa1f56d..877e671 100644
+--- a/.github/workflows/perf.yml
++++ b/.github/workflows/perf.yml
+@@ -1,10 +1,13 @@
+ name: perf
+ on:
++  push:
++    branches: [fable]
+   workflow_dispatch:
+ permissions:
+   contents: read
+ jobs:
+   measure:
++    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[perf]')
+     runs-on: ubuntu-24.04
+     timeout-minutes: 40
+     steps:
+diff --git a/src/app/intake.js b/src/app/intake.js
+index 4eb5588..549d330 100644
+--- a/src/app/intake.js
++++ b/src/app/intake.js
+@@ -7,9 +7,12 @@ const byRelPath = (a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath
+ const refOf = (file, relPath) => ({ name: file.name, relPath, size: file.size, lastModified: file.lastModified, file });
+ 
+ export function snapshotDrop(dt) {
+-  const items = [...(dt.items || [])].filter((it) => it.kind === 'file');
++  const items = Array.from(dt.items || []).filter((it) => it.kind === 'file');
+   const entries = items.map((it) => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null));
+-  return { entries: entries.length && entries.every(Boolean) ? entries : null, files: [...(dt.files || [])] };
++  const files = Array.from(dt.files || []);
++  const usable = entries.length > 0 && entries.every(Boolean);
++  const needed = usable && (files.length === 0 || entries.some((e) => e.isDirectory));
++  return { entries: needed ? entries : null, files };
+ }
+ 
+ export function splitRecipe(snapshot) {
+diff --git a/tests/e2e/fable-apply-worker.spec.js b/tests/e2e/fable-apply-worker.spec.js
+index 79d260f..907ff53 100644
+--- a/tests/e2e/fable-apply-worker.spec.js
++++ b/tests/e2e/fable-apply-worker.spec.js
+@@ -4,7 +4,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
+ import { resolvePlan } from '../../src/batch/resolve/resolve.js';
+ import { parseRecipe } from '../../src/batch/recipe/recipe.js';
+ import { runFilePlan } from '../../src/batch/execute/run-file.js';
+-import { openApp, fx, ext } from './helpers.js';
++import { openApp, fx, ext, expectSameOutput } from './helpers.js';
+ 
+ const NOW = '2026-11-14T10:00:00.000Z';
+ const LIMITS = { timeoutMs: 30000, maxRows: 1000000 };
+@@ -24,7 +24,7 @@ async function planFor(path, name, json) {
+ 
+ const expectedOf = async ({ bytes, recipe, meta, filePlan }, extra = {}) => {
+   const res = await runFilePlan(bytes, meta, filePlan, { now: NOW, dryRun: false, limits: LIMITS, culture: 'en-US', runId: 'r1', recipe, ...extra });
+-  return { bytesLength: res.bytes ? res.bytes.length : null, sha256: res.sha256, rows: res.rows.map((r) => ({ ...r, duration_ms: 0 })) };
++  return { bytes: res.bytes, bytesLength: res.bytes ? res.bytes.length : null, sha256: res.sha256, rows: res.rows.map((r) => ({ ...r, duration_ms: 0 })) };
+ };
+ 
+ const talk = (page, { name, bytes, filePlan, optionsList }) =>
+@@ -47,7 +47,7 @@ const talk = (page, { name, bytes, filePlan, optionsList }) =>
+           replies.push({ type: m.type, code: m.code || null });
+           continue;
+         }
+-        replies.push({ type: m.type, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
++        replies.push({ type: m.type, bytes: m.result.bytes ? Array.from(m.result.bytes) : null, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
+       }
+       worker.terminate();
+       return replies;
+@@ -55,7 +55,7 @@ const talk = (page, { name, bytes, filePlan, optionsList }) =>
+     { name, bytes: Array.from(bytes), filePlan, optionsList }
+   );
+ 
+-test('fable apply worker: an inject replace gives the same bytes, hash and rows as Node, twice in a row', async ({ page }) => {
++test('fable apply worker: an inject replace gives the same content, hash and rows as Node, twice in a row', async ({ page, browserName }) => {
+   await openApp(page);
+   const planned = await planFor(ext('pq_simple.xlsx'), 'pq_simple.xlsx', injectReplace);
+   const expected = await expectedOf(planned);
+@@ -63,42 +63,40 @@ test('fable apply worker: an inject replace gives the same bytes, hash and rows
+   expect(expected.rows.map((r) => [r.recipe, r.action, r.verdict, r.verified])).toEqual([['inject', 'replace', 'changed', true]]);
+   for (const got of [first, second]) {
+     expect(got.type).toBe('applied');
+-    expect(got.sha256).toBe(expected.sha256);
+-    expect(got.bytesHash).toBe(expected.sha256);
+-    expect(got.bytesLength).toBe(expected.bytesLength);
++    await expectSameOutput(got, expected, browserName);
+     expect(got.rows).toEqual(expected.rows);
+   }
+ });
+ 
+-test('fable apply worker: a replace in code recipe matches Node', async ({ page }) => {
++test('fable apply worker: a replace in code recipe matches Node', async ({ page, browserName }) => {
+   await openApp(page);
+   const planned = await planFor(fx('mixed.xlsm'), 'mixed.xlsm', replaceCode);
+   const expected = await expectedOf(planned);
+   const [got] = await talk(page, { name: 'mixed.xlsm', bytes: planned.bytes, filePlan: planned.filePlan, optionsList: [{ recipe: planned.recipe }] });
+   expect(expected.rows.length).toBeGreaterThan(0);
+-  expect(got.sha256).toBe(expected.sha256);
++  await expectSameOutput(got, expected, browserName);
+   expect(got.rows).toEqual(expected.rows);
+   expect(got.rows.some((r) => r.verdict === 'changed')).toBe(true);
+ });
+ 
+-test('fable apply worker: the signature confirmation travels in the options and changes the verdict', async ({ page }) => {
++test('fable apply worker: the signature confirmation travels in the options and changes the verdict', async ({ page, browserName }) => {
+   await openApp(page);
+   const planned = await planFor(fx('signed.xlsm'), 'signed.xlsm', moduleReplace);
+   const [refused, confirmed] = await talk(page, { name: 'signed.xlsm', bytes: planned.bytes, filePlan: planned.filePlan, optionsList: [{ recipe: planned.recipe }, { recipe: planned.recipe, acknowledgeSignature: true }] });
+   expect([refused.bytesLength, refused.rows.map((r) => [r.verdict, r.reason_code])]).toEqual([null, [['refused', 'vba.signature']]]);
+   const expected = await expectedOf(planned, { acknowledgeSignature: true });
+-  expect(confirmed.sha256).toBe(expected.sha256);
++  await expectSameOutput(confirmed, expected, browserName);
+   expect(confirmed.rows.map((r) => [r.verdict, r.signature_removed, r.verified])).toEqual([['changed', true, true]]);
+ });
+ 
+-test('fable apply worker: a message with a bad recipe is refused and the worker keeps working', async ({ page }) => {
++test('fable apply worker: a message with a bad recipe is refused and the worker keeps working', async ({ page, browserName }) => {
+   await openApp(page);
+   const planned = await planFor(ext('pq_simple.xlsx'), 'pq_simple.xlsx', injectReplace);
+   const expected = await expectedOf(planned);
+   const [bad, good] = await talk(page, { name: 'pq_simple.xlsx', bytes: planned.bytes, filePlan: planned.filePlan, optionsList: [{ recipe: 'inject' }, { recipe: planned.recipe }] });
+   expect(bad.type).toBe('refused');
+   expect(good.type).toBe('applied');
+-  expect(good.sha256).toBe(expected.sha256);
++  await expectSameOutput(good, expected, browserName);
+ });
+ 
+ test('fable apply worker: a file that cannot be opened is one failed row for the recipe and the worker keeps working', async ({ page }) => {
+diff --git a/tests/e2e/fable-collect-worker.spec.js b/tests/e2e/fable-collect-worker.spec.js
+index 9daa703..109c483 100644
+--- a/tests/e2e/fable-collect-worker.spec.js
++++ b/tests/e2e/fable-collect-worker.spec.js
+@@ -4,7 +4,7 @@ import { indexWorkbook } from '../../src/batch/index/file-index.js';
+ import { resolvePlan } from '../../src/batch/resolve/resolve.js';
+ import { parseRecipe } from '../../src/batch/recipe/recipe.js';
+ import { executeFilePlan } from '../../src/batch/execute/collect.js';
+-import { openApp, fx } from './helpers.js';
++import { openApp, fx, expectSameOutput } from './helpers.js';
+ 
+ const NOW = '2026-11-14T10:00:00.000Z';
+ const recipe = parseRecipe(JSON.stringify({ recipe: 'collect', v: 1 })).recipe;
+@@ -34,13 +34,13 @@ const applyInPage = (page, { url, name, filePlan, extraBytes }) =>
+       const first = await send(1);
+       const second = await send(2);
+       worker.terminate();
+-      const view = async (m) => ({ type: m.type, fileId: m.fileId, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
++      const view = async (m) => ({ type: m.type, fileId: m.fileId, bytes: m.result.bytes ? Array.from(m.result.bytes) : null, bytesLength: m.result.bytes ? m.result.bytes.length : null, bytesHash: m.result.bytes ? await hex(m.result.bytes) : null, sha256: m.result.sha256, rows: m.result.rows.map((r) => ({ ...r, duration_ms: 0 })) });
+       return { first: await view(first), second: await view(second) };
+     },
+     { url, name, filePlan, extraBytes }
+   );
+ 
+-test('fable collect worker: apply returns the same zip, hash and rows as Node, twice in a row on one worker', async ({ page }) => {
++test('fable collect worker: apply returns the same zip content, hash and rows as Node, twice in a row on one worker', async ({ page, browserName }) => {
+   await openApp(page);
+   const bytes = new Uint8Array(readFileSync(fx('mixed.xlsm')));
+   const { meta, filePlan } = await planFor(bytes, 'mixed.xlsm');
+@@ -49,9 +49,7 @@ test('fable collect worker: apply returns the same zip, hash and rows as Node, t
+   for (const got of [first, second]) {
+     expect(got.type).toBe('applied');
+     expect(got.fileId).toBe('f0001');
+-    expect(got.bytesLength).toBe(expected.bytes.length);
+-    expect(got.sha256).toBe(expected.sha256);
+-    expect(got.bytesHash).toBe(expected.sha256);
++    await expectSameOutput(got, { bytes: expected.bytes, bytesLength: expected.bytes.length, sha256: expected.sha256 }, browserName);
+     expect(got.rows).toEqual(expected.rows.map((r) => ({ ...r, duration_ms: 0 })));
+   }
+ });
+diff --git a/tests/e2e/fable-intake.spec.js b/tests/e2e/fable-intake.spec.js
+index b85503b..e737676 100644
+--- a/tests/e2e/fable-intake.spec.js
++++ b/tests/e2e/fable-intake.spec.js
+@@ -50,12 +50,15 @@ test('fable intake: workbooks that cannot be opened are skipped with their reaso
+ test('fable intake: dropping more files adds to the set and a repeat of the same file is ignored', async ({ page }) => {
+   await openApp(page);
+   const one = { name: 'a.xlsx', data: b64(ext('pq_simple.xlsx')) };
+-  await dropTree(page, [one]);
+-  await page.waitForTimeout(0);
+-  await dropTree(page, [one, { name: 'b.xlsx', data: b64(ext('pq_simple.xlsx')) }]);
++  const two = { name: 'b.xlsx', data: b64(ext('pq_simple.xlsx')) };
++  const three = { name: 'c.xlsx', data: b64(ext('pq_simple.xlsx')) };
++  await dropTree(page, [one, two]);
+   await waitForSet(page);
++  expect((await setSnapshot(page)).files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx']);
++  await dropTree(page, [two, three]);
++  await page.waitForFunction(() => window.__quoin.set.list().length === 3 && window.__quoin.set.state === 'ready');
+   const snap = await setSnapshot(page);
+-  expect(snap.files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx']);
++  expect(snap.files.map((f) => f.relPath)).toEqual(['a.xlsx', 'b.xlsx', 'c.xlsx']);
+ });
+ 
+ test('fable intake: a lone dropped workbook still opens the workspace and makes no set', async ({ page }) => {
+diff --git a/tests/e2e/helpers.js b/tests/e2e/helpers.js
+index 40f2688..c23b40d 100644
+--- a/tests/e2e/helpers.js
++++ b/tests/e2e/helpers.js
+@@ -1,4 +1,7 @@
+ import { readFileSync } from 'node:fs';
++import { createHash } from 'node:crypto';
++import { expect } from '@playwright/test';
++import { readZip } from '../../src/core/zip-read.js';
+ import { join, dirname } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ 
+@@ -12,6 +15,7 @@ export async function openApp(page, path = '/index.html') {
+     if (m.type() === 'error' || m.type() === 'warning') problems.push(`${m.type()}: ${m.text()}`);
+   });
+   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
++  page.__problems = problems;
+   await page.addInitScript(() => {
+     delete window.showSaveFilePicker;
+   });
+@@ -80,11 +84,11 @@ export async function dropTree(page, nodes) {
+         };
+       }
+       const bin = Uint8Array.from(atob(node.data), (c) => c.charCodeAt(0));
+-      return { isFile: true, isDirectory: false, name: node.name, fullPath, file: (ok) => ok(new File([bin], node.name)) };
++      return { isFile: true, isDirectory: false, name: node.name, fullPath, file: (ok) => ok(new File([bin], node.name, { lastModified: 1700000000000 })) };
+     };
+     const entries = nodes.map((n) => toEntry(n, ''));
+     const dt = new DataTransfer();
+-    for (const n of nodes) dt.items.add(new File(n.children ? [] : [Uint8Array.from(atob(n.data), (c) => c.charCodeAt(0))], n.name));
++    for (const n of nodes) dt.items.add(new File(n.children ? [] : [Uint8Array.from(atob(n.data), (c) => c.charCodeAt(0))], n.name, { lastModified: 1700000000000 }));
+     const carrier = { files: dt.files, items: entries.map((e) => ({ kind: 'file', webkitGetAsEntry: () => e })), types: ['Files'] };
+     const ev = new DragEvent('drop', { bubbles: true, cancelable: true });
+     Object.defineProperty(ev, 'dataTransfer', { value: carrier });
+@@ -100,4 +104,29 @@ export const setSnapshot = (page) =>
+     counts: window.__quoin.set.counts()
+   }));
+ 
+-export const waitForSet = (page, state = 'ready') => page.waitForFunction((s) => window.__quoin && window.__quoin.set.state === s, state, { timeout: 45000 });
++export const waitForSet = async (page, state = 'ready') => {
++  try {
++    await page.waitForFunction((s) => window.__quoin && window.__quoin.set.state === s, state, { timeout: 45000 });
++  } catch (e) {
++    const seen = await page.evaluate(() => (window.__quoin ? { state: window.__quoin.set.state, files: window.__quoin.set.list().map((f) => `${f.relPath}:${f.status}`), alert: (document.querySelector('#alert') || {}).textContent || '' } : null)).catch(() => null);
++    throw new Error(`${e.message}\nset: ${JSON.stringify(seen)}\npage problems: ${JSON.stringify(page.__problems || [])}`);
++  }
++};
++
++export async function zipDigest(bytes) {
++  const zip = readZip(Uint8Array.from(bytes));
++  const out = [];
++  for (const e of zip.entries) out.push([e.name, e.isDirectory ? '' : createHash('sha256').update(await e.read()).digest('hex')]);
++  return out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
++}
++
++export async function expectSameOutput(got, expected, browserName) {
++  expect(got.bytesHash).toBe(got.sha256);
++  if (browserName === 'chromium') {
++    expect(got.sha256).toBe(expected.sha256);
++    expect(got.bytesLength).toBe(expected.bytesLength);
++    return;
++  }
++  expect(got.bytes.length).toBeGreaterThan(0);
++  expect(await zipDigest(got.bytes)).toEqual(await zipDigest(expected.bytes));
++}
+diff --git a/tests/unit/intake.test.js b/tests/unit/intake.test.js
+index c07ec2c..0cbc624 100644
+--- a/tests/unit/intake.test.js
++++ b/tests/unit/intake.test.js
+@@ -60,6 +60,27 @@ test('a drop with no entry support still lists its files', () => {
+   assert.equal(hasFolder(snapshotDrop({ files: [file('a.xlsx')] })), false);
+ });
+ 
++test('a drop of files only is read from the file list, whatever the entries do', async () => {
++  const hung = (name) => ({ isFile: true, isDirectory: false, name, fullPath: `/${name}`, file: () => {} });
++  const snap = snapshotDrop(drop([hung('b.xlsx'), hung('a.xlsx')], [file('b.xlsx'), file('a.xlsx')]));
++  assert.equal(snap.entries, null);
++  const { files, unreadable } = await collectFiles(snap);
++  assert.deepEqual(files.map((f) => f.relPath), ['a.xlsx', 'b.xlsx']);
++  assert.deepEqual(unreadable, []);
++});
++
++test('entries are kept when a folder is among the items or the file list is empty', () => {
++  assert.equal(snapshotDrop(drop([dirEntry('/books', []), fileEntry('/a.xlsx')], [file('books'), file('a.xlsx')])).entries.length, 2);
++  assert.equal(snapshotDrop(drop([fileEntry('/a.xlsx')], [])).entries.length, 1);
++});
++
++test('a drop whose items are not iterable still lists its files', () => {
++  const items = { length: 1, 0: { kind: 'file', webkitGetAsEntry: () => fileEntry('/a.xlsx') } };
++  const snap = snapshotDrop({ items, files: [file('a.xlsx')] });
++  assert.equal(snap.files.length, 1);
++  assert.equal(snap.entries, null);
++});
++
+ test('files dropped at the top level use their name as the relative path', async () => {
+   const snap = snapshotDrop(drop([fileEntry('/b.xlsx'), fileEntry('/a.xlsx')]));
+   const { files, unreadable } = await collectFiles(snap);

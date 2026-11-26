@@ -107,5 +107,118 @@ export const STATES = [
       }
       await expect(page.locator('.print-page').first()).toBeVisible();
     }
+  },
+
+  {
+    id: '11-nav-layer-search',
+    mask: false,
+    run: async (page) => {
+      await loadFile(page, fx('many-queries.xlsx'));
+      await page.getByRole('combobox', { name: 'Group by' }).selectOption('layer');
+      await page.getByRole('searchbox', { name: 'Search queries' }).fill('sales');
+      await page.waitForTimeout(200);
+    }
+  },
+  {
+    id: '12-steps-peek',
+    mask: true,
+    run: async (page) => {
+      await loadFile(page, fx('many-queries.xlsx'));
+      await page.getByRole('searchbox', { name: 'Search queries' }).fill('Wide_Steps');
+      await page.locator('[role=treeitem][data-name="Wide_Steps"]').click();
+      await runButton(page).click();
+      await page.waitForSelector('.grid-cell:not(.grid-index)');
+      await page.locator('.steps-list .step-row').nth(4).click();
+      await page.waitForTimeout(650);
+    }
+  },
+  {
+    id: '13-view-chip-add-step',
+    mask: false,
+    run: async (page) => {
+      await loadFile(page, ext('pq_simple.xlsx'));
+      await pick(page, 'StudentResults');
+      await editor(page).fill([
+        'let',
+        '    Source = #table({"Name", "Age", "City"}, {{"Ann", 30, "Oslo"}, {"Bob", 25, "Rome"}, {"Cy", 30, "Oslo"}, {"Di", 41, "Paris"}, {"Ed", 25, "Rome"}, {"Flo", 30, "Oslo"}}),',
+        '    Typed = Table.TransformColumnTypes(Source, {{"Age", Int64.Type}})',
+        'in',
+        '    Typed'
+      ].join('\n'));
+      await runButton(page).click();
+      await page.waitForSelector('.grid-cell:not(.grid-index)');
+      await page.locator('.dock-panel[data-panel=result] .grid-hcell', { hasText: 'City' }).first().click();
+      await page.getByRole('menuitem', { name: 'Filter\u2026' }).click();
+      const dlg = page.getByRole('dialog', { name: 'Filter City' });
+      await dlg.getByRole('radio', { name: 'Condition' }).check();
+      await dlg.locator('select').selectOption({ label: 'equals' });
+      await dlg.getByLabel('Value', { exact: true }).fill('Oslo');
+      await dlg.getByRole('button', { name: 'Filter the view' }).click();
+      await expect(page.locator('.chip.view')).toBeVisible();
+      await page.locator('.dock-panel[data-panel=result] .grid-hcell', { hasText: 'City' }).first().click();
+      await page.getByRole('menuitem', { name: 'Add as a step\u2026' }).click();
+      await expect(page.getByRole('dialog', { name: 'Add a step for City' })).toBeVisible();
+    }
+  },
+  {
+    id: '14-graph-staging',
+    mask: false,
+    run: async (page) => {
+      await loadFile(page, fx('many-queries.xlsx'));
+      await page.getByRole('searchbox', { name: 'Search queries' }).fill('Staging_01');
+      await page.locator('[role=treeitem][data-name="Staging_01"]').click();
+      await page.keyboard.press('Control+k');
+      await page.keyboard.type('show the dependency graph');
+      await page.locator('.palette-row').filter({ hasText: /^Show the dependency graph$/ }).click();
+      await page.waitForSelector('.graph-svg');
+      await page.waitForTimeout(300);
+    }
+  },
+  {
+    id: '15-problems-4',
+    mask: false,
+    run: async (page) => {
+      await loadFile(page, fx('many-queries.xlsx'));
+      await page.waitForTimeout(800);
+      await page.getByRole('tab', { name: 'Problems' }).click();
+      await expect(page.locator('.dock-panel[data-panel=problems] .problem-row')).toHaveCount(4);
+    }
+  },
+  {
+    id: '16-queue-run-all',
+    mask: true,
+    run: async (page) => {
+      await loadFile(page, fx('many-queries.xlsx'));
+      await page.getByRole('searchbox', { name: 'Search queries' }).fill('Sales_Broken');
+      await page.locator('[role=treeitem][data-name="Sales_Broken"]').click();
+      await editor(page).fill('let\n    Source = Sales_Raw,\n    Bad = Table.SelectRows(Source, each [Amount] > 0)\nin\n    Bad');
+      await expect.poll(() => page.locator('.status-problems').textContent()).toBe('Problems 3');
+      await page.waitForTimeout(400);
+      await page.keyboard.press('Control+Alt+Enter');
+      await page.getByRole('dialog', { name: 'Some files are not bound yet' }).getByRole('button', { name: 'Run anyway' }).click();
+      await page.getByRole('tab', { name: 'Queue' }).click();
+      await page.waitForSelector('.dock-panel[data-panel=queue] .queue-row, .dock-panel[data-panel=queue] [role=listitem], .dock-panel[data-panel=queue] li', { timeout: 5000 });
+    }
+  },
+  {
+    id: '17-vba-structure-error',
+    mask: false,
+    run: async (page) => {
+      await loadFile(page, ext('pq_vba_complex.xlsm'));
+      await pick(page, 'Sheet1');
+      await editor(page).fill('Public Sub Alpha()\r\n  Exit Function\r\nEnd Sub\r\nPublic Sub Alpha()\r\nEnd Sub');
+      await page.waitForTimeout(400);
+    }
+  },
+  {
+    id: '18-palette-run',
+    mask: false,
+    run: async (page) => {
+      await loadFile(page, ext('pq_simple.xlsx'));
+      await pick(page, 'StudentResults');
+      await page.keyboard.press('Control+k');
+      await page.keyboard.type('>run');
+      await page.waitForTimeout(200);
+    }
   }
 ];

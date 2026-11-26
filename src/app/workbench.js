@@ -75,7 +75,7 @@ function invokeArg(p, raw) {
   return { m: textLiteral(raw) };
 }
 
-export class Workspace {
+export class Workbench {
   constructor(host, session, settings, status, { runSlot = null } = {}) {
     this.session = session;
     this.settings = settings;

@@ -158,3 +158,26 @@ test('T-WB-27: Run all reports its first member and ends with counts', async ({ 
   record.push(['runAllTotal', Math.round(all)]);
   await expect(page.locator('.statusbar')).toContainText('failed');
 });
+
+test('T-WB-27: a keystroke in the navigator search updates the 320-item list within 50 ms', async ({ page }) => {
+  await openMany(page);
+  await page.waitForTimeout(100);
+  const box = page.getByRole('searchbox', { name: 'Search queries' });
+  const ms = await page.evaluate(() => {
+    const box = document.querySelector('.nav-search');
+    box.value = 'stag';
+    const t0 = performance.now();
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    const t1 = performance.now();
+    box.value = '';
+    const t2 = performance.now();
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    return { stag: t1 - t0, clear: performance.now() - t2 };
+  });
+  const shown = await page.locator('.nav-list [role=treeitem][data-name]').count();
+  expect(shown).toBeGreaterThan(0);
+  expect(shown).toBeLessThan(320);
+  record.push(['searchKeystroke', { filter: Math.round(ms.stag), clear: Math.round(ms.clear) }]);
+  expect(ms.stag).toBeLessThanOrEqual(50 * FACTOR);
+  expect(ms.clear).toBeLessThanOrEqual(50 * FACTOR);
+});

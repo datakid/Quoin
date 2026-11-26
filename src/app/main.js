@@ -11,7 +11,7 @@ import { stepsOf } from '../core/wb/steps.js';
 import { summariesFor } from './change-summary.js';
 import { settingsDialog, shortcutsDialog, detailsDialog, changesDialog, confirmDialog, menu, popover } from '../ui/dialogs.js';
 import { Session } from './session.js';
-import { Workspace } from './workspace.js';
+import { Workbench } from './workbench.js';
 import { PRESET_ORDER } from '../core/wb/layout-presets.js';
 import { queryFile, moduleFile, zipFiles, sanitizeFileName } from '../core/export/files.js';
 import { QuoinError } from '../core/errors.js';
@@ -383,7 +383,7 @@ export class App {
     this.session = next;
     this.settings = { ...this.settings };
     clear(this.mainEl);
-    this.ws = new Workspace(this.mainEl, this.session, this.settings, this.status, { runSlot: this.runSlot });
+    this.ws = new Workbench(this.mainEl, this.session, this.settings, this.status, { runSlot: this.runSlot });
     this.ws.onEdit(() => {
       this.status.set({ edits: this.session.editCount });
       this.syncDownload();

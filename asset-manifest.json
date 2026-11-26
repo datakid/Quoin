@@ -1,5 +1,5 @@
 {
-  "version": "b10d6cc8ee767c19",
+  "version": "f1bf75cbb97ff878",
   "files": [
     "./",
     "index.html",
@@ -31,7 +31,7 @@
     "src/app/runner.js",
     "src/app/session.js",
     "src/app/theme-init.js",
-    "src/app/workspace.js",
+    "src/app/workbench.js",
     "src/core/bytes.js",
     "src/core/cells.js",
     "src/core/compare/cache-compare.js",

@@ -14,8 +14,7 @@ Read this first, then `docs/fable/MANAGER.md`, `docs/fable/PROGRESS.md` and `doc
 
 ## Remote
 
-- `git remote` currently says `https://github.com/datakid/power-query-manager`.
-- The repo was earlier reported renamed to `datakid/quoin`. Check which one is live (`gh repo view`) before pushing. Fix the remote if it differs.
+- The live repo is `https://github.com/datakid/Quoin` (GitHub redirected from `datakid/power-query-manager` on 26 Nov 2026). The local remote is set to it.
 - `gh run list -R …` fails in this sandbox. Use `gh api "repos/<owner>/<repo>/actions/runs?branch=fable&per_page=N"`, then `.../runs/<id>/jobs`, `.../check-runs/<jobid>/annotations`, and `gh run view <id> -R <owner>/<repo> --log-failed` once a run has finished.
 
 ## Where things stand

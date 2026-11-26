@@ -42,9 +42,9 @@ function inProcessPool({ hold = false, failIds = [], delayFor = () => 0, mutate 
   const pool = {
     submitted: [],
     cancelledWith: [],
-    async submit({ message }) {
+    async submit({ message, estimate }) {
       const id = message.fileRef.id;
-      pool.submitted.push({ id, type: message.type, recipe: message.options.recipe ? message.options.recipe.recipe : 'collect', dryRun: message.options.dryRun });
+      pool.submitted.push({ id, type: message.type, recipe: message.options.recipe ? message.options.recipe.recipe : 'collect', dryRun: message.options.dryRun, estimate });
       if (hold) return new Promise((resolve) => pending.push(resolve));
       const wait = delayFor(id);
       if (wait) await new Promise((r) => setTimeout(r, wait));
@@ -552,3 +552,13 @@ test('the plan summary reads as section 9 words it and keeps singular and plural
   assert.equal(S.planSummary({ files: 1, units: 1, groups: [{ unitsPerFile: 1, files: 1 }] }), '1 file → 1 unit each — 1 unit across 1 file');
 });
 
+
+test('each job is charged to the pool at the inflated size its index declares, never less than the file on disk', async () => {
+  const session = await settledSet([[pq(), 'a/one.xlsx'], [noQuery(), 'c/none.xlsm']]);
+  const pool = inProcessPool();
+  await preview({ session, pool, recipe: injectReplace() }).promise;
+  const charged = new Map(pool.submitted.map((s) => [s.id, s.estimate]));
+  const files = session.list();
+  for (const f of files) assert.equal(charged.get(f.id), Math.max(f.size, f.index.inflated));
+  assert.ok(files.some((f) => charged.get(f.id) > f.size));
+});

@@ -156,3 +156,8 @@ These entries cover the Fable branch (`fable`, cut from `beta`). The plan is `do
 - A saved recipe that cannot be read (corrupt, or from a newer version) is counted in the panel and left in storage, never deleted for the person.
 - A recipe file dropped with a folder or workbooks goes straight to Preview; the recipe is recognised only by the suffix `.quoin-recipe.json`, and only at the top of the drop. A recipe alone is refused when no set is open, and loads when one is.
 - Tokens are listed in the Recipe panel and flagged when unknown, both when a recipe loads and at Preview. There is no recipe editor, so "editing" is a list with Copy.
+- Indexing redraws the Files list at most five times a second while files settle, and at once for a state change or an action by the person. The old redraw after every file made indexing quadratic (196 s for 2,000 files, now 17 s).
+- The pool is charged `max(file size, declared inflated size)` for each job, so Q4's budget counts inflated bytes as written. The index carries `inflated` for this.
+- The memory test takes its baseline after one warm-up run, because the first run loads and compiles the batch modules. A worker's own heap is not readable from Playwright, so the test checks the pool's accounting.
+- The README names `quoin.theme` and `quoin.recipes` as the keys in use and says `quoin.recent` is allowed but never written, because recent sets were not wired.
+- Firefox and WebKit run in a separate workflow that is not a gate until its first results are read.

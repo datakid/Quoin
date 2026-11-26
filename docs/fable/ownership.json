@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "rule": "A file has one owner. A lane edits only the paths listed for it. Everything not listed for a lane belongs to the integrator.",
+  "lanes": {
+    "harness": {
+      "brief": "docs/fable/lanes/harness.md",
+      "owns": [
+        "playwright.config.js",
+        ".github/workflows/browsers.yml",
+        "tests/e2e/helpers.js",
+        "tests/e2e/fable-apply-worker.spec.js",
+        "tests/e2e/fable-collect-worker.spec.js",
+        "tests/e2e/fable-recipe-tokens.spec.js",
+        "tests/e2e/print.spec.js",
+        "tests/e2e/refinement.spec.js",
+        "tests/e2e/privacy.spec.js",
+        "tests/e2e/safety.spec.js",
+        "docs/fable/lanes/NOTES-harness.md"
+      ]
+    },
+    "ui": {
+      "brief": "docs/fable/lanes/ui.md",
+      "owns": [
+        "src/ui/grid.js",
+        "src/ui/set/**",
+        "styles/grid.css",
+        "styles/set.css",
+        "tests/e2e/fable-matrix.spec.js",
+        "tests/e2e/grid.spec.js",
+        "tests/e2e/grid-limits.spec.js",
+        "tests/e2e/perf.spec.js",
+        "tests/e2e/fable-row-diff.spec.js",
+        "tests/e2e/fable-responsive.spec.js",
+        "tests/unit/grid-labels.test.js",
+        "docs/fable/lanes/NOTES-ui.md"
+      ]
+    },
+    "safety": {
+      "brief": "docs/fable/lanes/safety.md",
+      "owns": [
+        "src/core/save.js",
+        "src/core/sheet/**",
+        "tests/unit/sheet-*.test.js",
+        "tests/unit/save-safety.test.js",
+        "docs/fable/lanes/NOTES-safety.md"
+      ]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "version": "5fe1936e1ee6c59d",
+  "version": "e8de3319e63c7b76",
   "files": [
     "./",
     "index.html",
@@ -33,6 +33,8 @@
     "src/app/outputs.js",
     "src/app/plan-run.js",
     "src/app/pool.js",
+    "src/app/recipe-files.js",
+    "src/app/recipe-store.js",
     "src/app/row-diff.js",
     "src/app/runner.js",
     "src/app/session.js",

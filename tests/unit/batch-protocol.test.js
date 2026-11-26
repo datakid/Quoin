@@ -186,3 +186,17 @@ test('every output buffer is transferred once, and a buffer shared by the result
   assert.equal(copy.result.outputs[0].bytes, copy.result.bytes);
 });
 
+const part = (over = {}) => ({ unit: { name: 'T', index: 0 }, name: 'a__T', xml: '<worksheet/>', digest: hash, rowIndex: 0, columns: 1, rows: 1, ...over });
+const withParts = (sheetParts) => appliedMessage('f0007', { ...result(null), sheetParts });
+
+test('an applied message may carry sheet parts, each with a name, a hash and an xml string that is null in a preview', () => {
+  assert.equal(validateMessage(withParts([part(), part({ name: 'b__T' })])).ok, true);
+  assert.equal(validateMessage(withParts([part({ xml: null })])).ok, true);
+  assert.equal(validateMessage(withParts([])).ok, true);
+  assert.equal(validateMessage(withParts('x')).ok, false);
+  assert.equal(validateMessage(withParts([part({ name: '' })])).ok, false);
+  assert.equal(validateMessage(withParts([part({ digest: 'ABC' })])).ok, false);
+  assert.equal(validateMessage(withParts([part({ xml: 5 })])).ok, false);
+  assert.equal(validateMessage(withParts([part({ xml: undefined })])).ok, false);
+});
+

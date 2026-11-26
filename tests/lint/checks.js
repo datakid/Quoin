@@ -143,6 +143,26 @@ function identifierRefs(text, names, { members }) {
   return out;
 }
 
+export const STORAGE_KEYS = ['quoin.theme', 'quoin.recipes', 'quoin.recent'];
+
+export function storageFindings(relPath, text) {
+  const out = [];
+  const add = (line, msg) => out.push({ line, msg });
+  visit(parseSource(text).ast, (n, parent) => {
+    if (n.type === 'Identifier' && n.name === 'localStorage') {
+      const call = parent && parent.type === 'MemberExpression' ? parent : null;
+      if (!call) add(n.loc.start.line, 'localStorage');
+    }
+    if (n.type === 'CallExpression' && n.callee.type === 'MemberExpression' && ['getItem', 'setItem', 'removeItem'].includes(n.callee.property.name) && n.callee.object.type === 'MemberExpression' && n.callee.object.property.name === 'localStorage') {
+      const a = n.arguments[0];
+      if (!a || a.type !== 'Literal' || !STORAGE_KEYS.includes(a.value)) add(n.loc.start.line, 'localStorage key');
+    }
+    if (n.type === 'MemberExpression' && n.property.name === 'sessionStorage') add(n.loc.start.line, 'sessionStorage');
+    if (n.type === 'Identifier' && ['sessionStorage', 'indexedDB'].includes(n.name)) add(n.loc.start.line, n.name);
+  });
+  return out;
+}
+
 export function layerPurityFindings(relPath, text) {
   if (!relPath.startsWith('src/batch/')) return [];
   return identifierRefs(text, LAYER_GLOBALS, { members: false });
@@ -226,6 +246,7 @@ export function runAll() {
     for (const x of layerPurityFindings(rel(f), text)) add('T-LINT-18', f, x.line, x.msg);
     for (const x of importDirectionFindings(rel(f), text)) add('T-LINT-19', f, x.line, x.msg);
     for (const x of base64Findings(rel(f), text)) add('T-LINT-20', f, x.line, x.msg);
+    for (const x of storageFindings(rel(f), text)) add('T-LINT-8', f, x.line, x.msg);
   }
 
   for (const f of srcJs) {
@@ -258,16 +279,6 @@ export function runAll() {
       if (n.type === 'NewExpression' && n.callee.type === 'Identifier' && n.callee.name === 'Function') add('T-LINT-5', f, n.loc.start.line, 'new Function');
       if (n.type === 'CallExpression' && n.callee.type === 'Identifier' && ['setTimeout', 'setInterval'].includes(n.callee.name) && n.arguments[0] && n.arguments[0].type !== 'ArrowFunctionExpression' && n.arguments[0].type !== 'FunctionExpression' && n.arguments[0].type !== 'Identifier' && n.arguments[0].type !== 'MemberExpression') add('T-LINT-5', f, n.loc.start.line, 'string timer');
       if (rel(f).startsWith('src/core/') && n.type === 'Identifier' && ['document', 'window', 'navigator'].includes(n.name) && !(parent && parent.type === 'MemberExpression' && parent.property === n && !parent.computed) && !(parent && parent.type === 'Property' && parent.key === n)) add('T-LINT-7', f, n.loc.start.line, n.name);
-      if (n.type === 'Identifier' && n.name === 'localStorage') {
-        const call = parent && parent.type === 'MemberExpression' ? parent : null;
-        if (!call) add('T-LINT-8', f, n.loc.start.line, 'localStorage');
-      }
-      if (n.type === 'CallExpression' && n.callee.type === 'MemberExpression' && ['getItem', 'setItem', 'removeItem'].includes(n.callee.property.name) && n.callee.object.type === 'MemberExpression' && n.callee.object.property.name === 'localStorage') {
-        const a = n.arguments[0];
-        if (!a || a.type !== 'Literal' || a.value !== 'quoin.theme') add('T-LINT-8', f, n.loc.start.line, 'localStorage key');
-      }
-      if (n.type === 'MemberExpression' && n.property.name === 'sessionStorage') add('T-LINT-8', f, n.loc.start.line, 'sessionStorage');
-      if (n.type === 'Identifier' && ['sessionStorage', 'indexedDB'].includes(n.name)) add('T-LINT-8', f, n.loc.start.line, n.name);
     });
   }
 
@@ -454,7 +465,20 @@ export function runAll() {
     for (const x of oneExecuteEntryFindings(rel(f), read(f))) add('T-LINT-21', f, x.line, x.msg);
   }
 
+  for (const f of walk(root)) {
+    if (!/\.(js|mjs|json|md|css|html|yml|yaml|svg|webmanifest)$/.test(f) || rel(f) === 'package-lock.json') continue;
+    for (const x of conflictMarkerFindings(read(f))) add('T-LINT-22', f, x.line, x.msg);
+  }
+
   return findings;
+}
+
+export function conflictMarkerFindings(text) {
+  const out = [];
+  text.split('\n').forEach((line, n) => {
+    if (/^<{7} \S/.test(line) || /^>{7} \S/.test(line)) out.push({ line: n + 1, msg: 'merge conflict marker' });
+  });
+  return out;
 }
 
 export function printFindings(findings) {

@@ -16,19 +16,28 @@ import { QuoinError } from '../core/errors.js';
 import { SetSession } from './set-session.js';
 import { SetShell } from '../ui/set/shell.js';
 import { sharedPool } from './pool.js';
-import { snapshotDrop, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
+import { snapshotDrop, splitRecipe, hasFolder, collectFiles, filesFromInput, indexPending } from './intake.js';
 import { startCollect } from './collect-run.js';
 import { startPlanRun, previewSupport } from './plan-run.js';
 import { rowDiff } from './row-diff.js';
 import { buildPlanOutput } from './outputs.js';
 import { buildFolderOutput, hasDirectoryPicker } from './folder-output.js';
-import { parseRecipe } from '../batch/recipe/recipe.js';
+import { loadRecipeFile as readRecipeFile, saveRecipeFile } from './recipe-files.js';
+import { createRecipeStore } from './recipe-store.js';
+import { recipeTokens } from '../batch/resolve/tokens.js';
+import { TOKENS } from '../batch/recipe/recipe.js';
 import { createVariantTextLoader } from './variant-text.js';
 import { groupVariants } from '../batch/verify/variants.js';
 
-const MAX_RECIPE_BYTES = 256 * 1024;
-
 const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false };
+
+function browserStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 function loadTheme() {
   try {
@@ -167,11 +176,18 @@ export class App {
     this.shell = null;
     this.fromSet = null;
     this.recipeHeld = null;
+    this.recipeProblem = '';
+    this.store = createRecipeStore(browserStorage());
     this.preview = null;
     this.build();
     this.bindGlobal();
-    this.set.subscribe(() => {
+    this.previewAfterIndexing = false;
+    this.set.subscribe((ev) => {
       if (!this.ws && !this.shell && this.set.state !== 'empty') this.showSet();
+      if (this.previewAfterIndexing && ev && ev.type === 'state' && ev.state === 'ready') {
+        this.previewAfterIndexing = false;
+        queueMicrotask(() => this.previewIfPossible());
+      }
     });
   }
 
@@ -235,6 +251,10 @@ export class App {
       onOpen: (id) => this.openFromSet(id),
       onLoadRecipe: (file) => this.loadRecipeFile(file),
       onClearRecipe: () => this.clearRecipe(),
+      onSaveRecipe: () => this.saveRecipeHere(),
+      onDownloadRecipe: () => this.downloadRecipe(),
+      onUseStored: (name) => this.useStoredRecipe(name),
+      onDeleteStored: (name) => this.deleteStoredRecipe(name),
       onPreview: () => this.previewRecipe(),
       onGet: () => this.getRecipe({ folder: false }),
       onGetFolder: () => this.getRecipe({ folder: true }),
@@ -316,8 +336,11 @@ export class App {
     if (!dt) return;
     const first = dt.items && dt.items[0];
     const handle = first && typeof first.getAsFileSystemHandle === 'function' ? first.getAsFileSystemHandle().catch(() => null) : null;
-    const snapshot = snapshotDrop(dt);
+    const whole = snapshotDrop(dt);
+    const { recipes, rest: snapshot } = splitRecipe(whole);
     const files = snapshot.files;
+    if (recipes.length > 1) return this.refuse(S.dropRecipeMany);
+    if (recipes.length === 1) return this.dropWithRecipe(recipes[0], snapshot);
     if (this.ws) {
       if (hasFolder(snapshot)) this.refuse(S.dropFolder);
       else if (files.length > 1) this.refuse(S.dropOne);
@@ -328,19 +351,38 @@ export class App {
 
   async collectIntoSet(snapshot) {
     const { files, unreadable } = await collectFiles(snapshot);
-    this.addToSet(files, unreadable);
+    return this.addToSet(files, unreadable);
+  }
+
+  async dropWithRecipe(recipe, snapshot) {
+    const empty = snapshot.files.length === 0;
+    if (this.ws) return this.refuse(S.dropRecipeOpen);
+    if (empty && !this.shell) return this.refuse(S.dropRecipeAlone);
+    await this.loadRecipeFile(recipe);
+    if (empty) return;
+    if (!this.recipeHeld) {
+      await this.collectIntoSet(snapshot);
+      return;
+    }
+    this.previewAfterIndexing = true;
+    const result = await this.collectIntoSet(snapshot);
+    if (result && result.added > 0) return;
+    this.previewAfterIndexing = false;
+    if (result) this.previewIfPossible();
   }
 
   addToSet(refs, unreadable = []) {
-    if (!refs.length && !unreadable.length) return;
+    if (!refs.length && !unreadable.length) return null;
+    let result;
     try {
-      this.set.addFiles(refs);
+      result = this.set.addFiles(refs);
     } catch {
       this.status.set({ alertText: S.setBusy });
-      return;
+      return null;
     }
     if (unreadable.length) this.status.set({ alertText: S.unreadableItems(unreadable.length) });
     indexPending(this.set, sharedPool());
+    return result;
   }
 
   variantText(item, version) {
@@ -412,14 +454,26 @@ export class App {
     if (this.shell) this.shell.setRecipeView(view);
   }
 
+  showKept(text) {
+    if (this.shell) this.shell.setRecipeKept(text);
+  }
+
   recipeView(extra = {}) {
     const held = this.recipeHeld;
-    if (!held) return { loaded: null, warnings: [], error: '', notes: [], canPreview: false, canGet: false, ...extra };
+    const stored = this.storedRecipes();
+    if (!held) return { loaded: null, warnings: [], tokensUsed: [], error: this.recipeProblem, notes: [], canPreview: false, canGet: false, ...stored, ...extra };
     const support = previewSupport(held.recipe);
     const previewable = support.ok;
     const canGet = previewable && !!this.preview && this.preview.counts.changed > 0;
     const why = { kind: S.recipeNotPreviewable, compute: S.recipeComputeNotYet, output: S.recipeOutputNotYet(support.mode) }[support.why];
-    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: held.warnings, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...extra };
+    const tokens = recipeTokens(held.recipe);
+    const tokenWarnings = tokens.unknown.map((t) => ({ code: 'recipe.token', path: t }));
+    return { loaded: { name: held.name, kind: held.recipe.recipe }, warnings: [...held.warnings, ...tokenWarnings], tokensUsed: tokens.used, error: '', notes: previewable ? [] : [why], canPreview: previewable, canGet, ...stored, ...extra };
+  }
+
+  storedRecipes() {
+    const { recipes, skipped } = this.store.listRecipes();
+    return { stored: recipes.map(({ name, kind }) => ({ name, kind })), storedSkipped: skipped };
   }
 
   forgetPreview() {
@@ -429,23 +483,66 @@ export class App {
 
   async loadRecipeFile(file) {
     this.recipeHeld = null;
+    this.recipeProblem = '';
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
-    if (file.size > MAX_RECIPE_BYTES) return this.showRecipe(this.recipeView({ error: S.recipeTooLarge }));
-    let text;
-    try {
-      text = await file.text();
-    } catch {
-      return this.showRecipe(this.recipeView({ error: S.recipeUnreadable }));
+    const out = await readRecipeFile(file);
+    if (!out.ok) {
+      this.recipeProblem = this.recipeFileProblem(out);
+      return this.showRecipe(this.recipeView());
     }
-    const parsed = parseRecipe(text);
-    if (!parsed.ok) return this.showRecipe(this.recipeView({ error: errorMessage(parsed.code, { detail: parsed.detail }) }));
-    this.recipeHeld = { name: file.name, recipe: parsed.recipe, warnings: parsed.warnings };
+    this.recipeHeld = { name: file.name, recipe: out.recipe, warnings: out.warnings };
     this.showRecipe(this.recipeView());
+  }
+
+  recipeFileProblem(out) {
+    if (out.code === 'recipe.tooLarge') return S.recipeTooLarge;
+    if (out.code === 'recipe.invalid' && out.detail === 'the file could not be read') return S.recipeUnreadable;
+    return errorMessage(out.code, { detail: out.detail });
+  }
+
+  keptRecipe() {
+    const { recipe, name } = this.recipeHeld;
+    return typeof recipe.name === 'string' && recipe.name.trim() ? recipe : { ...recipe, name: name.replace(/\.quoin-recipe\.json$/i, '').replace(/\.json$/i, '') };
+  }
+
+  saveRecipeHere() {
+    if (!this.recipeHeld) return;
+    const recipe = this.keptRecipe();
+    const out = this.store.saveRecipe(recipe);
+    if (!out.ok) return this.showKept(errorMessage(out.code));
+    this.showRecipe(this.recipeView());
+    this.showKept(S.recipeSaved(recipe.name));
+  }
+
+  downloadRecipe() {
+    if (!this.recipeHeld) return;
+    const out = saveRecipeFile(this.keptRecipe());
+    if (!out.ok) return this.showKept(errorMessage(out.code, { detail: out.detail }));
+    saveBytes(out.bytes, out.name, 'application/json');
+    this.showKept(S.recipeDownloaded(out.name));
+  }
+
+  useStoredRecipe(name) {
+    const found = this.store.listRecipes().recipes.find((r) => r.name === name);
+    if (!found) return this.showRecipe(this.recipeView());
+    this.recipeHeld = { name: found.name, recipe: found.recipe, warnings: [] };
+    this.recipeProblem = '';
+    this.preview = null;
+    if (this.shell) this.shell.clearPreview();
+    this.showRecipe(this.recipeView());
+  }
+
+  deleteStoredRecipe(name) {
+    const out = this.store.deleteRecipe(name);
+    if (!out.ok) return this.showKept(errorMessage(out.code));
+    this.showRecipe(this.recipeView());
+    this.showKept(S.recipeDeleted(name));
   }
 
   clearRecipe() {
     this.recipeHeld = null;
+    this.recipeProblem = '';
     this.preview = null;
     if (this.shell) this.shell.clearPreview();
     this.showRecipe(this.recipeView());
@@ -455,7 +552,9 @@ export class App {
     if (out.code !== 'plan.invalid' || !out.errors.length) return errorMessage(out.code, { count: out.count });
     const first = out.errors[0];
     const text = errorMessage(first.code, { token: first.detail });
-    return out.errors.length > 1 ? `${text} ${S.recipePlanMore(out.errors.length - 1)}` : text;
+    const more = out.errors.length > 1 ? ` ${S.recipePlanMore(out.errors.length - 1)}` : '';
+    const hint = out.errors.every((e) => e.code === 'recipe.token') ? ` ${S.recipeTokensAre(TOKENS.join(', '))}` : '';
+    return `${text}${more}${hint}`;
   }
 
   async getRecipe({ folder }) {
@@ -517,6 +616,10 @@ export class App {
     });
   }
 
+  previewIfPossible() {
+    if (this.recipeHeld && previewSupport(this.recipeHeld.recipe).ok) this.previewRecipe();
+  }
+
   previewRecipe() {
     const held = this.recipeHeld;
     if (!held || this.setRun || !this.shell) return Promise.resolve(null);
@@ -541,7 +644,7 @@ export class App {
       if (out.ok) {
         this.preview = out;
         this.shell.showResult(out.rows, 'preview', { detailFor: (i) => rowDiff(out, i) });
-        this.showRecipe(this.recipeView({ notes: [S.recipeCounts(out.counts), ...(out.signedCount ? [S.recipeSigned(out.signedCount)] : [])] }));
+        this.showRecipe(this.recipeView({ notes: [...(out.plan.recipe.recipe === 'transform' && out.plan.summary.files ? [S.planSummary(out.plan.summary)] : []), S.recipeCounts(out.counts), ...(out.signedCount ? [S.recipeSigned(out.signedCount)] : [])] }));
       } else {
         this.showRecipe(this.recipeView({ error: this.planProblem(out) }));
       }

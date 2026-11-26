@@ -61,8 +61,8 @@ async function writeOne(root, path, data) {
   return [...parts, finalName].join('/');
 }
 
-export async function buildFolderOutput(root, { plan, indexes, perFile, rows }, { shouldStop = () => false } = {}) {
-  const files = releasedFiles({ indexes, perFile });
+export async function buildFolderOutput(root, { plan, indexes, perFile, rows, combined = null }, { shouldStop = () => false } = {}) {
+  const files = releasedFiles({ indexes, perFile, combined });
   const written = new Map();
   for (const f of files) {
     if (shouldStop()) return { ok: true, stopped: true, name: root.name, files: [...written.values()], rows };

@@ -89,3 +89,10 @@ Notes it made that need no change but should be read by whoever ticks the boxes:
 - Case 13 (combined): a formula cell of the input is stored as its computed value, which is what "the values of its table" asks for.
 - X01, X02: the stored M evaluates over the input data to exactly the expected file; both connections carry `refreshOnLoad="1"`; X02's VBA project is byte-identical to the input.
 - Case 09 (Writer's): with the signature removed Excel may show the unsigned-macro behaviour instead of the signed-trust prompt.
+
+## Merge of fable 'worked example' work: one conflict, one spec edit (integrator, please read)
+
+- Conflict in `src/batch/resolve/tokens.js`: your `recipeTokens` and my `withInjectTokens` were both appended at the end of the file. Kept both. I also made `recipeTokens` list the tokens in injected text (and flag unknown ones there), because the user decided that injected query and module text take tokens (D1); a test line in `batch-tokens.test.js` covers it.
+- Your difference 1 in the F3-10 notes (a unit whose query names a missing column is `failed`, and the engine had no code for `skipped`): the user decided D3, a unit like that is skipped. The engine now returns it as `skipped / skip.missingColumn` with the engine's message as the reason. I ran your own `tests/fixtures/worked-example.js` through plan and run: 13 rows, 11 changed, and `sales-09.xlsx` and `sales-10.xlsx`, unit `South`, are `skipped / skip.missingColumn` with `The column 'Amount' of the table wasn't found.`
+- I therefore edited three lines of `tests/e2e/fable-worked-example.spec.js`: the Preview note is now `11 would change · 2 skipped · 2 refused` (your `recipeCounts` already prints skipped), the two rows are filtered as `skipped` with code `skip.missingColumn`, and the report counts 2 `skipped` instead of 2 `failed`. I could not run this browser spec here; if it fails for a reason I could not see, the engine side is as above and the spec lines are yours to adjust.
+- Still needed from you: a string for `skip.missingColumn` wherever reasons are shown by code, and the closing run message when every non-changed row is skipped rather than failed.

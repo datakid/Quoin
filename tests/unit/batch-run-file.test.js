@@ -157,3 +157,14 @@ test('a transform that fails on one unit still returns the units that worked', a
   assert.deepEqual(res.rows.map((r) => [r.unit, r.verdict, r.reason_code]), [['StudentNames', 'failed', 'unit.error'], ['StudentResults', 'changed', '']]);
   assert.deepEqual(res.outputs.map((o) => o.name), ['pq_simple__StudentResults.xlsx']);
 });
+
+test('a combined run hands back sheet parts with their xml, and a preview hands back the same digests with no xml', async () => {
+  const bytes = fixture('pq_simple.xlsx');
+  const { recipe, meta, filePlan } = await planFor(bytes, 'pq_simple.xlsx', { ...transformNewFile, output: { mode: 'combined' } });
+  const ran = await runFilePlan(bytes, meta, filePlan, options(recipe));
+  const previewed = await runFilePlan(bytes, meta, filePlan, options(recipe, { dryRun: true }));
+  assert.deepEqual([ran.bytes, ran.outputs], [null, []]);
+  assert.deepEqual(ran.sheetParts.map((p) => [p.name, typeof p.xml, /^[0-9a-f]{64}$/.test(p.digest)]), [['pq_simple__StudentNames', 'string', true], ['pq_simple__StudentResults', 'string', true]]);
+  assert.deepEqual(previewed.sheetParts.map((p) => [p.name, p.xml, p.digest]), ran.sheetParts.map((p) => [p.name, null, p.digest]));
+});
+

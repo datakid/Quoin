@@ -8,7 +8,7 @@ import { refuseReason, rectOf, intersects } from '../../core/sheet/write-ranges.
 import { parseCellRef, indexToCol } from '../../core/cells.js';
 import { expectedGrid, hasLongText, sameGrid, tooLarge } from '../../core/sheet/grid.js';
 import { sha256Bytes } from '../index/hash.js';
-import { reportRow } from './changes.js';
+import { reportRow, sheetOutput } from './changes.js';
 import { zipClock } from './collect.js';
 import { gridDigest } from './combine.js';
 import { runFileUnits } from './units.js';
@@ -128,7 +128,7 @@ async function writeNewSheets(wb, items, culture, apply) {
     return { settled, outputs: [], bytes: null, sha256: null, sheetParts: [] };
   }
   const sha256 = await sha256Bytes(written.bytes);
-  for (const { run, name } of adds) settled.set(run, { verdict: 'changed', reason_code: '', verified: true, output: `${written.name} [${name}]`, new_hash: sha256 });
+  for (const { run, name } of adds) settled.set(run, { verdict: 'changed', reason_code: '', verified: true, output: sheetOutput(written.name, name), new_hash: sha256 });
   return { settled, outputs: [{ unit: null, name: written.name, bytes: written.bytes, sha256 }], bytes: written.bytes, sha256, sheetParts: [] };
 }
 

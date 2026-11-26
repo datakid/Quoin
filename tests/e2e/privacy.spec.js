@@ -51,7 +51,7 @@ test('T-PRIV-2: with network primitives disabled after load, every core flow sti
   expect((await dl.path()) !== null).toBe(true);
 });
 
-test('T-PRIV-3: no cookies, no web storage except the theme, no IndexedDB databases', async ({ page, context }) => {
+test('T-PRIV-3: using the app without saving a recipe or a set leaves only the theme in storage', async ({ page, context }) => {
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
   await page.getByRole('button', { name: 'Settings' }).click();
@@ -64,6 +64,35 @@ test('T-PRIV-3: no cookies, no web storage except the theme, no IndexedDB databa
     idb: indexedDB.databases ? (await indexedDB.databases()).length : 0
   }));
   expect(stores).toEqual({ local: ['quoin.theme'], session: [], idb: 0 });
+});
+
+test('T-PRIV-3: after saving a recipe and remembering a set, exactly three keys exist, holding names and recipe text and no paths or workbook contents', async ({ page, context }) => {
+  await openApp(page);
+  await loadFile(page, ext('pq_simple.xlsx'));
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByLabel('Theme').selectOption('dark');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.evaluate(async () => {
+    const { createRecipeStore } = await import('/src/app/recipe-store.js');
+    const { parseRecipe } = await import('/src/batch/recipe/recipe.js');
+    const store = createRecipeStore(window.localStorage);
+    store.saveRecipe(parseRecipe(JSON.stringify({ recipe: 'collect', v: 1, name: 'Inventory' })).recipe);
+    store.rememberSet('Q3 sales');
+    store.rememberSet('east/secret/path');
+  });
+  expect(await context.cookies()).toEqual([]);
+  const stores = await page.evaluate(async () => ({
+    local: Object.keys(localStorage).sort(),
+    values: Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])),
+    session: Object.keys(sessionStorage),
+    idb: indexedDB.databases ? (await indexedDB.databases()).length : 0
+  }));
+  expect(stores.local).toEqual(['quoin.recent', 'quoin.recipes', 'quoin.theme']);
+  expect(JSON.parse(stores.values['quoin.recent'])).toEqual(['Q3 sales']);
+  expect(JSON.parse(stores.values['quoin.recipes']).map((e) => e.name)).toEqual(['Inventory']);
+  expect(stores.values['quoin.theme']).toBe('dark');
+  expect(JSON.stringify(stores.values)).not.toMatch(/pq_simple|secret|Source =|HELLO/);
+  expect([stores.session, stores.idb]).toEqual([[], 0]);
 });
 
 test('T-PRIV-4: the page sets the strict policy and the dialog refuses inline script', async ({ page }) => {

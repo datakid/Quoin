@@ -84,7 +84,7 @@ export async function dropTree(page, nodes) {
     };
     const entries = nodes.map((n) => toEntry(n, ''));
     const dt = new DataTransfer();
-    for (const n of nodes) dt.items.add(new File(n.children ? [] : [new Uint8Array(1)], n.name));
+    for (const n of nodes) dt.items.add(new File(n.children ? [] : [Uint8Array.from(atob(n.data), (c) => c.charCodeAt(0))], n.name));
     const carrier = { files: dt.files, items: entries.map((e) => ({ kind: 'file', webkitGetAsEntry: () => e })), types: ['Files'] };
     const ev = new DragEvent('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(ev, 'dataTransfer', { value: carrier });

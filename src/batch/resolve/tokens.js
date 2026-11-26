@@ -1,4 +1,4 @@
-import { TOKENS } from '../recipe/recipe.js';
+import { TOKENS, unknownTokens } from '../recipe/recipe.js';
 
 const KNOWN = new Set(TOKENS);
 const ANY_BRACES = /\{[^{}]*\}/g;
@@ -62,4 +62,14 @@ export function withInjectTokens(recipe, file) {
   if (recipe.recipe !== 'inject' || typeof recipe.inject.text !== 'string') return recipe;
   const unit = { name: baseName(file.name), index: 1 };
   return { ...recipe, inject: { ...recipe.inject, text: substituteTokens(recipe.inject.text, file, unit) } };
+}
+
+export function recipeTokens(recipe) {
+  const name = recipe.output && typeof recipe.output.name === 'string' ? recipe.output.name : '';
+  const m = recipe.recipe === 'transform' && recipe.query && typeof recipe.query.m === 'string' ? recipe.query.m : '';
+  const text = recipe.recipe === 'inject' && typeof recipe.inject.text === 'string' ? recipe.inject.text : '';
+  const used = TOKENS.filter((t) => name.includes(t) || m.includes(t) || text.includes(t));
+  const unknown = [...unknownTokens(name)];
+  for (const t of [...unknownQueryTokens(m), ...unknownQueryTokens(text)]) if (!unknown.includes(t)) unknown.push(t);
+  return { used, unknown };
 }

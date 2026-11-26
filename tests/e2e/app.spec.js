@@ -16,7 +16,7 @@ test('T-E2E-1: the empty state shows the mark, tagline, drop zone and privacy li
   await expect(page.locator('.empty img.mark')).toBeVisible();
   await expect(page.locator('.empty h2')).toHaveText('The working parts of a workbook.');
   await expect(page.locator('.dropzone')).toBeVisible();
-  await expect(page.locator('.footnote')).toHaveText('Files stay in this tab. Nothing is uploaded or stored.');
+  await expect(page.locator('.footnote')).toHaveText('Files stay in this tab. Nothing is uploaded or stored, except your theme and the recipes you choose to save.');
   expect(problems).toEqual([]);
 });
 

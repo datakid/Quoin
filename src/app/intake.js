@@ -1,5 +1,6 @@
 import { openMessage } from '../batch/protocol.js';
 import { refusalByName } from '../batch/index/file-index.js';
+import { isRecipeFileName } from './recipe-files.js';
 
 const byRelPath = (a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0);
 
@@ -9,6 +10,13 @@ export function snapshotDrop(dt) {
   const items = [...(dt.items || [])].filter((it) => it.kind === 'file');
   const entries = items.map((it) => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null));
   return { entries: entries.length && entries.every(Boolean) ? entries : null, files: [...(dt.files || [])] };
+}
+
+export function splitRecipe(snapshot) {
+  const recipes = snapshot.files.filter((f) => isRecipeFileName(f.name));
+  if (!recipes.length) return { recipes, rest: snapshot };
+  const entries = snapshot.entries ? snapshot.entries.filter((e) => !(e.isFile && isRecipeFileName(e.name))) : null;
+  return { recipes, rest: { entries, files: snapshot.files.filter((f) => !isRecipeFileName(f.name)) } };
 }
 
 export const hasFolder = (snapshot) => !!snapshot.entries && snapshot.entries.some((e) => e.isDirectory);

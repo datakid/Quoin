@@ -1503,6 +1503,39 @@ export class Workspace {
     return this.nav ? this.nav.selectedItems().filter((i) => i.type === 'query').map((i) => i.name) : [];
   }
 
+  navSelection() {
+    return this.nav ? this.nav.selectedItems() : [];
+  }
+
+  revertSelection() {
+    const items = this.navSelection().filter((i) => i.edited);
+    if (!items.length) return false;
+    this.revertItems(items.map((i) => ({ type: i.type, name: i.name })));
+    return true;
+  }
+
+  graphSelection() {
+    const first = this.navSelection().find((i) => i.type === 'query');
+    if (!first) return false;
+    this.openGraph(first.name);
+    return true;
+  }
+
+  async copySelectionNames() {
+    const items = this.navSelection();
+    if (!items.length) return false;
+    const names = items.map((i) => i.name);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(names.join('\n'));
+      ok = true;
+    } catch {
+      ok = false;
+    }
+    this.status.set({ note: ok ? S.nav.copied(names.length) : S.nav.copyFailed });
+    return true;
+  }
+
   runSelected(downstream) {
     const names = this.selectedQueryNames();
     if (!names.length) {

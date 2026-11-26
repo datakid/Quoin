@@ -616,6 +616,10 @@ export const S = {
     stepNext: 'Go to the next step',
     stepPrev: 'Go to the previous step',
     runSelected: 'Run the selected queries',
+    runSelectedDownstream: 'Run the selected queries with downstream',
+    revertSelection: 'Revert the selected items',
+    graphSelection: 'Show the first selected query in the graph',
+    copySelectionNames: 'Copy the selected names',
     definition: 'Go to the definition of the name under the caret',
     references: 'Find the references of the name under the caret',
     renameEditor: 'Rename the step under the caret'

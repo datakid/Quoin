@@ -221,3 +221,26 @@ test('T-WB-11: sort by name orders the list and the sort is off while searching'
   await page.getByRole('searchbox').fill('sales');
   await expect(page.getByLabel('Sort by')).toBeDisabled();
 });
+
+test('T-WB-11: the palette offers the five selection actions on the current selection', async ({ page }) => {
+  await openMany(page);
+  await item(page, 'Staging_05').click();
+  await item(page, 'Sales_Clean').click({ modifiers: ['Control'] });
+  await expect(page.locator('.nav-list [aria-selected=true]')).toHaveCount(2);
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('>selected');
+  const row = (name) => page.locator('.palette-row').filter({ hasText: new RegExp(`^${name}($|Select)`) });
+  for (const name of ['Run the selected queries', 'Run the selected queries with downstream', 'Revert the selected items', 'Show the first selected query in the graph', 'Copy the selected names']) {
+    await expect(row(name)).toBeVisible();
+  }
+  for (const name of ['Run the selected queries', 'Run the selected queries with downstream', 'Show the first selected query in the graph', 'Copy the selected names']) {
+    await expect(row(name)).not.toHaveAttribute('aria-disabled', 'true');
+  }
+  await expect(row('Revert the selected items')).toHaveAttribute('aria-disabled', 'true');
+  await row('Copy the selected names').click();
+  await expect(page.locator('.statusbar')).toContainText('Copied 2 names.');
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('show the first selected query in the graph');
+  await page.locator('.palette-row').filter({ hasText: /^Show the first selected query in the graph$/ }).click();
+  await expect(page.locator('.graph-panel')).toBeVisible();
+});

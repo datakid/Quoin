@@ -12,7 +12,10 @@ test('T-WB-26: after reorder, insert and bypass the summary lists exactly those 
   await open(page);
   await page.locator('.step-row').nth(2).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
-  await page.locator('dialog[open]').getByRole('button', { name: 'Move and rewire' }).click();
+  const apply = page.locator('.step-preview').getByRole('button', { name: 'Apply' });
+  await expect(apply).toBeVisible({ timeout: 5000 });
+  await apply.focus();
+  await page.keyboard.press('Enter');
   await page.locator('.step-row').nth(0).focus();
   await page.keyboard.press('Control+d');
   await expect(page.locator('.step-row')).toHaveCount(4);

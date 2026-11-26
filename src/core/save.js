@@ -1,6 +1,7 @@
 import { QuoinError } from './errors.js';
 import { removeVbaSignatures } from './opc.js';
 import { changedQueryEdits, writeQueryEdits } from './pq/writeback.js';
+import { toViewText } from './pq/section.js';
 import { writeVbaProject } from './vba/writeback.js';
 import { openWorkbook } from './workbook.js';
 import { equalBytes } from './bytes.js';
@@ -52,7 +53,7 @@ async function selfCheck(wb, bytes, { qEdits, vEdits, touched, signatureRemoved 
     const back = await openWorkbook(bytes, wb.fileName, wb.limits);
     for (const [name, view] of qEdits) {
       const q = back.queries.find((x) => x.name === name);
-      if (!q || q.original !== view) throw new QuoinError('check.query', 'query text differs after write', name);
+      if (!q || q.original !== toViewText(view)) throw new QuoinError('check.query', 'query text differs after write', name);
     }
     for (const q of wb.queries) {
       if (qEdits.has(q.name)) continue;

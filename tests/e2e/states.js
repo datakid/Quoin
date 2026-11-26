@@ -216,10 +216,13 @@ export const STATES = [
       await page.waitForTimeout(400);
       await page.keyboard.press('Control+Alt+Enter');
       await page.getByRole('dialog', { name: 'Some files are not bound yet' }).getByRole('button', { name: 'Run anyway' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Skip' }).click({ timeout: 30000 });
       const result = page.getByRole('button', { name: 'Result', exact: true });
       if (await result.isVisible()) await result.click();
       await page.getByRole('tab', { name: 'Queue' }).click();
       await page.waitForSelector('.dock-panel[data-panel=queue] .queue-table tbody tr', { timeout: 8000 });
+      await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 30000 });
+      await page.waitForTimeout(300);
     }
   },
   {

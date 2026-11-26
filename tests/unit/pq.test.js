@@ -5,14 +5,14 @@ import { Package } from '../../src/core/opc.js';
 import { parseXml } from '../../src/core/xml.js';
 import { base64Decode, base64Encode, equalBytes, concat, le32, writeU32 } from '../../src/core/bytes.js';
 import { parseDataMashup, buildDataMashup, readSection } from '../../src/core/pq/datamashup.js';
-import { splitSection, rebuildSection, dominantEol, toViewText } from '../../src/core/pq/section.js';
+import { splitSection, rebuildSection, dominantEol, toViewText, fromViewText } from '../../src/core/pq/section.js';
 import { parseMetadata, decodeEntryValue } from '../../src/core/pq/metadata.js';
 import { parseConnectionString } from '../../src/core/pq/connections.js';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { buildWorkbook } from '../../src/core/save.js';
 import { checkSection } from '../../src/core/m/engine.js';
 import { QuoinError } from '../../src/core/errors.js';
-import { fixture } from './helpers.js';
+import { fixture, generated } from './helpers.js';
 
 const FILES = ['ms_template_query.xlsx', 'pq_simple.xlsx', 'pq_vba_complex.xlsm'];
 
@@ -98,6 +98,24 @@ test('T-PQ-SEC-3/4/5: editing one member leaves every other byte untouched and k
   assert.equal(dominantEol('a\r\nb\r\nc\nd'), '\r\n');
   assert.equal(dominantEol('a\nb\nc\r\nd'), '\n');
   assert.equal(dominantEol('abc'), null);
+});
+
+test('fromViewText round-trips any line endings a pasted view can carry', async () => {
+  assert.equal(fromViewText('let\r\n    x = 1\r\nin\r\n    x', '\r\n'), 'let\r\n    x = 1\r\nin\r\n    x');
+  assert.equal(fromViewText('let\r\n    x = 1\r\nin\r\n    x', '\n'), 'let\n    x = 1\nin\n    x');
+  assert.equal(fromViewText('let\r\n    x = 1\nin\n    x', '\r\n'), 'let\r\n    x = 1\r\nin\r\n    x');
+  assert.equal(fromViewText('let\r    x = 1\rin\r    x', '\n'), 'let\n    x = 1\nin\n    x');
+  assert.ok(!fromViewText('let\r\n    x = 1\r\nin\r\n    x', '\r\n').includes('\r\r'));
+});
+
+test('a CRLF pasted view of a query round-trips through the workbook write', async () => {
+  const wb = await openWorkbook(generated('many-queries.xlsx'), 'many-queries.xlsx');
+  const fixed = 'let\r\n    Source = Sales_Raw,\r\n    Bad = Table.SelectRows(Source, each [Amount] > 0)\r\nin\r\n    Bad';
+  const res = await buildWorkbook(wb, { queryEdits: new Map([['Sales_Broken', fixed]]), refreshOnLoad: true });
+  const back = await openWorkbook(res.bytes, 'many-queries.xlsx');
+  const q = back.queries.find((x) => x.name === 'Sales_Broken');
+  assert.equal(q.original, 'let\n    Source = Sales_Raw,\n    Bad = Table.SelectRows(Source, each [Amount] > 0)\nin\n    Bad');
+  assert.equal(back.queries.length, wb.queries.length);
 });
 
 test('metadata entries decode by type prefix', async () => {

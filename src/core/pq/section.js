@@ -120,7 +120,8 @@ export function dominantEol(text) {
 export const toViewText = (raw) => raw.replace(/\r\n?/g, '\n');
 
 export function fromViewText(view, eol) {
-  return eol === '\r\n' ? view.replace(/\n/g, '\r\n') : view;
+  const lf = view.replace(/\r\n?/g, '\n');
+  return eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf;
 }
 
 export function memberEol(sectionText, member) {

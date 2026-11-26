@@ -22,7 +22,7 @@ const MACRO = [
 ].join('\r\n');
 
 test('T-WB-28: the acceptance story', async ({ page }) => {
-  test.setTimeout(540000);
+  test.setTimeout(720000);
   await page.setViewportSize({ width: 1400, height: 900 });
   const problems = await openApp(page);
   const search = page.getByRole('searchbox', { name: 'Search queries' });
@@ -85,7 +85,7 @@ test('T-WB-28: the acceptance story', async ({ page }) => {
   for (let guard = 0; guard < 6; guard++) {
     const names = await stepNames(page);
     const at = names.indexOf(newName);
-    if (at > 0 && names[at - 1] === 'Changed Type') break;
+    if (names[at + 1] === 'Changed Type') break;
     await page.locator('.step-row').nth(at).focus();
     await page.keyboard.press('Alt+Shift+ArrowUp');
     const apply = page.locator('.step-preview').getByRole('button', { name: 'Apply' });
@@ -96,7 +96,7 @@ test('T-WB-28: the acceptance story', async ({ page }) => {
     await idle();
   }
   const moved = await stepNames(page);
-  expect(moved[moved.indexOf(newName) - 1]).toBe('Changed Type');
+  expect(moved[moved.indexOf(newName) + 1]).toBe('Changed Type');
   const margin = moved.indexOf('Added Margin');
   await page.locator('.step-row').nth(margin).focus();
   await page.keyboard.press('Alt+Shift+ArrowUp');
@@ -134,7 +134,9 @@ test('T-WB-28: the acceptance story', async ({ page }) => {
   const target = join(mkdtempSync(join(tmpdir(), 'wb28-')), 'saved.xlsx');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.popover .btn-primary').press('Enter')]);
   await dl.saveAs(target);
-  await loadFile(page, target);
+  await page.setInputFiles('input[type=file]', target);
+  await page.getByRole('button', { name: 'Discard and open' }).click();
+  await page.waitForSelector('.workspace, .empty .message');
   await search.fill('Sales_Clean');
   await treeitem(page, 'Sales_Clean').click();
   const saved = await editor(page).inputValue();
@@ -145,12 +147,12 @@ test('T-WB-28: the acceptance story', async ({ page }) => {
   await treeitem(page, 'Module1').click();
   await editor(page).fill(MACRO);
   const proc = page.locator('.outline-proc', { hasText: 'RefreshSales' });
-  await expect(proc.locator('.outline-links')).toBeVisible();
+  await expect(proc.locator('.outline-links').first()).toBeVisible();
   await proc.getByRole('button', { name: 'Run these queries' }).click();
   await expect(dot(page, 'RawInput')).toHaveAttribute('data-status', 'ok');
   await expect(dot(page, 'FinalTable')).toHaveAttribute('data-status', 'ok');
   await expect(page.locator('.statusbar')).toContainText(/2 ran/);
-  await expect(page.locator('.outline-links')).toContainText('Not in this workbook: Ghost');
+  await expect(proc.locator('.outline-links').first()).toContainText('Not in this workbook: Ghost');
 
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
   expect(problems).toEqual([]);

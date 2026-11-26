@@ -1,5 +1,5 @@
 {
-  "version": "2551aded2bc4653d",
+  "version": "b5677c3a1785aada",
   "files": [
     "./",
     "index.html",
@@ -96,6 +96,7 @@
     "src/core/vba/writeback.js",
     "src/core/wb/ast-walk.js",
     "src/core/wb/compare-results.js",
+    "src/core/wb/completion.js",
     "src/core/wb/deps.js",
     "src/core/wb/find.js",
     "src/core/wb/fuzzy.js",
@@ -133,6 +134,7 @@
     "src/ui/print-preview.js",
     "src/ui/print-render.js",
     "src/ui/strings.js",
+    "src/ui/wb/autocomplete.js",
     "src/ui/wb/column-tools.js",
     "src/ui/wb/deps-panel.js",
     "src/ui/wb/dock-views.js",

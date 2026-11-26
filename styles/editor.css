@@ -149,3 +149,67 @@
   border-radius: var(--r-md);
   background: var(--sunk);
 }
+
+.autocomplete {
+  position: fixed;
+  z-index: var(--z-overlay, 30);
+  margin: 0;
+  padding: var(--s-1);
+  list-style: none;
+  width: min(420px, calc(100vw - 2 * var(--s-4)));
+  max-height: calc(var(--h-row) * 7);
+  overflow: auto;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-overlay);
+}
+
+.ac-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--h-ctl-sm);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-1);
+  cursor: pointer;
+}
+
+.ac-row.is-active {
+  background: var(--slate-soft);
+}
+
+.ac-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+  line-height: var(--t-code-lh);
+}
+
+.ac-row mark {
+  background: none;
+  color: var(--slate-ink);
+  font-weight: 700;
+}
+
+.ac-detail,
+.ac-kind,
+.ac-note {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.ac-note {
+  color: var(--madder-ink);
+}
+
+.ac-kind {
+  color: var(--ink-3);
+}

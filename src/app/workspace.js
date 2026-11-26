@@ -27,6 +27,7 @@ import { DEFAULT_LIMITS } from '../core/limits.js';
 import { problemsForQuery, problemsForModule, sortProblems, countProblems } from '../core/wb/problems.js';
 import { sourcesOfSection, unboundFor } from '../core/wb/sources.js';
 import { M_NAMES, supportedNames } from '../ui/wb/m-names.js';
+import { attachCompletion } from '../ui/wb/autocomplete.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -542,6 +543,16 @@ export class Workspace {
     let found = null;
     for (const st of model.steps) if (text.lastIndexOf('\n', st.parts.coreStart - 1) + 1 <= at) found = st.name;
     return found || model.steps[0].name;
+  }
+
+  completionContext() {
+    const columns = new Map();
+    for (const [name, r] of this.stepResults) {
+      if (!r || r.status !== 'ok' || !r.result) continue;
+      const t = r.result.value && Array.isArray(r.result.value.columns) ? r.result.value : r.result;
+      if (Array.isArray(t.columns)) columns.set(name, t.columns.map((c) => (typeof c === 'string' ? c : c.name)));
+    }
+    return { library: M_NAMES, queries: this.session.queries.map((q) => q.name), self: this.item ? this.item.name : null, columns };
   }
 
   refreshSteps(focusName = null) {
@@ -1367,6 +1378,7 @@ export class Workspace {
     const text = s.textOf(item);
     let loaded = false;
     if (group.shownKey !== key || ed.getText() !== text) {
+      group.completion.close();
       ed.setText(text);
       loaded = true;
     }
@@ -1383,6 +1395,7 @@ export class Workspace {
     const host = h('div', { class: 'editor-host' });
     group.el = h('div', { class: 'editor-group', 'data-group': String(this.groups.length) }, group.strip.el, host);
     group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
+    group.completion = attachCompletion(group.editor, () => this.completionContext());
     group.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
     group.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());
     group.el.addEventListener('focusin', () => this.focusGroup(this.groups.indexOf(group)));

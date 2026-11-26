@@ -259,6 +259,21 @@ export class Editor {
     return this.textarea.selectionStart;
   }
 
+  caretRect() {
+    const ta = this.textarea;
+    const at = ta.selectionStart;
+    const li = Math.max(0, this.offsets.findIndex((o) => at >= o.start && at <= o.end));
+    const line = this.offsets[li] || { start: 0, end: 0 };
+    const prefix = ta.value.slice(line.start, at);
+    const cols = prefix.length + 3 * (prefix.match(/\t/g) || []).length;
+    const rect = ta.getBoundingClientRect();
+    return {
+      left: rect.left + this.padLeft + cols * this.charWidth - ta.scrollLeft,
+      top: rect.top + this.padTop + li * this.lineHeight - ta.scrollTop,
+      height: this.lineHeight
+    };
+  }
+
   setText(text) {
     this.textarea.value = text;
     this.history = [{ value: text, start: 0, end: 0 }];

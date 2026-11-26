@@ -761,6 +761,15 @@ export const S = {
     count: (n) => (n === 1 ? '1 result' : `${n} results`),
     disabled: (why) => `Not available: ${why}`
   },
+  completion: {
+    label: 'Suggestions',
+    count: (n) => `${n === 1 ? '1 suggestion' : `${n} suggestions`}. Up and Down choose, Enter inserts, Escape closes.`,
+    none: 'No suggestions.',
+    kind: { step: 'Step', query: 'Query', column: 'Column', keyword: 'Keyword', library: 'Library', literal: 'Literal' },
+    libraryKind: { function: 'Function', type: 'Type', value: 'Value', getter: 'Value' },
+    unsupported: 'Not supported by this engine',
+    partial: 'Partly supported'
+  },
   shortcutNotes: [
     ['Ctrl/Cmd+F', 'Find in the editor'],
     ['F3 / Shift+F3', 'Next or previous match'],

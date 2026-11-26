@@ -247,3 +247,12 @@
   color: var(--madder-ink);
   font-weight: 600;
 }
+
+.gutter .gutter-step {
+  background: var(--slate-soft);
+  cursor: pointer;
+}
+
+.gutter .gutter-step-start {
+  box-shadow: inset 3px 0 0 var(--slate);
+}

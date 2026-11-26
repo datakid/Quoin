@@ -16,7 +16,7 @@ import { PRESET_ORDER } from '../core/wb/layout-presets.js';
 import { queryFile, moduleFile, zipFiles, sanitizeFileName } from '../core/export/files.js';
 import { QuoinError } from '../core/errors.js';
 
-const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false, countRows: true, autoRunSteps: false };
+const DEFAULTS = { theme: 'system', density: 'comfortable', culture: 'en-US', timeoutS: 30, rowCap: 1000000, csvGuard: true, useUpstream: false, countRows: true, autoRunSteps: false, followCaret: true };
 
 function loadTheme() {
   try {

@@ -3390,3 +3390,31 @@ dialog.colwork.sheet {
 .rename-note {
   margin: 0;
 }
+
+.invoke-item {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3);
+}
+
+.invoke-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  gap: var(--s-2);
+  align-items: center;
+}
+
+.invoke-name {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.invoke-input {
+  min-height: var(--h-ctl-sm);
+  padding: 0 var(--s-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  background: var(--sunk);
+}

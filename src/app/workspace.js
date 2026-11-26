@@ -32,6 +32,7 @@ import { attachSignature } from '../ui/wb/signature.js';
 import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
 import { analyseCalls, definitionOf } from '../core/vba/refs.js';
 import { structureProblems } from '../core/vba/structure.js';
+import { literal, numberLiteral, textLiteral } from '../core/wb/m-gen.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -49,6 +50,28 @@ function loadLabel(load) {
   if (load.kind === 'table') return `${S.loadedToTable} · ${load.sheet}!${load.ref}${load.alsoModel ? ` · ${S.loadedToModel}` : ''}`;
   if (load.kind === 'model') return S.loadedToModel;
   return S.connectionOnly;
+}
+
+function invokeArg(p, raw) {
+  if (raw === '') return p.optional ? { omit: true } : { missing: true };
+  const t = p.type && p.type.name ? String(p.type.name).toLowerCase() : null;
+  if (t === 'number') {
+    const n = Number(raw);
+    return Number.isFinite(n) ? { m: numberLiteral(n) } : { bad: true };
+  }
+  if (t === 'logical') {
+    if (/^true$/i.test(raw)) return { m: 'true' };
+    if (/^false$/i.test(raw)) return { m: 'false' };
+    return { bad: true };
+  }
+  if (t === 'date' || t === 'time' || t === 'datetime' || t === 'datetimezone') {
+    try {
+      return { m: literal({ [t]: raw }) };
+    } catch (e) {
+      return { bad: true };
+    }
+  }
+  return { m: textLiteral(raw) };
 }
 
 export class Workspace {
@@ -106,6 +129,7 @@ export class Workspace {
     this.lastRunErrors = new Map();
     this.onProblems = null;
     this.stepResults = new Map();
+    this.shownStepName = null;
     this.stepsHost = h('div', { class: 'inspector-section steps-host' });
     this.outlineHost = h('div', { class: 'inspector-section outline-host' });
     this.inspector.append(this.stepsHost, this.outlineHost);
@@ -750,7 +774,9 @@ export class Workspace {
     this.stepsPanel.setCountOptions({ countRows: this.settings.countRows, limit: DEFAULT_LIMITS.stepCountRows });
     this.stepsPanel.setResults(this.stepResults);
     this.stepsPanel.setRefreshedBy(this.item && this.item.type === 'query' ? this.refreshedByFor(this.item.name) : []);
-    this.stepsPanel.render(model, this.caretStep(model));
+    if (model.shape === 'function' || model.shape === 'function-let') this.renderInvoke(model);
+    else this.stepsPanel.render(model, this.caretStep(model));
+    this.paintStepBand();
     this.refreshDeps();
     if (focusName) this.stepsPanel.focusStep(focusName);
   }
@@ -975,6 +1001,87 @@ export class Workspace {
     if (!this.stepsModel || this.item === null || this.item.type !== 'query') return;
     const name = this.caretStep(this.stepsModel);
     if (name !== this.stepsPanel.caret) this.stepsPanel.render(this.stepsModel, name);
+    this.paintStepBand();
+    this.followCaret();
+  }
+
+  renderInvoke(model) {
+    if (!this.invokeArgs) this.invokeArgs = new Map();
+    const params = model.params || [];
+    this.stepsPanel.renderInvoke({
+      params,
+      values: this.invokeArgs.get(this.item.name) || {},
+      onInvoke: (raw) => {
+        const texts = [];
+        for (const p of params) {
+          const arg = invokeArg(p, raw[p.name] === undefined ? '' : String(raw[p.name]));
+          if (arg.missing || arg.bad) {
+            const note = arg.missing ? S.stepsPanel.invokeNeed(p.name) : S.stepsPanel.invokeBad(p.name);
+            this.stepsPanel.announce(note);
+            this.status.set({ note });
+            return;
+          }
+          if (!arg.omit) texts.push(arg.m);
+        }
+        this.invokeArgs.set(this.item.name, raw);
+        this.invokeQuery(this.item.name, texts);
+      }
+    });
+  }
+
+  async invokeQuery(name, argTexts) {
+    if (this.runner.running) return false;
+    const s = this.session;
+    const token = ++this.runToken;
+    this.setPane('result');
+    this.setRunning(true);
+    const set = this.settings;
+    const res = await this.runner.run({
+      sectionText: `${s.currentSectionText()} shared __Invoke = ${quoteIdent(name)}(${argTexts.join(', ')});`,
+      queryName: '__Invoke',
+      snapshot: await s.snapshot(),
+      bindings: [...s.bindings].map(([k, b]) => [k, { bytes: b.bytes, workbook: b.workbook }]),
+      culture: set.culture,
+      limits: { timeoutMs: set.timeoutS * 1000, maxRows: set.rowCap },
+      useUpstream: set.useUpstream,
+      previewRows: 200,
+      now: new Date().toISOString(),
+      localOffsetMin: -new Date().getTimezoneOffset()
+    }, { onNeedBinding: (kind, key) => this.askBinding(kind, key) });
+    if (token !== this.runToken) return false;
+    this.setRunning(false);
+    this.renderResult(res, false, res.resultId || null);
+    return true;
+  }
+
+  gutterStep(line) {
+    if (!this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return false;
+    const text = this.editor.getText();
+    const st = this.stepsModel.steps.find((x) => this.lineOfOffset(text, x.span.start) <= line && line <= this.lineOfOffset(text, x.span.end));
+    if (!st) return false;
+    this.stepActions().go(st);
+    this.syncCaretStep();
+    return true;
+  }
+
+  paintStepBand() {
+    const st = this.item && this.item.type === 'query' && this.stepsModel && this.stepsModel.shape === 'let' ? this.stepsModel.steps.find((x) => x.name === this.stepsPanel.caret) : null;
+    if (!st) {
+      this.editor.setStepBand(null);
+      return;
+    }
+    const text = this.editor.getText();
+    this.editor.setStepBand(this.lineOfOffset(text, st.span.start), this.lineOfOffset(text, st.span.end));
+  }
+
+  followCaret() {
+    clearTimeout(this.followTimer);
+    if (!this.settings.followCaret || !this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return;
+    this.followTimer = setTimeout(() => {
+      if (!this.item || this.item.type !== 'query' || !this.stepsModel || this.stepsModel.shape !== 'let') return;
+      const name = this.caretStep(this.stepsModel);
+      if (name && name !== this.shownStepName) this.showStepResult(name);
+    }, 600);
   }
 
   applySteps(res, done, focusName, rerun = true) {
@@ -1053,6 +1160,7 @@ export class Workspace {
       go: (st) => {
         this.editor.goto(this.lineOfOffset(text(), st.parts.coreStart), 1);
         this.showStepResult(st.name);
+        this.paintStepBand();
       },
       move: async (st, to) => {
         const model = stepsOf(text(), 0);
@@ -1647,7 +1755,7 @@ export class Workspace {
     group.strip = new TabStrip(S.tabs.group(this.groups.length + 1), this.stripActions(group));
     const host = h('div', { class: 'editor-host' });
     group.el = h('div', { class: 'editor-group', 'data-group': String(this.groups.length) }, group.strip.el, host);
-    group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
+    group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t), onGutterLine: (line) => this.gutterStep(line) });
     group.completion = attachCompletion(group.editor, () => this.completionContext());
     group.editor.signature = attachSignature(group.editor, () => this.completionContext());
     group.editor.textarea.addEventListener('click', (ev) => {
@@ -2169,10 +2277,15 @@ export class Workspace {
 
   stepOfResult(resultId) {
     const model = this.stepsModel;
-    if (!this.hasSteps() || !model || !model.steps.length) return null;
+    if (!this.hasSteps() || !model || !model.steps.length) {
+      this.shownStepName = null;
+      return null;
+    }
     let name = null;
     if (resultId) for (const [n, r] of this.stepResults) if (r && r.resultId === resultId) name = n;
-    const at = name ? model.steps.findIndex((x) => x.name === name) : model.steps.length - 1;
+    if (!name) name = model.steps[model.steps.length - 1].name;
+    this.shownStepName = name;
+    const at = model.steps.findIndex((x) => x.name === name);
     return at < 0 ? null : { index: at + 1, total: model.steps.length };
   }
 
@@ -2507,3 +2620,4 @@ export class Workspace {
 }
 
 export { svgImg };
+

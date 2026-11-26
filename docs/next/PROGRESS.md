@@ -552,3 +552,12 @@ Done:
 - The `vba.exit` message now capitalises the procedure kind (*inside a Sub*).
 Changed expectations: none.
 Tests: `tests/e2e/structure.spec.js` (T-WB-23, 2 tests: gutter markers on the exact lines after the debounce; the Download tooltip lists both checks without blocking and the Changes review lists them). Lint 0; unit 1161: 1156 pass, 0 fail, 5 skipped; the changes/save/change-summary specs stay green (16 passed).
+
+#### WB-14 leftovers — the gutter band, Follow caret and the Invoke form (2026-11-26, commit on `beta-v2`)
+Done:
+- The editor gutter renders every line with `data-line` and a step band: the current step's line range gets a `--slate-soft` background with a 3 px `--slate` tick at its first line (`Editor.setStepBand`). The band follows the step cursor everywhere it moves (panel clicks, F10, caret moves).
+- Clicking a step's line in the gutter moves the step cursor there (the same `go` the panel uses: jump, show that step's result, update the panel caret).
+- *Follow caret* (new setting, default on, in the Settings dialog): 600 ms after the caret rests inside a different step, the shown result moves to that step. The follow compares the caret's step with the step the result header currently shows (`shownStepName`, tracked in `stepOfResult`), because the panel highlight already follows the caret instantly.
+- *Invoke a function query*: for `function` and `function-let` queries the steps panel is an Invoke form — one typed input per parameter (number inputs for `as number`), the value kept per query for the session. Invoke builds `Name(literal, …)` (literals via `m-gen`, empty optional parameters omitted) as a temporary `__Invoke` member appended to the section text in memory, runs it and shows the result. Nothing is written to the workbook. A missing required value or a value that does not fit the type says so in the status region and the panel's live region.
+Changed expectations: none.
+Tests: `tests/e2e/step-cursor.spec.js` (T-WB-14, 3 tests: the band follows the cursor and a gutter click moves it; the shown step follows the caret by keyboard after the 600 ms delay; the Invoke form runs a function query with two typed arguments and keeps them). Lint 0; unit 1161: 1156 pass, 0 fail, 5 skipped; the step/ops/history/delta/dialogs/states specs stay green (36 passed). All 40 visual baselines regenerated (the settings dialog row and the gutter band change the query and settings states); the band's placement is asserted by the e2e tests.

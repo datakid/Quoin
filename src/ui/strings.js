@@ -591,7 +591,10 @@ export const S = {
     focusPrev: 'Go to the previous region',
     stepNext: 'Go to the next step',
     stepPrev: 'Go to the previous step',
-    runSelected: 'Run the selected queries'
+    runSelected: 'Run the selected queries',
+    definition: 'Go to the definition of the name under the caret',
+    references: 'Find the references of the name under the caret',
+    renameEditor: 'Rename the step under the caret'
   },
   resultHead: {
     label: 'Result details',
@@ -681,7 +684,7 @@ export const S = {
   },
   dock: {
     label: 'Result dock',
-    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', problems: 'Problems', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
+    tabs: { result: 'Result', pinned: 'Pinned', compare: 'Compare', problems: 'Problems', references: 'References', queue: 'Queue', graph: 'Graph', changes: 'Changes' },
     pin: 'Pin this result',
     unpin: 'Unpin',
     show: 'Show',
@@ -769,6 +772,22 @@ export const S = {
     libraryKind: { function: 'Function', type: 'Type', value: 'Value', getter: 'Value' },
     unsupported: 'Not supported by this engine',
     partial: 'Partly supported'
+  },
+  signature: {
+    current: (i, n) => `Parameter ${i} of ${n}`,
+    hint: 'Signature'
+  },
+  refs: {
+    title: (name, n, items) => `References to ${name}: ${n === 1 ? '1 place' : `${n} places`} in ${items === 1 ? '1 query' : `${items} queries`}`,
+    definition: 'Definition',
+    empty: (name) => `No references to ${name} in any query.`,
+    at: (line, col) => `Line ${line}, column ${col}`
+  },
+  editor: {
+    renameQuery: 'A query is named in the workbook, so F2 cannot rename it from the editor. F2 renames a step instead.',
+    renameNested: 'Only the steps of the query can be renamed, not names inside a step.',
+    libraryName: (name) => `${name} is a library function. References list where a step or a query name is used.`,
+    unknownName: 'Put the caret on a step or a query name to find its references.'
   },
   shortcutNotes: [
     ['Ctrl/Cmd+F', 'Find in the editor'],

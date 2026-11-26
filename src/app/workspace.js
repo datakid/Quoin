@@ -28,6 +28,8 @@ import { problemsForQuery, problemsForModule, sortProblems, countProblems } from
 import { sourcesOfSection, unboundFor } from '../core/wb/sources.js';
 import { M_NAMES, supportedNames } from '../ui/wb/m-names.js';
 import { attachCompletion } from '../ui/wb/autocomplete.js';
+import { attachSignature } from '../ui/wb/signature.js';
+import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -553,6 +555,142 @@ export class Workspace {
       if (Array.isArray(t.columns)) columns.set(name, t.columns.map((c) => (typeof c === 'string' ? c : c.name)));
     }
     return { library: M_NAMES, queries: this.session.queries.map((q) => q.name), self: this.item ? this.item.name : null, columns };
+  }
+
+  nameAtCaret() {
+    return resolveNameAt(this.editor.getText(), this.editor.caretOffset(), { queries: this.session.queries.map((q) => q.name), library: M_NAMES });
+  }
+
+  goToDefinition() {
+    if (!this.item || this.item.type !== 'query') return false;
+    const res = this.nameAtCaret();
+    if (!res) return false;
+    if (res.kind === 'step') {
+      const text = this.editor.getText();
+      const place = lineColAt(text, res.binding.start);
+      this.editor.goto(place.line, place.col);
+      return true;
+    }
+    if (res.kind === 'query') {
+      const item = this.items().find((i) => i.type === 'query' && i.name.toLowerCase() === res.name.toLowerCase());
+      if (item) this.select(item);
+      return true;
+    }
+    if (res.kind === 'library') {
+      this.editor.signature.showEntry(res.library);
+      return true;
+    }
+    return false;
+  }
+
+  findReferences() {
+    if (!this.item || this.item.type !== 'query') return false;
+    const res = this.nameAtCaret();
+    if (!res) return false;
+    if (res.kind === 'library') {
+      this.status.set({ note: S.editor.libraryName(res.name) });
+      return true;
+    }
+    if (res.kind === 'unknown') {
+      this.status.set({ note: S.editor.unknownName });
+      return true;
+    }
+    const queries = this.session.queries.map((q) => ({ name: q.name, text: this.session.textOf({ type: 'query', name: q.name }) }));
+    this.openReferences(res.name, referencesOf(queries, res.name));
+    return true;
+  }
+
+  openReferences(name, rows) {
+    const panel = this.dock.panel('references');
+    clear(panel);
+    const items = new Set(rows.map((r) => r.item));
+    const list = h('ul', { class: 'refs-list', 'aria-label': S.dock.tabs.references });
+    for (const r of rows) {
+      const item = this.items().find((i) => i.type === 'query' && i.name.toLowerCase() === r.item.toLowerCase());
+      list.append(h('li', null, h('button', { class: 'btn btn-quiet ref-row', type: 'button', onclick: () => {
+        if (item) this.select(item);
+        this.editor.goto(r.line, r.col);
+      } },
+      h('span', { class: 'ref-item' }, r.item),
+      h('span', { class: 'ref-place item-meta' }, S.refs.at(r.line, r.col)),
+      r.kind === 'definition' ? h('span', { class: 'ref-kind item-meta' }, S.refs.definition) : null,
+      h('span', { class: 'ref-code' }, r.excerpt))));
+    }
+    if (!rows.length) list.append(h('li', { class: 'refs-empty item-meta' }, S.refs.empty(name)));
+    panel.append(h('div', { class: 'refs-head item-meta' }, S.refs.title(name, rows.length, items.size)), list);
+    this.dock.badge('references', rows.length || null);
+    this.dock.show('references');
+    if (window.matchMedia('(max-width: 639px)').matches) this.setPane('result');
+  }
+
+  renameAtCaret() {
+    if (!this.item || this.item.type !== 'query') return false;
+    const res = this.nameAtCaret();
+    if (!res) return false;
+    if (res.kind === 'query') {
+      this.status.set({ note: S.editor.renameQuery });
+      return true;
+    }
+    if (res.kind !== 'step' || !res.binding.topLevel) {
+      this.status.set({ note: S.editor.renameNested });
+      return true;
+    }
+    const model = stepsOf(this.editor.getText(), 0, { members: new Set(this.session.queries.map((q) => q.name)) });
+    if (model.shape !== 'let') return false;
+    const st = model.steps.find((s) => s.name.toLowerCase() === res.name.toLowerCase());
+    if (!st) return false;
+    this.startEditorRename(st);
+    return true;
+  }
+
+  startEditorRename(st) {
+    this.closeEditorRename();
+    const r = this.editor.caretRect();
+    const input = h('input', { class: 'step-rename', type: 'text', value: st.name, 'aria-label': S.stepsPanel.renameLabel });
+    const note = h('p', { class: 'rename-note item-meta' });
+    const pop = h('div', { class: 'popover rename-pop' }, input, note);
+    pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 360))}px`;
+    pop.style.top = `${r.top + r.height + 2}px`;
+    document.body.append(pop);
+    this.renamePop = pop;
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      const value = input.value.trim();
+      if (commit && value && value !== st.name) {
+        const res = renameStep(this.editor.getText(), st.index, value);
+        if (!res.ok) {
+          done = false;
+          note.textContent = res.reason;
+          input.focus();
+          return;
+        }
+        this.applySteps(res, S.stepsPanel.done.rename(value), value);
+      }
+      this.closeEditorRename();
+      this.editor.focus();
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        finish(true);
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(false);
+      }
+    });
+    input.addEventListener('blur', () => finish(false));
+    input.focus();
+    input.select();
+  }
+
+  closeEditorRename() {
+    if (this.renamePop) {
+      this.renamePop.remove();
+      this.renamePop = null;
+    }
   }
 
   refreshSteps(focusName = null) {
@@ -1379,6 +1517,7 @@ export class Workspace {
     let loaded = false;
     if (group.shownKey !== key || ed.getText() !== text) {
       group.completion.close();
+      group.editor.signature.close();
       ed.setText(text);
       loaded = true;
     }
@@ -1396,6 +1535,13 @@ export class Workspace {
     group.el = h('div', { class: 'editor-group', 'data-group': String(this.groups.length) }, group.strip.el, host);
     group.editor = new Editor(host, { language: 'm', label: S.editorAria, onChange: (t) => this.onEditorChange(t) });
     group.completion = attachCompletion(group.editor, () => this.completionContext());
+    group.editor.signature = attachSignature(group.editor, () => this.completionContext());
+    group.editor.textarea.addEventListener('click', (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && this.item && this.item.type === 'query') {
+        ev.preventDefault();
+        this.goToDefinition();
+      }
+    });
     group.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
     group.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());
     group.el.addEventListener('focusin', () => this.focusGroup(this.groups.indexOf(group)));

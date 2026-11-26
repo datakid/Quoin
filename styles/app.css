@@ -3331,3 +3331,62 @@ dialog.colwork.sheet {
   flex-wrap: wrap;
 }
 
+
+.refs-head {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.refs-list {
+  margin: 0;
+  padding: var(--s-2);
+  list-style: none;
+  overflow: auto;
+}
+
+.ref-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  width: 100%;
+  text-align: left;
+}
+
+.ref-item {
+  flex: none;
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+}
+
+.ref-code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  color: var(--ink-3);
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+}
+
+.refs-empty {
+  padding: var(--s-3);
+}
+
+.rename-pop {
+  position: fixed;
+  z-index: var(--z-overlay, 30);
+  display: grid;
+  gap: var(--s-1);
+  width: min(360px, calc(100vw - 2 * var(--s-4)));
+}
+
+.rename-pop .step-rename {
+  flex: none;
+  margin: 0;
+}
+
+.rename-note {
+  margin: 0;
+}

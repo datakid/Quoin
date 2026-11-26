@@ -213,3 +213,32 @@
 .ac-kind {
   color: var(--ink-3);
 }
+
+.signature {
+  position: fixed;
+  z-index: var(--z-overlay, 30);
+  max-width: min(420px, calc(100vw - 2 * var(--s-4)));
+  padding: var(--s-2) var(--s-3);
+  background: var(--readout);
+  color: var(--on-readout);
+  border-radius: var(--r-1);
+  box-shadow: var(--shadow-overlay);
+  font-family: var(--font-code);
+  font-size: var(--t-code);
+  line-height: var(--t-code-lh);
+}
+
+.sig-name {
+  font-weight: 700;
+}
+
+.sig-param.is-current {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sig-note {
+  margin-top: var(--s-1);
+  color: var(--on-readout-2);
+}

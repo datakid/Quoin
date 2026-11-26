@@ -1,5 +1,5 @@
 {
-  "version": "b5677c3a1785aada",
+  "version": "1e296f7049be9b5b",
   "files": [
     "./",
     "index.html",
@@ -105,6 +105,7 @@
     "src/core/wb/layout-presets.js",
     "src/core/wb/let-edit.js",
     "src/core/wb/m-gen.js",
+    "src/core/wb/m-refs.js",
     "src/core/wb/nav-model.js",
     "src/core/wb/op-history.js",
     "src/core/wb/problems.js",
@@ -147,6 +148,7 @@
     "src/ui/wb/palette.js",
     "src/ui/wb/panes.js",
     "src/ui/wb/problems-view.js",
+    "src/ui/wb/signature.js",
     "src/ui/wb/sources-dialog.js",
     "src/ui/wb/steps-panel.js",
     "src/ui/wb/tabs.js",

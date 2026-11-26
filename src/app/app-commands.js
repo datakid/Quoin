@@ -1,6 +1,8 @@
 import { CommandRegistry } from './commands.js';
 
 const inField = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+const inEditor = (a) => !!a.ws && document.activeElement === a.ws.editor.textarea;
+const editorCommand = (a) => (a.ws && a.ws.item && a.ws.item.type === 'query' ? true : 'Open a query first.');
 
 export function buildRegistry(app) {
   const r = new CommandRegistry();
@@ -27,6 +29,9 @@ export function buildRegistry(app) {
   r.register({ id: 'toggleDock', keys: ['Mod+J'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.toggleDock() : false) });
   r.register({ id: 'focusNext', keys: ['F6'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.cycleRegion(1) : false) });
   r.register({ id: 'focusPrev', keys: ['Shift+F6'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.cycleRegion(-1) : false) });
+  r.register({ id: 'definition', keys: ['F12'], surfaces: ['T2'], when: (ev, a) => inEditor(a), enabled: editorCommand, run: (a) => (a.ws ? a.ws.goToDefinition() : false) });
+  r.register({ id: 'references', keys: ['Shift+F12'], surfaces: ['T2'], when: (ev, a) => inEditor(a), enabled: editorCommand, run: (a) => (a.ws ? a.ws.findReferences() : false) });
+  r.register({ id: 'renameEditor', keys: ['F2'], surfaces: ['T2'], when: (ev, a) => inEditor(a), enabled: editorCommand, run: (a) => (a.ws ? a.ws.renameAtCaret() : false) });
   r.register({ id: 'runSelected', keys: [], surfaces: ['T3'], enabled: (a) => (a.ws && a.ws.selectedQueryNames().length ? true : 'Select queries in the list first.'), run: (a) => (a.ws ? a.ws.runSelected(false) : false) });
   r.register({ id: 'toggleInspector', keys: ['Mod+Alt+B'], surfaces: ['T2'], enabled: needsFile, run: (a) => (a.ws ? a.ws.toggleInspector() : false) });
   r.register({ id: 'layoutWrite', keys: [], surfaces: ['T3'], enabled: needsFile, run: (a) => (a.ws ? a.ws.applyPreset('write') : false) });

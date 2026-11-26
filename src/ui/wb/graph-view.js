@@ -5,7 +5,7 @@ import { layoutGraph, neighbourhood, pathsOf, NODE_W, NODE_H } from '../../core/
 const BEAD = { ok: 'ok', error: 'error', stopped: 'stopped', cancelled: 'stopped', stale: 'stale', skipped: 'never' };
 const MAX_LABEL = 20;
 
-export function mountGraph(host, source, handlers, { start = null } = {}) {
+export function mountGraph(host, source, handlers, { start = null, runs = true } = {}) {
   const nodesAll = source.nodes();
   const edgesAll = source.edges();
   const state = { selected: start && nodesAll.includes(start) ? start : nodesAll[0] || null, all: !start, view: null, layout: null };
@@ -27,6 +27,8 @@ export function mountGraph(host, source, handlers, { start = null } = {}) {
     state.all = false;
     draw(true);
   });
+  runBtn.hidden = !runs;
+  downBtn.hidden = !runs;
   const root = h('div', { class: 'graph-panel' },
     h('div', { class: 'graph-tools' }, modeBtn, mk(S.graph.fit, () => fit()), mk(S.graph.zoomOut, () => zoom(1 / 1.25)), mk(S.graph.zoomIn, () => zoom(1.25)), h('span', { class: 'spacer' }), count),
     wrap, sel, live,

@@ -190,5 +190,5 @@ export function attachCompletion(editor, provide) {
     if (open) place();
   });
   ta.addEventListener('blur', close);
-  return { close };
+  return { close, open: () => refresh(true) };
 }

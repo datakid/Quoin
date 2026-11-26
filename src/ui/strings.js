@@ -502,7 +502,11 @@ export const S = {
     decl: { dim: 'Variable', const: 'Constant', type: 'Type', enum: 'Enum', declare: 'Declare', event: 'Event' },
     params: (n) => (n === 1 ? '1 parameter' : `${n} parameters`),
     done: { revert: (n) => `Reverted ${n}.`, putBack: (n) => `Put back ${n}.` },
-    problemsHint: 'Problems'
+    problemsHint: 'Problems',
+    calls: 'Calls',
+    calledBy: 'Called by',
+    noCallers: 'No callers found',
+    noCallersNote: 'It may be run from a button, a shape, another workbook or the Macros dialog.'
   },
   problems: {
     title: 'Problems',
@@ -778,16 +782,18 @@ export const S = {
     hint: 'Signature'
   },
   refs: {
-    title: (name, n, items) => `References to ${name}: ${n === 1 ? '1 place' : `${n} places`} in ${items === 1 ? '1 query' : `${items} queries`}`,
+    title: (name, n, items) => `References to ${name}: ${n === 1 ? '1 place' : `${n} places`} in ${items === 1 ? '1 item' : `${items} items`}`,
     definition: 'Definition',
-    empty: (name) => `No references to ${name} in any query.`,
+    empty: (name) => `No references to ${name} in the workbook.`,
     at: (line, col) => `Line ${line}, column ${col}`
   },
   editor: {
     renameQuery: 'A query is named in the workbook, so F2 cannot rename it from the editor. F2 renames a step instead.',
     renameNested: 'Only the steps of the query can be renamed, not names inside a step.',
     libraryName: (name) => `${name} is a library function. References list where a step or a query name is used.`,
-    unknownName: 'Put the caret on a step or a query name to find its references.'
+    unknownName: 'Put the caret on a step or a query name to find its references.',
+    complete: 'Complete at the caret',
+    noName: 'Put the caret on a name first.'
   },
   shortcutNotes: [
     ['Ctrl/Cmd+F', 'Find in the editor'],

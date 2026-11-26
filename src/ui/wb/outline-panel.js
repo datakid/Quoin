@@ -23,7 +23,7 @@ export class OutlinePanel {
     return `${p.name}(${args})`;
   }
 
-  render(outline, match, caretLine, links = new Map()) {
+  render(outline, match, caretLine, links = new Map(), calls = new Map()) {
     clear(this.body);
     this.count.textContent = String(outline ? outline.procedures.length : 0);
     if (!outline) return;
@@ -54,6 +54,14 @@ export class OutlinePanel {
         const btn = ev.currentTarget;
         menu(btn, [{ label: S.outline.revert, run: () => this.actions.revert(key, p.name) }], () => btn.focus());
       } }, '\u22ef');
+      const cl = calls.get(p.name);
+      const callBlock = cl ? h('div', { class: 'outline-links outline-calls' },
+        cl.calls.length ? h('div', { class: 'outline-label' }, S.outline.calls) : null,
+        ...cl.calls.map((k) => h('button', { class: 'outline-link', type: 'button', onclick: () => this.actions.goCall(k) }, k)),
+        cl.calledBy.length ? h('div', { class: 'outline-label' }, S.outline.calledBy) : null,
+        ...cl.calledBy.map((k) => h('button', { class: 'outline-link', type: 'button', onclick: () => this.actions.goCall(k) }, k)),
+        cl.noCallers && !cl.calledBy.length ? h('div', { class: 'outline-link item-meta' }, S.outline.noCallers) : null,
+        cl.noCallers && !cl.calledBy.length ? h('div', { class: 'outline-link item-meta' }, S.outline.noCallersNote) : null) : null;
       const lk = links.get(p.name);
       const linkBlock = lk ? h('div', { class: 'outline-links' },
         h('div', { class: 'outline-label' }, S.pqLinks.refreshes),
@@ -72,7 +80,7 @@ export class OutlinePanel {
           p.isEventHandler ? h('span', { class: 'step-tag event' }, S.outline.event) : null,
           st === 'edited' ? h('span', { class: 'step-tag' }, S.outline.edited) : null,
           st === 'added' ? h('span', { class: 'step-tag' }, S.outline.added) : null),
-        more, linkBlock);
+        more, linkBlock, callBlock);
     });
     this.body.append(h('div', { class: 'outline-block' }, h('div', { class: 'outline-label' }, `${S.outline.procedures} ${outline.procedures.length}`), outline.procedures.length ? h('ul', { class: 'outline-list', role: 'list' }, ...procRows) : h('p', { class: 'panel-note item-meta' }, S.outline.empty)));
     if (match && match.removed.length) {

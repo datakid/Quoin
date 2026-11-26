@@ -30,6 +30,7 @@ import { M_NAMES, supportedNames } from '../ui/wb/m-names.js';
 import { attachCompletion } from '../ui/wb/autocomplete.js';
 import { attachSignature } from '../ui/wb/signature.js';
 import { referencesOf, resolveNameAt, lineColAt } from '../core/wb/m-refs.js';
+import { analyseCalls, definitionOf } from '../core/vba/refs.js';
 import { stepsOf } from '../core/wb/steps.js';
 import { Navigator } from '../ui/wb/navigator.js';
 import { TabStrip } from '../ui/wb/tabs.js';
@@ -111,6 +112,7 @@ export class Workspace {
     this.depsPanel = new DepsPanel(this.stepsHost, { open: (n) => this.select({ type: 'query', name: n }), graph: () => this.openGraph() });
     this.outlinePanel = new OutlinePanel(this.outlineHost, {
       go: (line) => this.editor.goto(line, 1),
+      goCall: (key) => this.openProc(key),
       revert: (key, name) => this.revertProc(key, name, false),
       putBack: (key, name) => this.revertProc(key, name, true),
       runLinked: (name, names) => this.runLinked(name, names)
@@ -324,7 +326,10 @@ export class Workspace {
     const open = isQuery || this.dock.current !== 'result';
     this.resultPanel.hidden = !open;
     this.main.dataset.dockOpen = String(!isQuery && open);
-    if (!isQuery) this.pinBtn.hidden = true;
+    if (!isQuery) {
+      this.pinBtn.hidden = true;
+      if (this.dock.current === 'graph') this.mountGraphPanel();
+    }
   }
 
   onDockShow(id) {
@@ -562,9 +567,28 @@ export class Workspace {
   }
 
   goToDefinition() {
-    if (!this.item || this.item.type !== 'query') return false;
+    if (!this.item) return false;
+    if (this.item.type === 'module') {
+      const found = this.vbaNameAtCaret();
+      if (!found) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      const def = this.vbaDefinitionOf(found);
+      if (!def) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      if (def.module !== this.item.name) this.select({ type: 'module', name: def.module });
+      this.editor.goto(def.startLine, 1);
+      return true;
+    }
+    if (this.item.type !== 'query') return false;
     const res = this.nameAtCaret();
-    if (!res) return false;
+    if (!res) {
+      this.status.set({ note: S.editor.noName });
+      return true;
+    }
     if (res.kind === 'step') {
       const text = this.editor.getText();
       const place = lineColAt(text, res.binding.start);
@@ -584,7 +608,27 @@ export class Workspace {
   }
 
   findReferences() {
-    if (!this.item || this.item.type !== 'query') return false;
+    if (!this.item) return false;
+    if (this.item.type === 'module') {
+      const found = this.vbaNameAtCaret();
+      if (!found) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      const def = this.vbaDefinitionOf(found);
+      if (!def) {
+        this.status.set({ note: S.editor.noName });
+        return true;
+      }
+      const textOf = (mod) => (this.item.name === mod ? this.editor.getText() : this.session.textOf({ type: 'module', name: mod }));
+      const rows = (this.callGraph().refs.get(def.key) || []).map((r) => {
+        const raw = textOf(r.module).split(/\r\n|\r|\n/)[r.line - 1] || '';
+        return { item: r.module, line: r.line, col: r.col, excerpt: raw.trim(), kind: 'reference' };
+      });
+      this.openReferences(def.name, rows);
+      return true;
+    }
+    if (this.item.type !== 'query') return false;
     const res = this.nameAtCaret();
     if (!res) return false;
     if (res.kind === 'library') {
@@ -606,7 +650,7 @@ export class Workspace {
     const items = new Set(rows.map((r) => r.item));
     const list = h('ul', { class: 'refs-list', 'aria-label': S.dock.tabs.references });
     for (const r of rows) {
-      const item = this.items().find((i) => i.type === 'query' && i.name.toLowerCase() === r.item.toLowerCase());
+      const item = this.items().find((i) => i.name.toLowerCase() === r.item.toLowerCase());
       list.append(h('li', null, h('button', { class: 'btn btn-quiet ref-row', type: 'button', onclick: () => {
         if (item) this.select(item);
         this.editor.goto(r.line, r.col);
@@ -740,6 +784,21 @@ export class Workspace {
   }
 
   mountGraphPanel() {
+    if (this.item && this.item.type === 'module') {
+      const graph = this.callGraph();
+      this.graphView = mountGraph(this.dock.panel('graph'), {
+        nodes: () => [...graph.procs.keys()],
+        edges: () => [...graph.procs.keys()].flatMap((k) => [...(graph.calls.get(k) || [])].map((t) => [k, t])),
+        statuses: () => new Map(),
+        upstream: (n) => [...(graph.calledBy.get(n) || [])],
+        downstream: (n) => [...(graph.calls.get(n) || [])]
+      }, {
+        open: (n) => this.openProc(n),
+        run: () => {},
+        runDownstream: () => {}
+      }, { start: null, runs: false });
+      return;
+    }
     const index = this.orchestrator.refresh();
     const cur = this.graphStart || (this.item && this.item.type === 'query' ? this.item.name : null);
     this.graphStart = null;
@@ -805,6 +864,49 @@ export class Workspace {
     this.status.set({ note: `${S.pqLinks.forMacro(procName)}: ${S.batch.summary(this.orchestrator.counts())}` });
   }
 
+  callGraph() {
+    const modules = this.session.modules.map((m) => ({
+      name: m.name,
+      kind: this.moduleKindOf({ name: m.name }),
+      text: this.item && this.item.type === 'module' && this.item.name === m.name ? this.editor.getText() : this.session.textOf({ type: 'module', name: m.name })
+    }));
+    const sig = modules.map((m) => `${m.name}:${m.kind}:${m.text.length}:${m.text}`).join('|');
+    if (this.callCache && this.callCache.sig === sig) return this.callCache.graph;
+    const graph = analyseCalls(modules);
+    this.callCache = { sig, graph };
+    return graph;
+  }
+
+  openProc(key) {
+    const p = this.callGraph().procs.get(key);
+    if (!p) return;
+    this.select({ type: 'module', name: p.module });
+    this.editor.goto(p.startLine, 1);
+  }
+
+  vbaNameAtCaret() {
+    const text = this.editor.getText();
+    const at = this.editor.caretOffset();
+    const lineStart = Math.max(text.lastIndexOf('\n', at - 1), text.lastIndexOf('\r', at - 1)) + 1;
+    const m = /([A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(text.slice(lineStart, at));
+    if (!m) return null;
+    const parts = m[1].split('.').map((x) => x.trim()).filter(Boolean);
+    if (!parts.length || parts.length > 2) return null;
+    return parts.length === 2 ? { module: parts[0], name: parts[1] } : { module: null, name: parts[0] };
+  }
+
+  vbaDefinitionOf(found) {
+    const graph = this.callGraph();
+    if (found.module) {
+      const direct = graph.procs.get(`${found.module}.${found.name}`);
+      if (direct) return direct;
+      const lower = found.module.toLowerCase();
+      for (const p of graph.procs.values()) if (p.module.toLowerCase() === lower && p.name.toLowerCase() === found.name.toLowerCase()) return p;
+      return null;
+    }
+    return definitionOf(graph, found.name, this.item.name);
+  }
+
   moduleKindOf(item) {
     const m = this.session.module(item.name);
     return m && (m.kind === 'standard' || m.kind === 'class') ? m.kind : 'document';
@@ -827,7 +929,18 @@ export class Workspace {
       const resolved = resolveLinks(ls, ctx);
       links.set(pname, { plan: runPlanOf(resolved), hasAll: resolved.some((r) => r.kind === 'all'), reads: [...new Set(resolved.filter((r) => r.kind === 'read' && !r.dynamic && r.name).map((r) => r.name))] });
     }
-    this.outlinePanel.render(outline, match, line, links);
+    const graph = this.callGraph();
+    const calls = new Map();
+    for (const p of outline.procedures) {
+      const key = `${this.item.name}.${p.name}`;
+      if (!graph.procs.has(key)) continue;
+      calls.set(p.name, {
+        calls: [...(graph.calls.get(key) || [])].sort(),
+        calledBy: [...(graph.calledBy.get(key) || [])].sort(),
+        noCallers: graph.noCallers.includes(key)
+      });
+    }
+    this.outlinePanel.render(outline, match, line, links, calls);
     this.updateCrumb(outline, line);
   }
 
@@ -1537,10 +1650,21 @@ export class Workspace {
     group.completion = attachCompletion(group.editor, () => this.completionContext());
     group.editor.signature = attachSignature(group.editor, () => this.completionContext());
     group.editor.textarea.addEventListener('click', (ev) => {
-      if ((ev.ctrlKey || ev.metaKey) && this.item && this.item.type === 'query') {
+      if ((ev.ctrlKey || ev.metaKey) && this.item) {
         ev.preventDefault();
         this.goToDefinition();
       }
+    });
+    group.editor.textarea.addEventListener('contextmenu', (ev) => {
+      if (!this.item) return;
+      ev.preventDefault();
+      group.editor.textarea.setSelectionRange(group.editor.positionAt(ev), group.editor.textarea.selectionEnd);
+      const entries = [];
+      if (this.item.type === 'query') entries.push({ label: S.editor.complete, run: () => group.completion.open() });
+      entries.push({ label: S.cmd.definition, run: () => this.goToDefinition() });
+      entries.push({ label: S.cmd.references, run: () => this.findReferences() });
+      if (this.item.type === 'query') entries.push({ label: S.cmd.renameEditor, run: () => this.renameAtCaret() });
+      menu(ev.currentTarget, entries);
     });
     group.editor.textarea.addEventListener('keyup', () => this.syncCaretStep());
     group.editor.textarea.addEventListener('mouseup', () => this.syncCaretStep());

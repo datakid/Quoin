@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, openApp, loadFile } from './helpers.js';
+import { ext, openApp, loadFile, skipOnEngines } from './helpers.js';
 
 async function openQuery(page) {
   await openApp(page);
@@ -58,7 +58,7 @@ test('T-V-06: panes float on the ground with a gutter and the page never scrolls
 });
 
 test('T-V-05: on touch the rail rows and controls reach 44 px', async ({ browser, browserName }) => {
-  test.skip(browserName === 'firefox', 'Playwright does not support the isMobile context option in Firefox');
+  skipOnEngines(test, browserName, ['firefox'], 'Playwright does not support the isMobile context option in Firefox');
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
   await openApp(page);

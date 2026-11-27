@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fx, ext, openApp, loadFile, item, editor, runButton, downloadButton } from './helpers.js';
+import { fx, ext, openApp, loadFile, item, editor, runButton, downloadButton, skipOnEngines } from './helpers.js';
 import { root } from '../unit/helpers.js';
 
 test.beforeEach(async ({ page }) => {
@@ -125,7 +125,7 @@ test('T-PRIV-5: file names are rendered as text, never as markup', async ({ page
 });
 
 test('offline: after the first load the app starts without a network', async ({ page, context, browserName }) => {
-  test.skip(browserName === 'webkit', 'Playwright WebKit fails page.reload after setOffline(true) with an internal error, so offline start is not exercised in WebKit');
+  skipOnEngines(test, browserName, ['webkit'], 'Playwright WebKit fails page.reload after setOffline(true) with an internal error, so offline start is not exercised in WebKit');
   await openApp(page);
   await page.evaluate(async () => {
     const reg = await navigator.serviceWorker.ready;
@@ -150,7 +150,7 @@ test('offline: after the first load the app starts without a network', async ({ 
 });
 
 test('T-B-23: offline reload with a query string and with index.html still renders', async ({ page, context, browserName }) => {
-  test.skip(browserName === 'webkit', 'Playwright WebKit fails page.goto after setOffline(true) with an internal error, so offline start is not exercised in WebKit');
+  skipOnEngines(test, browserName, ['webkit'], 'Playwright WebKit fails page.goto after setOffline(true) with an internal error, so offline start is not exercised in WebKit');
   await openApp(page);
   await page.evaluate(async () => (await navigator.serviceWorker.ready).active.state);
   await page.waitForFunction(async () => (await caches.keys()).length > 0);

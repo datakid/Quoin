@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ext, fx, openApp, loadFile, item, editor, runButton } from './helpers.js';
+import { ext, fx, openApp, loadFile, item, editor, runButton, skipUnlessChromium } from './helpers.js';
 
 const THOUSAND = 'Table.FromColumns({List.Numbers(1, 1000), List.Transform(List.Numbers(1, 1000), each _ * 2)}, {"N", "Double"})';
 const WIDE = '#table(List.Transform({1..30}, each "Column" & Text.From(_)), {{1..30}})';
@@ -84,7 +84,7 @@ test('T-P-14c: a 30-column table is split into bands that each repeat the index 
 });
 
 test('T-P-14b: the generated PDF has the preview page count and A4 landscape paper', async ({ page, browserName }) => {
-  test.skip(browserName !== 'chromium', 'page.pdf is only supported by headless Chromium in Playwright, so Firefox and WebKit cannot produce the PDF');
+  skipUnlessChromium(test, browserName, 'page.pdf is only supported by headless Chromium in Playwright, so Firefox and WebKit cannot produce the PDF');
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
   await runQuery(page, THOUSAND);
@@ -102,7 +102,7 @@ test('T-P-14b: the generated PDF has the preview page count and A4 landscape pap
 });
 
 test('T-P-14b: letter portrait gives a letter-sized PDF', async ({ page, browserName }) => {
-  test.skip(browserName !== 'chromium', 'page.pdf is only supported by headless Chromium in Playwright, so Firefox and WebKit cannot produce the PDF');
+  skipUnlessChromium(test, browserName, 'page.pdf is only supported by headless Chromium in Playwright, so Firefox and WebKit cannot produce the PDF');
   await openApp(page);
   await loadFile(page, ext('pq_simple.xlsx'));
   await runQuery(page, THOUSAND);

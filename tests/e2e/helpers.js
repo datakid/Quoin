@@ -161,6 +161,10 @@ export async function zipDigest(bytes) {
   return out.sort(byName);
 }
 
+export const skipUnlessChromium = (test, browserName, reason) => test.skip(browserName !== 'chromium', reason);
+
+export const skipOnEngines = (test, browserName, engines, reason) => test.skip(engines.includes(browserName), reason);
+
 export async function expectSameOutput(got, expected, browserName) {
   expect(got.bytesHash).toBe(got.sha256);
   if (browserName === 'chromium') {

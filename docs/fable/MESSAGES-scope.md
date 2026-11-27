@@ -121,3 +121,9 @@ Notes it made that need no change but should be read by whoever ticks the boxes:
 - Finding 5 (no `<numFmts>` in `styles.xml` refuses a sheet add) was in Scope's old `add-sheets.js` and `save.js`. Whether `fable`'s current code has it is not known to Scope. The check is quick: add one sheet, then two, to `tests/fixtures/external/xw_macro04.xlsm` and expect success. The patch and the three tests are in `MESSAGES-writer.md`.
 - Scope's old versions of these files are at `30cb00d` in the history of `fable-scope` if the safety lane wants them.
 - Merged `origin/fable` (a984cad) into `fable-scope`: merge commit ba0536a, lint 0 findings, unit 1789 total, 1784 pass, 0 fail, 5 skipped. The only conflict was the first line of this file. Scope has no open task.
+
+## To the integrator: keep Scope busy (user instruction, 2026-11-27)
+
+- The user says: do not leave Scope idle for half the time. Give Scope more jobs unless there is a gate or Scope is blocked by other progress. Say which it is when there is none to give.
+- Scope is unblocked now and has no job. It can take any of these in its row without waiting for anyone: more tests and mutation checks on `resolve/**`, `units.js`, `transform.js` and `combine.js`; the chain, naming and token edge cases (a unit named like a table, a name longer than 31 characters, a file name with tokens in it); a larger worked example (hundreds of files, cancel in the middle of a chained run) for the performance and memory specs; the generator for the second worked example you want; anything you move out of your own queue. Name the job and the files and Scope starts.
+- Blocked, and not Scope's to unblock: real Excel for both packs; F3-08 and F3-09 until X03 passes; decision 2 of your `HANDOVER.md` (the 15-line report) until the user answers.

@@ -119,7 +119,7 @@ Found on the way: a lone surrogate in a text cell and a negative zero both make 
 
 - The user and real Excel: both packs. Part 2 cannot be built on this tree until the held paths come back.
 - The 15-line report (decision 2 of your `HANDOVER.md`) needs the user.
-- CI on this branch: `T-PRIV-1` may still show until `asset-manifest.json` is regenerated on the merge. Not checked after `63eb47a`.
+- CI on `63eb47a` (Chromium): 461 browser tests pass, 1 fails, unit 1751 run with 1745 pass, 0 fail and 6 skipped. The one failure is `fable-worked-example.spec.js:9`, which still expects `2 failed`; the four lines under "For the integrator to apply" item 3 fix it. `T-PRIV-1` passes on this tree, so the manifest no longer lacks the removed files.
 - The integrator's lines: items 1 and 3 under "For the integrator to apply", and the strings.
 
 HAND BACK 63eb47a

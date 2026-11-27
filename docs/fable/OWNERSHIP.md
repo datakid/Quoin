@@ -11,7 +11,6 @@ The rule: one owner per file. A lane edits only the paths listed for it. Every o
 | integrator | everything not listed for a lane: `src/app/**`, `src/workers/**`, `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/batch/recipe/**`, `src/batch/index/**`, `src/ui/strings.js`, the rest of `src/core/`, `docs/**` except the lane notes, `asset-manifest.json`, `tests/lint/**`, `tests/fixtures/**`, `tests/unit/**` except the lane tests (see `ownership.json`), `tests/__visual__/**`, `scripts/**`, `.github/workflows/ci.yml`, `openxml.yml`, `perf.yml`, `package*.json` | the paths below | this file |
 | harness | `playwright.config.js`, `.github/workflows/browsers.yml`, `tests/e2e/helpers.js`, and the specs for apply and collect worker, recipe tokens, print, refinement, privacy, safety | `src/**`, `styles/**` | `docs/fable/lanes/harness.md` |
 | ui | `src/ui/grid.js`, `src/ui/set/**`, `styles/grid.css`, `styles/set.css`, and the specs for matrix, grid, grid limits, perf, row diff, responsive | `src/app/**`, `src/ui/strings.js`, `tests/e2e/helpers.js` | `docs/fable/lanes/ui.md` |
-| safety | `src/core/save.js`, `src/core/sheet/**`, `tests/unit/sheet-*.test.js`, `tests/unit/save-safety.test.js` | `src/batch/**`, `src/app/**`, anything in `src/core/` outside `sheet/` and `save.js` | `docs/fable/lanes/safety.md` |
 
 Each lane also owns its own notes file, `docs/fable/lanes/NOTES-<lane>.md`. Only that lane writes it. The integrator reads it and moves what matters into `PROGRESS.md` and `MANAGER.md`.
 
@@ -54,7 +53,7 @@ Writer (branch `fable-writer`) and Scope (branch `fable-scope`) run in the user'
 
 | Where | Owner | Rule |
 |---|---|---|
-| `src/core/save.js`, `src/core/sheet/**`, the `sheet-*` tests | safety lane | Writer and Scope read them and send changes in their notes |
+| `src/core/save.js`, `src/core/sheet/**`, the `sheet-*`, `save-safety` and `batch-naming` tests | scope | the safety lane never ran; Scope took it over on 2026-11-27 (milestone S1); Writer reviews and sends changes in its notes |
 | `src/core/pq/**`, `src/core/vba/**`, `changes.js`, `replace.js`, the writer tests | writer | no one else edits them |
 | `src/batch/resolve/**`, `units.js`, `transform.js`, `combine.js`, `src/core/export/xlsx.js`, the scope tests | scope | no one else edits them |
 | `src/batch/execute/index.js`, `collect.js`, `run-file.js` | integrator | Writer's three lines (commit `30e7599`) and Scope's two lines (the `withInjectTokens` import and call) are accepted exceptions; everything else is requested in notes |

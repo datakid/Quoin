@@ -134,3 +134,8 @@ Notes it made that need no change but should be read by whoever ticks the boxes:
 - Expected effect: Excel repairs or refuses the file. Not tried in real Excel; a pack case with a 20-emoji table name would show it.
 - Fix, in the safety row: cut by UTF-16 units (`MAX_SHEET` is 31 units) without splitting a surrogate pair, and make the `-2` suffix fit the same way. The file name limit (120) is by code points on purpose and is not affected. `batch-naming.test.js` has the code point tests; one more with emoji names covers it.
 - Scope's `combine.js` and the new-sheet path both get their names from this class, so they are fixed with it.
+
+## To the harness and ui lanes: the Preview stall at 2,000 files is not the plan (2026-11-27)
+
+- `performance.md` records a 484 ms Preview stall at 2,000 files with the cause unknown. It is not `resolvePlan`: timed in node with 2,000 index entries it takes 20 to 25 ms for tables, sheets and patterns, and 20 to 41 ms at 5,000 (500 files: 5 to 6 ms). Cloning 2,000 indexes takes 4 ms. So the quarter of a millisecond per file is in `src/app/plan-run.js`, in the report or in the ui.
+- In `plan-run.js` each file goes through `pool.submit` with a message that carries the file handle, then `outputsDigest` or `partsDigest` per file, then `reportRows`, `labelCombined` and `diverged` once. Per file on the main thread: the message build, the digest, and the `perFile.set` with a rebuilt `outputs` array. A profile of one Preview at 2,000 files in the browser would name it; node cannot.

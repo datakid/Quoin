@@ -131,7 +131,7 @@ test('a sheet scope gives one output per sheet unit with raw cells', async () =>
   assert.deepEqual([grid[0][0].v, grid[1][0].v], ['Column1', 'Name']);
 });
 
-test('a new sheet, in place or Excel compute needs the change writer and says so when it is missing', async () => {
+test('a new sheet needs the change writer and says so when it is missing', async () => {
   const recipe = recipeOf(CURRENT, { mode: 'newSheet' });
   const s = await setup('pq_simple.xlsx', recipe);
   await assert.rejects(() => executeTransform(s.wb, s.filePlan, recipe, { now: NOW, meta: s.index }), /change writer/);
@@ -148,7 +148,7 @@ test('executeFile hands a transform recipe to the transform step and returns its
 
 const runSheet = async (name, recipe, extra = {}) => {
   const s = await setup(name, recipe);
-  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', allowInPlace: true, ...extra });
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', ...extra });
   return { ...s, result, back: result.outputs && result.outputs.length ? await openWorkbook(result.outputs[0].bytes, 'copy.xlsx') : null };
 };
 
@@ -223,82 +223,19 @@ test('the same file run twice gives the same copy byte for byte', async () => {
 });
 
 const placeRecipe = (range, scope = { type: 'tables', match: 'all' }, m = CURRENT) => recipeOf(m, { mode: 'inPlace', range }, { scope });
-const gridAt = (grid, row, col, h, w) => grid.slice(row, row + h).map((r) => Array.from({ length: w }, (_, i) => r[col + i] || null));
-
-test('in place writes each table result on the sheet of its table, at the range, in the copy', async () => {
-  const { wb, result, back } = await runSheet('pq_simple.xlsx', placeRecipe('E1'));
-  assert.equal(result.outputs.length, 1);
-  const names = (await buildSnapshot(wb)).sources;
-  const first = names.find((s) => s.name === 'StudentNames');
-  const input = await readUsedGrid(back, 'Input');
-  assert.deepEqual(gridAt(input, 0, 4, 4, 2), [first.columns.map((c) => ({ t: 's', v: c })), ...first.rows]);
-  assert.deepEqual(await readUsedGrid(back, 'StudentResults').then((g) => g[0].slice(4, 7).map((c) => c.v)), ['Name', 'Age', 'DateTimeGenerated']);
-  assert.deepEqual(gridAt(input, 0, 0, 4, 2), gridAt(await readUsedGrid(wb, 'Input'), 0, 0, 4, 2));
-});
-
-test('in place reports one verified row per unit naming the copy, the sheet and the range', async () => {
-  const { result } = await runSheet('pq_simple.xlsx', placeRecipe('E1'));
-  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.verified, r.output.split(' [')[1]]), [['StudentNames', 'changed', true, 'Input!E1:F4]'], ['StudentResults', 'changed', true, 'StudentResults!E1:G4]']]);
-  assert.equal(new Set(result.rows.map((r) => r.new_hash)).size, 1);
-});
-
-test('a sheet unit is written back on its own sheet', async () => {
-  const recipe = recipeOf(CURRENT, { mode: 'inPlace', range: 'E1' }, { scope: { type: 'sheets', match: 'pattern', pattern: 'Input' } });
-  const { result, back } = await runSheet('pq_simple.xlsx', recipe);
-  assert.equal(result.rows[0].verdict, 'changed');
-  const grid = await readUsedGrid(back, 'Input');
-  assert.deepEqual([grid[0][4].v, grid[0][5].v, grid[1][4].v], ['Column1', 'Column2', 'Name']);
-});
-
-test('a range over a table is refused for that unit and the copy holds only the others', async () => {
-  const { result, back } = await runSheet('pq_simple.xlsx', placeRecipe('C1'));
-  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['changed', ''], ['refused', 'refused.overlapsTable']]);
-  assert.equal((await readUsedGrid(back, 'Input'))[0][2].v, 'Name');
-  assert.equal((await readUsedGrid(back, 'StudentResults'))[0][2].v, 'DateTimeGenerated');
-});
-
-test('when every unit is refused there is no copy', async () => {
-  const { result } = await runSheet('pq_simple.xlsx', placeRecipe('A1'));
-  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['refused', 'refused.overlapsTable'], ['refused', 'refused.overlapsTable']]);
-  assert.deepEqual([result.outputs, result.bytes], [[], null]);
-});
-
-test('a rectangle that is too small for the result refuses the unit and never writes outside it', async () => {
-  const { result } = await runSheet('pq_simple.xlsx', placeRecipe('E1:E2'));
-  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['refused', 'refused.rangeTooSmall'], ['refused', 'refused.rangeTooSmall']]);
-  const fits = await runSheet('pq_simple.xlsx', placeRecipe('E1:G10'));
-  assert.deepEqual(fits.result.rows.map((r) => r.verdict), ['changed', 'changed']);
-});
-
-test('two units that would write over each other are caught at run time as well', async () => {
-  const recipe = placeRecipe('E1');
-  const s = await setup('pq_simple.xlsx', recipe);
-  const twin = { ...s.filePlan.units[0], index: 2 };
-  const plan = { ...s.filePlan, units: [s.filePlan.units[0], twin], actions: [s.filePlan.actions[0], { ...s.filePlan.actions[0], unit: twin }] };
-  const result = await executeFile(s.wb, plan, { now: NOW, recipe, meta: s.index, runId: 'r1', allowInPlace: true });
-  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code]), [['changed', ''], ['refused', 'refused.overlap']]);
-});
-
-test('a macro workbook keeps its modules when a range is written in place', async () => {
-  const recipe = placeRecipe('K1', { type: 'tables', match: 'position', position: { kind: 'first' } });
-  const s = await setup('pq_vba_complex.xlsm', recipe);
-  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1', allowInPlace: true });
-  assert.equal(result.rows[0].verdict, 'changed');
-  const back = await openWorkbook(result.outputs[0].bytes, 'copy.xlsm');
-  assert.deepEqual(back.vba.project.modules.map((m) => m.text), s.wb.vba.project.modules.map((m) => m.text));
-});
-
-test('the same in-place run twice gives the same copy byte for byte', async () => {
-  const a = await runSheet('pq_simple.xlsx', placeRecipe('E1'));
-  const b = await runSheet('pq_simple.xlsx', placeRecipe('E1'));
-  assert.equal(a.result.sha256, b.result.sha256);
-});
-
-test('in place is held back until the real-Excel check: without the explicit flag every unit is refused and nothing is written', async () => {
+test('in place is held back until the real-Excel check: every unit is refused and nothing is written', async () => {
   const recipe = placeRecipe('E1');
   const s = await setup('pq_simple.xlsx', recipe);
   const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
   assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'refused', 'refused.inPlaceHeld', false], ['StudentResults', 'refused', 'refused.inPlaceHeld', false]]);
+  assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
+});
+
+test('a recipe that asks Excel to compute is refused for every unit, not run and not a crash', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newFile' }, { compute: 'excel' });
+  const s = await setup('pq_simple.xlsx', recipe);
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.compute, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'excel', 'refused', 'refused.excelComputeHeld', false], ['StudentResults', 'excel', 'refused', 'refused.excelComputeHeld', false]]);
   assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
 });
 

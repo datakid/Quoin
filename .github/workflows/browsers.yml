@@ -39,38 +39,54 @@ jobs:
           sh scripts/ci-annotate.sh "${{ matrix.browser }} failing tests" failures.log -E '.'
           awk '/^ +[0-9]+\) \[/ {n=0} n<12 {print; n++}' browser.log > details.log
           sh scripts/ci-annotate.sh "${{ matrix.browser }} failure details" details.log -E '.'
-          BROWSER_NAME="${{ matrix.browser }}" node - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          exit $code
+      - name: Report failed tests
+        if: always()
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          node - <<'EOF'
           const fs = require('node:fs');
           const name = process.env.BROWSER_NAME;
-          if (!fs.existsSync('playwright-report.json')) {
-            console.log(`## ${name}\n\nNo report was written.`);
-            process.exit(0);
-          }
-          const report = JSON.parse(fs.readFileSync('playwright-report.json', 'utf8'));
           const clean = (text) => String(text || '').replace(/\u001b\[[0-9;]*m/g, '');
           const cell = (text) => clean(text).replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
+          const message = (text) => String(text).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+          const property = (text) => message(text).replace(/:/g, '%3A').replace(/,/g, '%2C');
+          const out = [];
           const failed = [];
-          const walk = (suite) => {
-            for (const spec of suite.specs || []) {
-              for (const t of spec.tests || []) {
-                const last = t.results[t.results.length - 1];
-                if (!last || ['passed', 'skipped'].includes(last.status)) continue;
-                const err = (last.error && last.error.message) || (last.errors && last.errors[0] && last.errors[0].message) || last.status;
-                const first = clean(err).split('\n').map((l) => l.trim()).find((l) => l) || last.status;
-                failed.push({ file: spec.file, line: spec.line, title: spec.title, first });
+          let stats = {};
+          if (!fs.existsSync('playwright-report.json')) {
+            out.push(`## ${name}`, '', 'No report was written.');
+          } else {
+            const report = JSON.parse(fs.readFileSync('playwright-report.json', 'utf8'));
+            const walk = (suite) => {
+              for (const spec of suite.specs || []) {
+                for (const t of spec.tests || []) {
+                  const last = t.results[t.results.length - 1];
+                  if (!last || ['passed', 'skipped'].includes(last.status)) continue;
+                  const err = (last.error && last.error.message) || (last.errors && last.errors[0] && last.errors[0].message) || last.status;
+                  const lines = clean(err).split('\n').map((l) => l.trimEnd()).filter((l) => l.trim());
+                  failed.push({ file: spec.file, line: spec.line, title: spec.title, lines });
+                }
               }
+              for (const child of suite.suites || []) walk(child);
+            };
+            for (const suite of report.suites || []) walk(suite);
+            stats = report.stats || {};
+            out.push(`## ${name}: ${failed.length} failed, ${stats.expected || 0} passed, ${stats.flaky || 0} flaky, ${stats.skipped || 0} skipped`, '');
+            if (failed.length) {
+              out.push('| File | Line | Test | First error line |', '|---|---|---|---|');
+              for (const f of failed) out.push(`| tests/${cell(f.file)} | ${f.line} | ${cell(f.title)} | ${cell(f.lines[0])} |`);
             }
-            for (const child of suite.suites || []) walk(child);
-          };
-          for (const suite of report.suites || []) walk(suite);
-          const st = report.stats || {};
-          console.log(`## ${name}: ${failed.length} failed, ${st.expected || 0} passed, ${st.flaky || 0} flaky, ${st.skipped || 0} skipped\n`);
-          if (failed.length) {
-            console.log('| File | Line | Test | First error line |\n|---|---|---|---|');
-            for (const f of failed) console.log(`| tests/${cell(f.file)} | ${f.line} | ${cell(f.title)} | ${cell(f.first)} |`);
           }
+          const markdown = out.join('\n') + '\n';
+          if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+          console.log(`::notice title=${property(name + ' summary')}::${message(markdown)}`);
+          for (const f of failed.slice(0, 10)) {
+            console.log(`::error file=${property('tests/' + f.file)},line=${f.line},title=${property(name + ': ' + f.title)}::${message(f.lines.slice(0, 12).join('\n'))}`);
+          }
+          if (failed.length > 10) console.log(`::notice title=${property(name)}::${failed.length - 10} more failed tests are listed in the job summary`);
           EOF
-          exit $code
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

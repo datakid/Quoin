@@ -52,6 +52,7 @@
         "src/core/pq/writeback.js",
         "src/batch/execute/changes.js",
         "tests/unit/batch-pq-members.test.js",
+        "tests/unit/batch-writer-changes.test.js",
         "docs/fable/lanes/NOTES-writer.md"
       ]
     }

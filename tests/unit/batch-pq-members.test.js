@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { applyChangeSet, emptyChangeSet, selfCheck } from '../../src/core/save.js';
 import { buildDataMashup } from '../../src/core/pq/datamashup.js';
-import { removeMetadataItems, renameMetadataItems, connectionFragment } from '../../src/core/pq/members.js';
+import { removeMetadataItems, renameMetadataItems, connectionFragment, queryReferencers, writeQueryChanges } from '../../src/core/pq/members.js';
 import { base64Encode } from '../../src/core/bytes.js';
 import { applyEdits, parseXml, textContentEdit } from '../../src/core/xml.js';
 import { checkSection } from '../../src/core/m/engine.js';
@@ -610,3 +610,77 @@ test('F2-03: names with an apostrophe, an ampersand or angle brackets survive th
   }
   assert.deepEqual(back.warnings, []);
 });
+
+async function wrappedWorkbook(width) {
+  const wb = await openSimple();
+  const doc = parseXml(wb.mashup.text.text, wb.mashup.part);
+  const flat = doc.root.text().replace(/\s+/g, '');
+  const wrapped = flat.match(new RegExp(`.{1,${width}}`, 'g')).join('\r\n');
+  const pkg = wb.pkg.clone();
+  await pkg.setText(wb.mashup.part, applyEdits(wb.mashup.text.text, [textContentEdit(doc.root, wrapped)]), wb.mashup.text);
+  return openWorkbook(await pkg.write({ now: NOW }), 'wrapped.xlsx');
+}
+
+test('F2-03: a DataMashup stored in wrapped lines is written back in lines of the same width', async () => {
+  const wb = await wrappedWorkbook(76);
+  assert.equal(wb.mashup.lineLength, 76);
+  const cs = emptyChangeSet();
+  cs.queries.replace.set('StudentResults', NEW_M);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection });
+  const back = await openWorkbook(res.bytes, 'out.xlsx');
+  assert.equal(back.mashup.lineLength, 76);
+  const lines = parseXml(back.mashup.text.text, back.mashup.part).root.text().split('\r\n');
+  assert.ok(lines.length > 2);
+  for (const line of lines.slice(0, -1)) assert.equal(line.length, 76);
+  assert.ok(lines.at(-1).length > 0 && lines.at(-1).length <= 76);
+  assert.equal(back.queries.find((q) => q.name === 'StudentResults').original, NEW_M);
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-04: the list of queries that use a name is empty for a workbook with no query data', async () => {
+  const wb = await openWorkbook(fixture('plain_table.xlsx'), 'plain_table.xlsx');
+  assert.ok(!wb.mashup);
+  assert.deepEqual(queryReferencers(wb, 'Anything'), []);
+});
+
+const replaceOnly = (name, text = NEW_M) => {
+  const cs = emptyChangeSet();
+  cs.queries.replace.set(name, text);
+  return cs.queries;
+};
+
+async function writeDirect(wb, queries, options = {}) {
+  const pkg = wb.pkg.clone();
+  const result = await writeQueryChanges(wb, pkg, queries, { now: NOW, checkSection, ...options });
+  return { pkg, result };
+}
+
+async function refreshFlag(pkg, wb, name) {
+  const query = wb.queries.find((x) => x.name === name);
+  const doc = parseXml((await pkg.text(wb.connections.part)).text, wb.connections.part);
+  return doc.root.childrenNamed('connection').find((c) => c.attr('id') === query.connection.id).attr('refreshOnLoad');
+}
+
+test('F2-02: a replaced query refreshes on open by default, and only when asked otherwise', async () => {
+  const wb = await openSimple();
+  assert.notEqual(await refreshFlag(wb.pkg, wb, 'StudentResults'), '1');
+  const byDefault = await writeDirect(wb, replaceOnly('StudentResults'));
+  assert.ok(byDefault.result.touched.includes(wb.connections.part));
+  assert.equal(await refreshFlag(byDefault.pkg, wb, 'StudentResults'), '1');
+  const off = await writeDirect(wb, replaceOnly('StudentResults'), { refreshOnLoad: false });
+  assert.ok(!off.result.touched.includes(wb.connections.part));
+  assert.notEqual(await refreshFlag(off.pkg, wb, 'StudentResults'), '1');
+  const named = await writeDirect(wb, replaceOnly('StudentResults'), { refreshOnLoad: false, refreshNames: new Set(['StudentResults']) });
+  assert.ok(named.result.touched.includes(wb.connections.part));
+  assert.equal(await refreshFlag(named.pkg, wb, 'StudentResults'), '1');
+});
+
+test('F2-02: a connection that already refreshes on open is not rewritten', async () => {
+  const first = await writeDirect(await openSimple(), replaceOnly('StudentResults'));
+  const again = await openWorkbook(await first.pkg.write({ now: NOW }), 'again.xlsx');
+  assert.equal(await refreshFlag(again.pkg, again, 'StudentResults'), '1');
+  const second = await writeDirect(again, replaceOnly('StudentResults', 'let\n    Source = 2\nin\n    Source'));
+  assert.deepEqual(second.result.touched, [again.mashup.part]);
+  assert.equal((await second.pkg.text(again.connections.part)).text, again.connections.text.text);
+});
+

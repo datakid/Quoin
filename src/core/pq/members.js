@@ -2,13 +2,14 @@ import { QuoinError } from '../errors.js';
 import { base64Encode, concat, le32, u32, utf8Encode, decodeTextBytes, encodeTextBytes } from '../bytes.js';
 import { crc32 } from '../crc32.js';
 import { KEYWORDS, lex } from '../m/lexer.js';
-import { applyEdits, attributeEdit, removeElementEdit, textContentEdit, escapeText, parseXml } from '../xml.js';
+import { applyEdits, attributeEdit, removeElementEdit, textContentEdit, escapeAttr, escapeText, parseXml } from '../xml.js';
 import { indexSection } from '../wb/deps.js';
 import { writeZip, rawFromEntry } from '../zip-write.js';
 import { SECTION_PART } from './datamashup.js';
 import { dominantEol, fromViewText, memberEol } from './section.js';
 
 const PLAIN_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const NOT_IN_A_CONNECTION = /[;"\]=]/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 function wrapBase64(text, lineLength) {
@@ -103,6 +104,38 @@ function insertItems(xml, items) {
   const at = xml.lastIndexOf('</Items>');
   if (at < 0) throw new QuoinError('pq.format', 'metadata has no item list');
   return `${xml.slice(0, at)}${items.join('')}${xml.slice(at)}`;
+}
+
+export function connectionFragment({ id, name, uid, refresh, withUid }) {
+  const attrs = [`id="${id}"`];
+  if (withUid) attrs.push(`xr16:uid="{${uid}}"`);
+  attrs.push('keepAlive="1"', `name="${escapeAttr(`Query - ${name}`)}"`, `description="${escapeAttr(`Connection to the '${name}' query in the workbook.`)}"`, 'type="5"', 'refreshedVersion="0"', 'background="1"');
+  if (refresh) attrs.push('refreshOnLoad="1"');
+  const connection = escapeAttr(`Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;Location=${name};Extended Properties=""`);
+  return `<connection ${attrs.join(' ')}><dbPr connection="${connection}" command="${escapeAttr(`SELECT * FROM [${name}]`)}"/></connection>`;
+}
+
+function checkConnect(wb, queries) {
+  const connect = queries.connect;
+  if (!connect || !connect.size) return;
+  if (!wb.connections.part) throw new QuoinError('pq.format', 'no connections part');
+  const known = parseXml(wb.connections.text.text, wb.connections.part).root.childrenNamed('connection').map((c) => c.attr('name'));
+  for (const name of connect) {
+    if (!queries.add.has(name)) throw new TypeError(`${name} is not being added, so it cannot get a connection`);
+    if (NOT_IN_A_CONNECTION.test(name)) throw new TypeError(`query name cannot be used in a connection: ${name}`);
+    if (known.includes(`Query - ${name}`)) throw new TypeError(`a connection for ${name} already exists`);
+  }
+}
+
+function insertConnections(text, part, names, refreshNames) {
+  const root = parseXml(text, part).root;
+  const ids = root.childrenNamed('connection').map((c) => Number(c.attr('id')) || 0);
+  let next = Math.max(0, ...ids) + 1;
+  const withUid = /xmlns:xr16=/.test(text);
+  const at = text.lastIndexOf('</connections>');
+  if (at < 0) throw new QuoinError('pq.format', 'connections part has no end');
+  const fragments = names.map((name) => connectionFragment({ id: next++, name, uid: queryId(name, 'connection').toUpperCase(), refresh: refreshNames.has(name), withUid }));
+  return `${text.slice(0, at)}${fragments.join('')}${text.slice(at)}`;
 }
 
 function checkAdds(mashup, adds) {
@@ -253,6 +286,7 @@ function rewriteSection(text, split, members, queries) {
 export async function writeQueryChanges(wb, pkg, queries, { now, refreshOnLoad = true, refreshNames = new Set(), checkSection = null } = {}) {
   const mashup = assertWritable(wb, queries.add.size > 0 || queries.remove.size > 0 || queries.rename.size > 0);
   checkAdds(mashup, queries.add);
+  checkConnect(wb, queries);
   checkRemovals(wb, queries);
   checkRenames(wb, mashup, queries);
   const edits = queries.replace;
@@ -280,6 +314,8 @@ export async function writeQueryChanges(wb, pkg, queries, { now, refreshOnLoad =
   touched.push(mashup.part);
 
   const flagged = [...edits.keys()].filter((name) => refreshOnLoad || refreshNames.has(name));
+  let connectionsText = wb.connections.part ? wb.connections.text.text : null;
+  let connectionsChanged = false;
   if (flagged.length && wb.connections.part) {
     const cdoc = parseXml(wb.connections.text.text, wb.connections.part);
     const conns = cdoc.root.childrenNamed('connection');
@@ -291,9 +327,17 @@ export async function writeQueryChanges(wb, pkg, queries, { now, refreshOnLoad =
       if (el && el.attr('refreshOnLoad') !== '1') pieces.push(attributeEdit(el, 'refreshOnLoad', '1'));
     }
     if (pieces.length) {
-      await pkg.setText(wb.connections.part, applyEdits(wb.connections.text.text, pieces), wb.connections.text);
-      touched.push(wb.connections.part);
+      connectionsText = applyEdits(connectionsText, pieces);
+      connectionsChanged = true;
     }
+  }
+  if (queries.connect && queries.connect.size) {
+    connectionsText = insertConnections(connectionsText, wb.connections.part, [...queries.add.keys()].filter((n) => queries.connect.has(n)), refreshNames);
+    connectionsChanged = true;
+  }
+  if (connectionsChanged) {
+    await pkg.setText(wb.connections.part, connectionsText, wb.connections.text);
+    touched.push(wb.connections.part);
   }
   return { sectionText, touched };
 }

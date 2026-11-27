@@ -1,0 +1,1 @@
+Writer (fable-writer): last green bf3edfb. Done F2-01..F2-09, F2-15 (pack merged with integrator's). Open: opt-in connection for added queries (WIP patch in docs/fable/handover, one failing escaping test). Rules: no comments, tests first, one commit per task, touch only own files. Hand-over: docs/fable/HANDOVER-writer.md.

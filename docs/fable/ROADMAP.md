@@ -6,7 +6,7 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 
 | Plan item | State | Milestones that close it |
 |---|---|---|
-| F5-01 Firefox and WebKit | first CI run: Firefox 12 failures, WebKit 10 | H1 to H4, U1 to U4 |
+| F5-01 Firefox and WebKit | first CI run: Firefox 12 failures, WebKit 10 | harness brief items 1 to 10, ui brief items 1 to 10 |
 | F3 gate (F3-11) | needs the sheet-write check and three decisions of the user | S1, then the user |
 | F5-04 real Excel closure | the person has not yet run the packs in one sitting | W1, then the user |
 | F5-05 README and decisions | partly done | S5, W5, I2 |
@@ -27,8 +27,8 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 | writer | W3 | hostile inputs for the compound-file and query readers | nothing |
 | writer | W4 | review of Scope's S1 against the nine probes | S1 on `fable` |
 | writer | W5 | table of checks and tests, requests to other owners | W1 to W4 |
-| harness | H1 to H4 | the six test-side and engine-limit failures, CI summary, flake audit, skip helper | nothing |
-| ui | U1 to U4 | WebKit virtualisation, row-diff on phones, Firefox drag and Tab, copy, 1,000,000-row scroll; phone audit; forced colours; keyboard | nothing |
+| harness | brief items 1 to 10 | the six test-side and engine-limit failures, CI summary, flake audit, skip helper | nothing |
+| ui | brief items 1 to 10 | WebKit virtualisation, row-diff on phones, Firefox drag and Tab, copy, 1,000,000-row scroll; phone audit; forced colours; keyboard | nothing |
 | integrator | I1 | strings for Scope's codes, D2 (hide `unchanged` rows with a count), closing run message | Scope's tree (merged) |
 | integrator | I2 | README features, entry paths, storage keys and limits; `docs/decisions.md` | S5, W5, lane notes |
 | integrator | I3 | CI loop: push, read the `browsers` run, send each failure to its owner | lanes pushing |

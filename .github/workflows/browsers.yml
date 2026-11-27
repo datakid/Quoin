@@ -4,6 +4,11 @@ on:
     branches: [fable]
     paths: ['src/**', 'styles/**', 'index.html', 'tests/**', 'playwright.config.js', '.github/workflows/browsers.yml']
   workflow_dispatch:
+    inputs:
+      spec:
+        description: Optional spec path to run instead of the whole suite
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -23,9 +28,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Browser tests
+        env:
+          SPEC_ARGS: ${{ inputs.spec }}
         run: |
           set +e
-          PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report.json PLAYWRIGHT_HTML_OPEN=never npx playwright test --project=${{ matrix.browser }} --reporter=list,json,html --trace=retain-on-failure 2>&1 | tee browser.log
+          PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report.json PLAYWRIGHT_HTML_OPEN=never npx playwright test --project=${{ matrix.browser }} --reporter=list,json,html --trace=retain-on-failure $SPEC_ARGS 2>&1 | tee browser.log
           code=${PIPESTATUS[0]}
           sh scripts/ci-annotate.sh "${{ matrix.browser }} totals" browser.log -E '^ +[0-9]+ (passed|failed|flaky|skipped|did not run)'
           grep -E '^ +✘' browser.log | sed -E 's/^ +✘ +[0-9]+ \[[a-z]+\] › //' | sort -u > failures.log

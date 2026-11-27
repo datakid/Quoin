@@ -42,6 +42,7 @@ No `test.fixme` exists in `tests/e2e/` or `tests/a11y/`. Offline start in real S
 ## Open
 
 - Whole-suite CI on the final code commit, run 45998051576 (997d41a): WebKit 1 failed, 383 passed, 4 skipped. Firefox 4 failed, 381 passed, 3 skipped. The earlier run 45952953452 (a70284d) had WebKit 2 failed and Firefox 5 failed, 11 and 12 before this lane's changes.
+- Run 46033109587 on c5914ae, which is this branch merged with the trunk that carries the Writer and Scope lanes: the same totals and the same five failures, so those two merges added no failure on Firefox or WebKit. WebKit `fable-matrix.spec.js:80` passed again.
 - Every failure left is in a spec the ui lane owns, none in this lane:
   - WebKit `fable-row-diff.spec.js:111`: on a phone viewport a pane bottom is 1484.8, expected at most 797.
   - Firefox `fable-matrix.spec.js:96` (`not.toBeFocused` failed after Tab) and `:124` (drag selection, deep equality).
@@ -60,4 +61,4 @@ No `test.fixme` exists in `tests/e2e/` or `tests/a11y/`. Offline start in real S
   3. One annotation per failed test: done, 997d41a.
   4. Re-run the specs the ui lane fixes on Firefox and WebKit and report which still fail: waiting on the ui lane's fixes. The manual run takes a spec path, so one spec runs in a few minutes.
 
-HAND BACK 997d41a
+HAND BACK c5914ae

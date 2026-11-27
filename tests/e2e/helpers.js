@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { expect } from '@playwright/test';
 import { readZip } from '../../src/core/zip-read.js';
+import { parseDataMashup } from '../../src/core/pq/datamashup.js';
+import { base64Decode, decodeTextBytes } from '../../src/core/bytes.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -113,11 +115,50 @@ export const waitForSet = async (page, state = 'ready') => {
   }
 };
 
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const byName = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+const MASHUP_ITEM = /^customXml\/item\d+\.xml$/i;
+const MASHUP_BODY = /(<(?:[\w.-]+:)?DataMashup\b[^>]*>)([\s\S]*?)(<\/(?:[\w.-]+:)?DataMashup>)/;
+
+async function mashupDigest(bytes) {
+  const decoded = decodeTextBytes(bytes);
+  const found = MASHUP_BODY.exec(decoded.text);
+  if (!found) return null;
+  try {
+    const model = parseDataMashup(base64Decode(found[2]));
+    const parts = [];
+    for (const e of model.packageParts.entries) parts.push([e.name, e.isDirectory ? '' : sha256(await e.read())]);
+    const open = found.index + found[1].length;
+    const firstBreak = found[2].search(/[\r\n]/);
+    return sha256(JSON.stringify({
+      encoding: decoded.encoding,
+      bom: decoded.bom,
+      wrapper: `${decoded.text.slice(0, open)}\u0000${decoded.text.slice(open + found[2].length)}`,
+      lineLength: firstBreak >= 0 ? firstBreak : 0,
+      version: model.version,
+      parts: parts.sort(byName),
+      permissions: sha256(model.raw.permissions),
+      metadata: sha256(model.raw.metadata),
+      bindings: sha256(model.permissionBindings)
+    }));
+  } catch {
+    return null;
+  }
+}
+
 export async function zipDigest(bytes) {
   const zip = readZip(Uint8Array.from(bytes));
   const out = [];
-  for (const e of zip.entries) out.push([e.name, e.isDirectory ? '' : createHash('sha256').update(await e.read()).digest('hex')]);
-  return out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  for (const e of zip.entries) {
+    if (e.isDirectory) {
+      out.push([e.name, '']);
+      continue;
+    }
+    const data = await e.read();
+    const decoded = MASHUP_ITEM.test(e.name) ? await mashupDigest(data) : null;
+    out.push([e.name, decoded || sha256(data)]);
+  }
+  return out.sort(byName);
 }
 
 export async function expectSameOutput(got, expected, browserName) {

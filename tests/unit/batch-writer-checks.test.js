@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { readCfb } from '../../src/core/vba/cfb-read.js';
 import { writeCfb } from '../../src/core/vba/cfb-write.js';
 import { decompress } from '../../src/core/vba/ovba-decompress.js';
+import { compress } from '../../src/core/vba/ovba-compress.js';
 import { encodeText } from '../../src/core/vba/codepages.js';
 import { parseDir, REC } from '../../src/core/vba/dir-stream.js';
 import { readVbaProject } from '../../src/core/vba/vba-project.js';
 import { writeVbaProject, verifyVbaProject } from '../../src/core/vba/writeback.js';
 import { DEFAULT_LIMITS } from '../../src/core/limits.js';
+import { parseDataMashup, readSection } from '../../src/core/pq/datamashup.js';
 import { fixture } from './helpers.js';
 
 const refuses = (fn, code, pattern) => assert.throws(fn, (e) => e.code === code && pattern.test(e.message), `${code} ${pattern}`);
@@ -182,3 +184,27 @@ test('readCfb names what is wrong with a chain in the mini stream', () => {
   refuses(() => readCfb(broken((b) => setU32(b, small(b).at + 120, 100))), 'cfb.loop', /mini chain longer than the stream/);
   refuses(() => readCfb(broken((b) => setU32(b, miniFatAt(b, getU32(b, miniFatAt(b, small(b).start))), 0xFFFFFFFE))), 'cfb.short', /mini stream shorter than its declared size/);
 });
+
+test('a package that is not a zip is refused as a package problem, and a package with no section is refused', async () => {
+  const junk = bytes(0, 0, 0, 0, 4, 0, 0, 0, 74, 85, 78, 75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  refuses(() => parseDataMashup(junk), 'pq.package', /./);
+  await assert.rejects(() => readSection({ packageParts: new Map() }), (e) => e.code === 'pq.section' && /Formulas\/Section1\.m is missing/.test(e.message));
+});
+
+
+test('a VBA/dir stream that cannot be decompressed is reported as a dir problem', () => {
+  const cfb = readCfb(fixture('xw_vbaProject01.bin'));
+  cfb.find('VBA/dir').data[0] = 2;
+  refuses(() => readVbaProject(writeCfb(cfb.root)), 'vba.dir', /signature byte/);
+});
+
+test('a project whose dir stream has trailing bytes can be read but is not writable', () => {
+  const cfb = readCfb(fixture('xw_vbaProject01.bin'));
+  const node = cfb.find('VBA/dir');
+  node.data = compress(Uint8Array.from([...decompress(node.data), 1, 2, 3]));
+  const project = readVbaProject(writeCfb(cfb.root));
+  assert.ok(project.anomalies.includes('dir.trailing'));
+  assert.equal(project.writable, false);
+  assert.equal(readVbaProject(fixture('xw_vbaProject01.bin')).writable, true);
+});
+

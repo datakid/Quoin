@@ -77,6 +77,12 @@ test('a unit that fails is a failed row with its reason and the substituted quer
   assert.equal(result.failures[0].error.code, 'unit.parse');
 });
 
+test('a parse error is reported in the row reason with its line and column', async () => {
+  const m = 'if {unit.index} = 1 then 1 + else Excel.CurrentWorkbook(){[Name=\"{unit.name}\"]}[Content]';
+  const { result } = await run('pq_simple.xlsx', recipeOf(m, { mode: 'newFile' }));
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.reason]), [['StudentNames', 'Expected an expression. (line 1, column 19)'], ['StudentResults', 'Expected an expression. (line 1, column 19)']]);
+});
+
 test('one unit failing leaves the others written', async () => {
   const m = `let T = ${CURRENT} in if {unit.index} = 1 then error "boom" else T`;
   const { result } = await run('pq_simple.xlsx', recipeOf(m, { mode: 'newFile' }));
@@ -131,9 +137,10 @@ test('a sheet scope gives one output per sheet unit with raw cells', async () =>
   assert.deepEqual([grid[0][0].v, grid[1][0].v], ['Column1', 'Name']);
 });
 
-test('the compute mode Excel and the other output modes are not written by this function yet', async () => {
-  const s = await setup('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newFile' }, { compute: 'excel' }));
-  await assert.rejects(() => executeTransform(s.wb, s.filePlan, recipeOf(CURRENT, { mode: 'newFile' }, { compute: 'excel' }), { now: NOW, meta: s.index }), /excel/);
+test('a new sheet needs the change writer and says so when it is missing', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newSheet' });
+  const s = await setup('pq_simple.xlsx', recipe);
+  await assert.rejects(() => executeTransform(s.wb, s.filePlan, recipe, { now: NOW, meta: s.index }), /change writer/);
 });
 
 test('executeFile hands a transform recipe to the transform step and returns its outputs', async () => {
@@ -219,4 +226,46 @@ test('the same file run twice gives the same copy byte for byte', async () => {
   const a = await runSheet('pq_simple.xlsx', recipe);
   const b = await runSheet('pq_simple.xlsx', recipe);
   assert.equal(a.result.outputs[0].sha256, b.result.outputs[0].sha256);
+});
+
+const placeRecipe = (range, scope = { type: 'tables', match: 'all' }, m = CURRENT) => recipeOf(m, { mode: 'inPlace', range }, { scope });
+test('in place is held back until the real-Excel check: every unit is refused and nothing is written', async () => {
+  const recipe = placeRecipe('E1');
+  const s = await setup('pq_simple.xlsx', recipe);
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'refused', 'refused.inPlaceHeld', false], ['StudentResults', 'refused', 'refused.inPlaceHeld', false]]);
+  assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
+});
+
+test('a recipe that asks Excel to compute is refused for every unit, not run and not a crash', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'newFile' }, { compute: 'excel' });
+  const s = await setup('pq_simple.xlsx', recipe);
+  const result = await executeFile(s.wb, s.filePlan, { now: NOW, recipe, meta: s.index, runId: 'r1' });
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.compute, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'excel', 'refused', 'refused.excelComputeHeld', false], ['StudentResults', 'excel', 'refused', 'refused.excelComputeHeld', false]]);
+  assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
+});
+
+const LONE_SURROGATE = '#table({\"A\"}, {{\"a#(D800)b\"}})';
+
+test('a new file whose content does not read back as written is not released and no file is made', async () => {
+  const { result } = await run('pq_simple.xlsx', recipeOf(LONE_SURROGATE, { mode: 'newFile' }));
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified, r.output]), [['StudentNames', 'not-released', 'verify.readBack', false, ''], ['StudentResults', 'not-released', 'verify.readBack', false, '']]);
+  assert.deepEqual([result.outputs, result.bytes, result.sha256], [[], null, null]);
+});
+
+test('a combined sheet part whose content does not read back as written is not released and is left out', async () => {
+  const { result } = await run('pq_simple.xlsx', recipeOf(LONE_SURROGATE, { mode: 'combined', name: '{unit.name}' }));
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'not-released', 'verify.readBack', false], ['StudentResults', 'not-released', 'verify.readBack', false]]);
+  assert.deepEqual(result.sheetParts, []);
+});
+
+test('a unit whose query names a column it does not have is a skipped row with the column and nothing is written for it', async () => {
+  const m = 'let T = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content] in Table.SelectColumns(T, {"Age"})';
+  const { result } = await run('pq_simple.xlsx', recipeOf(m, { mode: 'newFile' }));
+  assert.deepEqual(result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.verified]), [['StudentNames', 'changed', '', true], ['StudentResults', 'changed', '', true]]);
+  const bad = 'let T = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content] in Table.SelectColumns(T, {"DateTimeGenerated"})';
+  const second = await run('pq_simple.xlsx', recipeOf(bad, { mode: 'newFile' }));
+  assert.deepEqual(second.result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.reason]), [['StudentNames', 'skipped', 'skip.missingColumn', "The column 'DateTimeGenerated' of the table wasn't found."], ['StudentResults', 'changed', '', '']]);
+  assert.deepEqual(second.result.outputs.map((o) => o.name), ['pq_simple__StudentResults.xlsx']);
+  assert.deepEqual(second.result.failures, []);
 });

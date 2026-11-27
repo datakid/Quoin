@@ -88,14 +88,18 @@ async function writeNewSheets(wb, items, culture, apply) {
 }
 
 export async function executeTransform(wb, filePlan, recipe, { now, meta, runId = '', apply } = {}) {
-  if (recipe.compute === 'excel') throw new Error('excel compute is not supported yet');
+  const started = performance.now();
+  const file = meta || { name: wb.fileName, relPath: wb.fileName };
+  const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));
+  const heldCode = recipe.compute === 'excel' ? 'refused.excelComputeHeld' : recipe.output && recipe.output.mode === 'inPlace' ? 'refused.inPlaceHeld' : null;
+  if (heldCode) {
+    const rows = filePlan.actions.map((action) => reportRow(file, action, recipe, { run_id: runId, verdict: 'refused', reason_code: heldCode, verified: false, duration_ms: Math.round(performance.now() - started) }));
+    return { fileId: filePlan.fileId, outputs: [], bytes: null, sha256: null, sheetParts: [], rows, failures: [], warnings };
+  }
   if (!recipe.output) throw new TypeError('a transform recipe needs an output');
   const mode = recipe.output.mode;
   if (mode !== 'newFile' && mode !== 'newSheet' && mode !== 'combined') throw new Error(`${mode} output is not supported yet`);
   if (mode === 'newSheet' && typeof apply !== 'function') throw new TypeError('a new sheet output needs the change writer');
-  const started = performance.now();
-  const file = meta || { name: wb.fileName, relPath: wb.fileName };
-  const warnings = wb.warnings.map((w) => (w.part ? { code: w.code, part: w.part } : { code: w.code }));
   const culture = recipe.more.culture;
   const { runs } = await runFileUnits(wb, file, filePlan, recipe, { now });
   const failures = [];
@@ -103,6 +107,10 @@ export async function executeTransform(wb, filePlan, recipe, { now, meta, runId 
   const items = [];
   for (const run of runs) {
     const action = filePlan.actions.find((a) => a.unit.index === run.unit.index);
+    if (run.status === 'skipped') {
+      early.set(run, { verdict: 'skipped', reason_code: 'skip.missingColumn', reason: run.error.message, verified: false });
+      continue;
+    }
     if (run.status !== 'ok') {
       failures.push({ unit: run.unit, m: run.m, error: run.error });
       early.set(run, { verdict: 'failed', reason_code: run.error.code, reason: failureReason(run.error), verified: false });

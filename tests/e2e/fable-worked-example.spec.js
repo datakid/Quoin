@@ -20,14 +20,14 @@ test('fable worked example: twelve workbooks in, ten in the zip, every number of
   await expect(matrix(page)).toBeVisible();
   const notes = panel(page).locator('.recipe-notes');
   await expect(notes).toContainText('7 files → 1 unit each, 3 files → 2 units each — 13 units across 10 files');
-  await expect(notes).toContainText('11 would change · 2 refused · 2 failed');
+  await expect(notes).toContainText('11 would change · 2 skipped · 2 refused');
 
   const rows = await page.evaluate(() => window.__quoin.preview.rows.map((r) => ({ file: r.file, unit: r.unit, verdict: r.verdict, code: r.reason_code, reason: r.reason, output: r.output })));
   const unitRows = rows.filter((r) => r.unit !== '');
   expect(unitRows).toHaveLength(13);
   expect(unitRows.filter((r) => r.verdict === 'changed')).toHaveLength(11);
-  const failed = unitRows.filter((r) => r.verdict === 'failed');
-  expect(failed.map((r) => [r.file, r.unit, r.reason])).toEqual(MISSING_COLUMN.map((file) => [file, 'South', "The column 'Amount' of the table wasn't found."]));
+  const skipped = unitRows.filter((r) => r.verdict === 'skipped');
+  expect(skipped.map((r) => [r.file, r.unit, r.code, r.reason])).toEqual(MISSING_COLUMN.map((file) => [file, 'South', 'skip.missingColumn', "The column 'Amount' of the table wasn't found."]));
   expect(unitRows.filter((r) => PINNED.includes(r.file)).map((r) => r.unit)).toEqual(['Data', 'Data', 'Data']);
   const perFile = new Map();
   for (const r of unitRows) perFile.set(r.file, (perFile.get(r.file) || 0) + 1);
@@ -50,7 +50,7 @@ test('fable worked example: twelve workbooks in, ten in the zip, every number of
   expect(body).toHaveLength(15);
   const verdicts = body.map((r) => r[col('verdict')]);
   expect(verdicts.filter((v) => v === 'changed')).toHaveLength(11);
-  expect(verdicts.filter((v) => v === 'failed')).toHaveLength(2);
+  expect(verdicts.filter((v) => v === 'skipped')).toHaveLength(2);
   expect(verdicts.filter((v) => v === 'refused')).toHaveLength(2);
   expect(body.filter((r) => r[col('verdict')] === 'changed').every((r) => r[col('verified')] === 'yes')).toBe(true);
   expect(body.filter((r) => r[col('verdict')] === 'changed').map((r) => r[col('output')])).toContain('books/sales-08 (edited).xlsx [Clean-2]');

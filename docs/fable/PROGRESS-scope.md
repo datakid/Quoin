@@ -208,9 +208,74 @@ Decisions made inside gaps in the plan:
 - The combined workbook is called `Combined.xlsx`. Its rows are patched after the run, so a progress display should treat `output` as empty until `combineOutputs` has run.
 - `sameGrid` now ignores trailing empty rows and cells and fails on extra cells, so a table whose last row is all empty reads back equal and an extra cell no longer slips through.
 
+## F3-08 Output: in place
+
+Layer: core sheet, save, execute, resolve
+Files: src/core/sheet/write-ranges.js, styles.js (new; `appendStyles` moved out of add-sheets.js), src/core/sheet/sheet-xml.js (`tableCellRows`, bytes of the one-sheet file unchanged, checked by hash), src/batch/execute/transform.js, src/batch/resolve/resolve.js, tests/unit/sheet-write.test.js (new, 16), tests/unit/batch-transform.test.js (+9), tests/unit/batch-scope.test.js (+3). Edits to others' files: `src/core/save.js` (Writer's: `refuseUnapplied` is gone because both sheet operations are now applied; `applyChangeSet` calls `writeRangesToPackage`; `selfCheck` calls `verifyWrittenRanges`).
+Do: opt-in (the recipe has to say `inPlace` and give `range`). `ChangeSet.sheets.write` is `[{sheet, anchor: {row, col}, table, culture}]`. `writeRangesToPackage` splices the header row and the table into the sheet's own XML: existing rows keep their attributes except `spans` (dropped on rows it touches), existing cells outside the range are copied through as the exact original text, new rows are inserted in order, `<sheetData/>` is expanded if empty, and `<dimension>` grows to cover the range. The cells use inline strings and the five styles appended to the workbook's styles. After the write `verifyWrittenRanges` re-opens the copy and checks every cell of each range against the table and every cell outside the ranges against the original. `refuseReason` refuses before anything is written, per unit: `refused.noSheet`, `refused.empty`, `refused.outOfSheet`, `refused.overlapsTable` (any table on the sheet), `refused.overlapsMerge` (a merged range), `refused.overlapsFormula` (a cell with a formula in the range), `refused.unsupportedSheet` (a row or cell without its position, or a prefixed `sheetData`). In `executeTransform` a unit's sheet is its own sheet (sheet unit) or the sheet of its table (table unit); `output.range` is a cell, or a rectangle that is a limit (`refused.rangeTooSmall` if the result does not fit, nothing written outside it); two units that would overlap on one sheet give `refused.overlap` for the later one; the copy is named like New sheet, `output` is `<copy> [Sheet!E1:F4]`. Resolve adds planning errors for Preview: `output.rangeRequired`, `output.range`, `output.inPlaceScope` and `output.overlap` (two units on one sheet with the same range).
+Test that fails without it: `sheet-write.test.js` fails on a missing module and the nine in-place tests in `batch-transform.test.js` fail with `inPlace output is not supported yet`; with the formula check, the spans removal, the row ordering or the outside-the-range check removed one test each fails; with the change all pass.
+Checked outside Quoin: a typed range written into the first sheet of each of the 9 fixture workbooks, at two anchors (18 files): openpyxl reads all of them, every original cell of the sheet is unchanged, the new cells are typed (date, date-time, duration) and LibreOffice converts all 18.
+Result: Done locally; the real-Excel pack item is pending (open the copy in Excel: no repair prompt, the old cells and formulas on the sheet unchanged, the new range right, pivot tables and charts on the sheet still fine).
+Fails without: yes
+Changed expectations: `sheet-add.test.js` (mine) lost its "sheet writes are still not applied" test.
+Deviations: none beyond the edits listed.
+
+Decisions made inside gaps in the plan:
+
+- `range` is required; there is no default. It is relative to each unit's own sheet, so a sheet scope with `E1` writes `E1` on every sheet.
+- Values already in the range are replaced without a warning, because the recipe is explicit and the mode is labelled. Formulas, tables and merged ranges are never replaced.
+- Data validation, conditional formatting, hyperlinks and comments that sit on cells of the range are left as they are; the pack should look at one sheet that has them.
+- The copy's own sheet-level parts (drawings, pivot caches, `tableParts`) are never touched.
+
+## F3-09 Compute: Excel runs it on open
+
+Layer: execute, resolve
+Files: src/batch/execute/excel-compute.js (new), src/batch/execute/transform.js (routes `compute: 'excel'`), src/batch/resolve/resolve.js, tests/unit/batch-excel-compute.test.js (new, 12), tests/unit/batch-transform.test.js (one test replaced).
+Do: Q5 taken as "reuse an existing load target only". For a transform recipe with `compute: 'excel'`, `output.name` is the name of a query that already loads to a table or the data model; `output.mode` must be `inPlace` and `range` is not used. For each unit Quoin substitutes tokens in the recipe's M, checks that it parses, replaces that query's text in a copy of the workbook through Writer's `applyChangeSet` and sets `refreshOnLoad` on its connection, so Excel computes on open. Quoin does not evaluate the query, so a query that fails when it runs is still handed to Excel. Rows carry `compute: excel`, `output` is `<copy> [query Name]`, and `old_hash` and `new_hash` are the old and new query text hashes (other modes put the file hash in `new_hash`). Refusals, each with the same wording to offer "Quoin runs it now" in the UI: `refused.sheetUnit` (Excel reads tables and names only), `refused.noName`, `refused.noQuery`, `refused.noLoadTarget` (a connection-only query), `refused.overlap` (a second unit wants the same query). A query that does not parse is `failed / unit.parse` with line and column, an unknown token is `failed / recipe.token`. Resolve adds planning errors `output.nameRequired` and `output.excelMode` (any mode but `inPlace`), and the range checks of in-place output apply to Quoin compute only.
+Test that fails without it: all 12 fail with `excel compute is not supported yet` before the change and pass with it.
+Checked outside Quoin: the copies for `pq_simple.xlsx` and `pq_vba_complex.xlsm` open in openpyxl and convert in LibreOffice, and `connections.xml` has `refreshOnLoad="1"`. Neither can run Power Query, so whether Excel refreshes and gets the intended table is for the real-Excel pack.
+Result: Done locally; the real-Excel pack item is pending and matters most here: open the copy in Excel, let it refresh, and compare the table with the Quoin-computed result of the same recipe.
+Fails without: yes
+Changed expectations: my own earlier "compute excel is not written" test in `batch-transform.test.js` is now a guard test for a missing change writer.
+Deviations: none.
+
+Decisions made inside gaps in the plan:
+
+- Output mode `inPlace` is the only mode allowed for Excel compute, and `output.name` is the query to reuse; any other mode is the planning error `output.excelMode`. The plan says nothing about modes under Excel compute.
+- A query that loads only to the data model counts as a load target, because Excel refreshes it on open the same way.
+- If every unit is refused or fails there is no copy.
+
+## F3-10 Worked example (engine level only)
+
+Layer: test
+Files: tests/unit/batch-worked-example.test.js (new, 3 tests)
+Do: Fable §9 on twelve generated workbooks, none from a fixture file: seven with `Data` and `Notes`, three with `Data` and `Extra`, two `.xls` that cannot be opened. The recipe is transform, all sheets, new sheet `Clean`, Quoin computes, with seven pins to `Data`. Asserted: twelve rows in the plan, two skipped with `file.unsupportedExtension`, the summary is 10 files, 13 units, groups 7 files with 1 unit and 3 files with 2, no planning errors and no orphan pins; running the ten files gives ten workbooks and thirteen rows all `changed`, `verified` and `quoin`, the original bytes unchanged (compared by hash), the added sheets `Clean` (and `Clean-2` for the three-sheet files) with the expected cells.
+Result: Partly done, and I am saying so plainly. The browser spec `fable-worked-example.spec.js` is not written: it needs the Preview, Get and report screens (trunk's F2-10 onward), and no browser can run here. Two numbers of §9 cannot be asserted at all, because no card builds the feature behind them: step 4 says two rows warn that the query names a column the sheet does not have, are excluded, and their files fall back to inject only (so 11 changed and 2 skipped in the report). Today such a unit runs, fails inside the query as `failed / unit.error`, and the other units still land. Whoever owns Preview has to decide whether that is a static check (the index has no column names for sheets or tables, so it would need a read of each file) or a run-time outcome, and what "fall back to inject only" means.
+Fails without: n/a (it checks what the earlier cards built)
+Changed expectations: none.
+Deviations: this is not the test the card asks for.
+
+## Manager lane (MANAGER.md section 3) and Writer's review
+
+Layer: execute, core save, tests
+Files: tests/unit/batch-contract.test.js (new, 10), tests/unit/sheet-selfcheck.test.js (new, 19), tests/fixtures/generators/worked-example.js (new), tests/unit/batch-worked-example.test.js (now uses the generator), src/core/save.js (`selfCheck` and the sheet hooks), src/core/sheet/add-sheets.js, styles.js, write-ranges.js, src/batch/execute/transform.js, src/batch/execute/index.js (one option forwarded).
+Do:
+- Contract test: resolve into `executeFile` for query add, replace, rename and remove, module add, replace and remove, replace in code, and align for queries and modules. Each checks verified rows, that two runs with the same `now` give the same bytes (the wall-clock `duration_ms` column is left out of the comparison), and that an aligned output's index hash equals the recipe's hash. Rename and remove run on a query the run itself added, because loaded queries are refused by design; the refusals are tested too. Mutations of resolve (rename resolved as replace, align resolved to no action) fail three cases each.
+- Worked-example data: `tests/fixtures/generators/worked-example.js` exports `buildWorkedExample()` (the twelve workbooks as `{name, relPath, bytes}`: seven with `Data` and `Notes`, three with `Data` and `Extra`, two `.xls` that cannot open), `writeWorkedExample(dir)` (the same twelve on disk under `east/`, `west/` and `legacy/`), the tables and the Clean Sales query text. The workbooks are built by the product's own writer, not by Excel.
+- Writer's findings 1 and 2: fixed, in two layers. (a) The sheet writers return the final text of every part they touched (`texts`) and `selfCheck` requires the output to match it byte for byte. (b) They also return the exact fragments they inserted (`insertions`) and `selfCheck` removes those fragments from the output and requires the result to equal the original part, ignoring only the `count` attributes of `fonts`, `cellXfs` and `numFmts` in `styles.xml`; (b) does not trust the writer's own idea of the result. The sheet writes now run after the query and module writes, so the declared text is final. A `numFmts` element that is self-closing is refused as `check.part` instead of being rewritten. Tests: one per row of Writer's table, in the form "refused", and again "refused even when the writer itself had expected the damaged text". With layer (b) removed, 7 of those fail.
+- Findings 3 (`docProps/app.xml` not updated) and 4 (no VBA document module or `codeName` for a new sheet in a macro workbook) are for the real-Excel pack as Writer has them; nothing to change before that. Writer's `repro-sheet-gap.mjs` still reports its edits as accepted, because it declares no `partTexts` and no `insertions`; it should pass `written.texts` and `written.insertions` from `addSheetsToPackage` to show the fix.
+Result: Done locally.
+Fails without: yes (by mutation, as above).
+Changed expectations: none.
+Deviations: see the next section.
+
+## F3-08 in place is held (MANAGER.md section 3 item 4)
+
+I had built in place before the hold reached me (commit c15016d). It is now unreachable by default: `executeFile` takes `allowInPlace` (default false) and passes it to `executeTransform`; without it every unit of an in-place recipe is a `refused / refused.inPlaceHeld` row, nothing is written and no unit is run. Excel compute is a different path and is not affected. The tests pass `allowInPlace: true`. To release in place after the real-Excel check, pass `allowInPlace: true` from the worker, or make it the default in `executeFile`. The core writer (`ChangeSet.sheets.write`, `write-ranges.js`) is still in `applyChangeSet`, because the sheet seam is shared; nothing but a change set that asks for it reaches it. If the integrator would rather not carry F3-08 at all, the commit to leave out is c15016d plus the three hunks listed under F3-08 above; say so here and Scope will remove it.
+
 ## For trunk when merging
 
-- `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on the merge adds `src/batch/execute/units.js`, `src/batch/resolve/scope.js`, `src/batch/resolve/tokens.js` and `src/batch/resolve/align-source.js`.
+- `asset-manifest.json` is not committed here, so CI on this branch shows one browser failure: `T-PRIV-1` finds `/src/batch/resolve/tokens.js` loaded but not listed (resolve.js now imports it, and `scope.js`). Everything else on CI at 4e3517a is green: unit 1202 pass, 0 fail; browser 281 pass, 1 fail; 0 visual. Running `npm run build` on a merge of `fable-writer` and `fable-scope` into `fable` adds these runtime modules to the manifest: `src/batch/execute/{changes,combine,excel-compute,index,replace,transform,units}.js`, `src/batch/resolve/{align-source,scope,tokens}.js`, `src/core/export/limits.js`, `src/core/pq/members.js` and `src/core/sheet/{add-sheets,grid,names,sheet-xml,styles,write-ranges}.js`.
 - Files this branch changes: `src/batch/resolve/{resolve,scope,tokens}.js`, `src/batch/execute/units.js`, `src/core/snapshot.js`, three new test files, this progress file. It touches no file outside the Scope list. The merge of `fable` at e86d5e4 was clean.
 - Nothing in `src/app`, `src/workers` or `collect.js` calls the new code yet. Wiring is yours: call `inspectNeeds` then `resolvePlan`; in the worker call `runFileUnits` with the file's `{name, relPath}`, the file plan and the recipe, and hand each `run.table` to the output writer there.
 - Decisions to confirm with the user, because they change what people see: `{unit.index}` is the ordinal among resolved units; a name resolves to the latest earlier output, so a constant output name accumulates (chain); a sheet named like a table is `unit.nameCollision`; `{file.folder}` keeps its trailing slash.

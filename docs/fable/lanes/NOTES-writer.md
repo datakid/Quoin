@@ -1,5 +1,105 @@
 # Notes: writer lane
 
+## Queue
+
+| item | commit | verified |
+|---|---|---|
+| 1 merge `origin/fable`, run the ownership check | `8189766` | `check-ownership map` ok; `lane writer origin/fable` lists only `src/batch/execute/index.js` and `tests/unit/batch-execute.test.js`, both accepted by the integrator |
+| 2 split `module-excel-made` into three cases | `135fbe5` | pack tests 23 pass; lint 0; 22 cases, 27 outputs; the later cases move up by two |
+| 3 check audit of `src/core/pq/**` and `src/core/vba/**` | `4e69548`, `41248a6`, `0062158` | table below; unit 1779 tests, 1774 pass, 0 fail, 5 skipped; lint 0 |
+| 4 corpus gap check | not started | |
+| 5 one-page Excel README | not started | |
+| 6 review of the safety lane | not started | |
+| 7 final hand-back | not started | |
+
+## Item 3: every check, and the test that fails when it is off
+
+Method: each refusal, error code and anomaly in the two directories was disabled once in a scratch copy of the repo (the condition replaced by `false && (condition)`, or the anomaly push removed), and the tests that could reach it were run. 76 sites were found. 72 are checks; the other 4 (`dir-stream.js` 31 and 49, `vba-project.js` 21 and 80) only declare, copy or return the anomaly list.
+
+- Before: 19 of the 65 checks that could be disabled mechanically had a test that failed. 46 had none, because 22 reader checks and 8 decompressor checks share a handful of codes and the tests only asserted the code, so another check of the same code fired in its place. Of the 7 checks disabled by hand, the four `refused.*` codes were already pinned; `vba.dir` at `vba-project.js:18` and the `writable` flag were not.
+- Now: every check below is caught by a test that asserts the code and the message. The new tests are in `tests/unit/batch-writer-checks.test.js` and `tests/unit/batch-pq-members.test.js`.
+- My first run left half of every `A || B` condition active (precedence) and reported nearly everything as untested. It was found because basic checks such as the compound-file signature survived; the condition is now wrapped whole.
+
+| site | code | check | test that fails when the check is off |
+|---|---|---|---|
+| `pq/datamashup.js:12` | pq.length | {label} exceeds the buffer | T-PQ-4/5: bad length, trailing bytes and version are reported |
+| `pq/datamashup.js:33` | pq.package |  | a package that is not a zip is refused as a package problem, and a package with no section is r |
+| `pq/datamashup.js:65` | pq.section | Formulas/Section1.m is missing | a package that is not a zip is refused as a package problem, and a package with no section is r |
+| `pq/members.js:51` | pq.format | no readable query data | F2-03: a workbook with no query data cannot take an add |
+| `pq/members.js:52` | pq.format |  | T-SEC-3: a DataMashup with trailing bytes opens for reading but cannot be written |
+| `pq/members.js:53` | pq.format | section did not split cleanly | F2-03: query data that does not split cleanly, or has no item list or connections end, is refus |
+| `pq/members.js:54` | pq.format | metadata does not match the section | F2-03: a workbook whose metadata already does not match its section cannot take an add |
+| `pq/members.js:105` | pq.format | metadata has no item list | F2-03: query data that does not split cleanly, or has no item list or connections end, is refus |
+| `pq/members.js:121` | pq.format | no connections part | F2-03: names that cannot sit in a connection string, a connect for a query that is not being ad |
+| `pq/members.js:136` | pq.format | connections part has no end | F2-03: query data that does not split cleanly, or has no item list or connections end, is refus |
+| `pq/members.js:176` | refused.loaded | removal refused: query loads or has a connection | F2-03: a query added with a connection cannot be removed, because it now has a connection |
+| `pq/members.js:176` | refused.usedBy | removal refused: other queries use it | F2-04: a query that other queries use cannot be removed, and the user can be named |
+| `pq/members.js:177` | refused.renameLoaded | rename refused: query loads or has a connection | F2-05: a query that loads to a table or has a connection cannot be renamed |
+| `pq/members.js:177` | refused.referenced | rename refused: other queries use it | F2-05: a query that other queries use cannot be renamed and the users are named |
+| `pq/members.js:181` | pq.unknown |  | F2-04: removing a name the file does not have fails with pq.unknown, and remove with replace on |
+| `pq/members.js:190` | pq.unknown |  | F2-05: names that clash, cannot be written, or do not change are refused before anything is wri |
+| `pq/members.js:298` | m.parse | {problem.message} Line {problem.line}, column {problem.col}. | F2-03: text that does not parse is refused with m.parse and nothing is written |
+| `pq/writeback.js:8` | pq.unknown |  | unknown query edits are rejected |
+| `vba/cfb-read.js:23` | cfb.header | signature mismatch | readCfb names the header check that refused a file |
+| `vba/cfb-read.js:26` | cfb.header | byte order | readCfb names the header check that refused a file |
+| `vba/cfb-read.js:29` | cfb.header | version or sector size | readCfb names the header check that refused a file |
+| `vba/cfb-read.js:30` | cfb.header | mini sector size | readCfb names the header check that refused a file |
+| `vba/cfb-read.js:35` | limit.cfb | too many sectors | readCfb refuses a file with too many sectors, and a header that claims too many FAT sectors |
+| `vba/cfb-read.js:39` | cfb.range | sector {n} is out of range | readCfb refuses a DIFAT chain that loops and a sector number past the end of the file |
+| `vba/cfb-read.js:48` | limit.cfb | too many FAT sectors | readCfb refuses a file with too many sectors, and a header that claims too many FAT sectors |
+| `vba/cfb-read.js:59` | cfb.loop | DIFAT chain loops | readCfb refuses a DIFAT chain that loops and a sector number past the end of the file |
+| `vba/cfb-read.js:83` | cfb.chain | chain hits a special sector | readCfb names what is wrong with a FAT chain |
+| `vba/cfb-read.js:84` | cfb.loop | FAT chain loops | readCfb names what is wrong with a FAT chain |
+| `vba/cfb-read.js:86` | cfb.range | FAT index out of range | readCfb names what is wrong with a FAT chain |
+| `vba/cfb-read.js:101` | cfb.short | stream shorter than its declared size | readCfb names what is wrong with a FAT chain |
+| `vba/cfb-read.js:128` | cfb.root | root entry missing | readCfb refuses a directory with no root entry, an object of an unknown type, and a tree that l |
+| `vba/cfb-read.js:149` | cfb.loop | MiniFAT chain loops | readCfb names what is wrong with a chain in the mini stream |
+| `vba/cfb-read.js:150` | cfb.range | mini sector out of range | readCfb names what is wrong with a chain in the mini stream |
+| `vba/cfb-read.js:152` | cfb.loop | mini chain longer than the stream | readCfb names what is wrong with a chain in the mini stream |
+| `vba/cfb-read.js:157` | cfb.short | mini stream shorter than its declared size | readCfb names what is wrong with a chain in the mini stream |
+| `vba/cfb-read.js:166` | cfb.range | directory id out of range | readCfb refuses a directory with no root entry, an object of an unknown type, and a tree that l |
+| `vba/cfb-read.js:167` | cfb.loop | directory tree loops | readCfb refuses a directory with no root entry, an object of an unknown type, and a tree that l |
+| `vba/cfb-read.js:191` | cfb.type | unexpected object type | readCfb refuses a directory with no root entry, an object of an unknown type, and a tree that l |
+| `vba/cfb-write.js:186` | cfb.write | entry name too long | writeCfb refuses an entry name longer than 31 characters and accepts 31 |
+| `vba/codepages.js:81` | vba.codepage | code page {cp} is not supported | encodeText refuses a code page it does not know and a character the page cannot hold |
+| `vba/codepages.js:93` | vba.codepage | character {ch} cannot be saved in code page {cp} | encodeText refuses a code page it does not know and a character the page cannot hold |
+| `vba/codepages.js:106` | vba.codepage | character {ch} cannot be saved in code page {cp} | T-VBA-CP-1/2: code page encoders reject unmappable text and honour DBCS rules |
+| `vba/dir-stream.js:40` | anomaly | dir.truncated | parseDir reports each way a dir stream can be damaged, and nothing for a sound one |
+| `vba/dir-stream.js:47` | anomaly | dir.trailing | parseDir reports each way a dir stream can be damaged, and nothing for a sound one |
+| `vba/dir-stream.js:48` | anomaly | dir.terminator | parseDir reports each way a dir stream can be damaged, and nothing for a sound one |
+| `vba/ovba-decompress.js:11` | ovba.signature | container signature byte is not 0x01 | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:16` | ovba.chunk | truncated chunk header | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:18` | ovba.chunk | invalid chunk signature | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:22` | ovba.chunk | chunk overruns the container | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:35` | ovba.chunk | chunk exceeds 4096 bytes | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:38` | ovba.chunk | truncated copy token | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:41` | ovba.offset | copy token at the start of a chunk | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:46` | ovba.offset | copy offset precedes the chunk | decompress names the check that refused each hostile container |
+| `vba/ovba-decompress.js:47` | ovba.chunk | copy runs past the chunk | decompress names the check that refused each hostile container |
+| `vba/vba-project.js:13` | vba.dir | the VBA/dir stream is missing | a project with no VBA/dir stream is refused, and one with no PROJECT stream is flagged |
+| `vba/vba-project.js:18` | vba.dir | dir stream cannot be decompressed | a VBA/dir stream that cannot be decompressed is reported as a dir problem |
+| `vba/vba-project.js:28` | anomaly | vba.projectStream | a project with no VBA/dir stream is refused, and one with no PROJECT stream is flagged |
+| `vba/vba-project.js:67` | anomaly | vba.moduleCount | F2-07: selfCheck rejects an output whose module records do not match its module list |
+| `vba/vba-project.js:68` | (writable flag) | an anomaly makes a project not writable | a project whose dir stream has trailing bytes can be read but is not writable |
+| `vba/writeback.js:116` | vba.write | module records do not match the module list | writeVbaProject names what is wrong with an edit |
+| `vba/writeback.js:138` | vba.write | this project cannot be written | F2-07: a project that cannot be written cannot take an add or a remove |
+| `vba/writeback.js:148` | vba.write | module {name} cannot be removed: {problem} | F2-07: only standard and class modules can be removed; sheets and the workbook cannot, and unkn |
+| `vba/writeback.js:149` | vba.write | module {name} is both edited and removed | F2-07: only standard and class modules can be removed; sheets and the workbook cannot, and unkn |
+| `vba/writeback.js:153` | vba.write | unknown module {name} | writeVbaProject names what is wrong with an edit |
+| `vba/writeback.js:161` | vba.write | module {name} cannot be added: {problem} | F2-07: names VBA would not accept, names already in use and names that clash with a stream are  |
+| `vba/writeback.js:162` | vba.write | module {name} is added twice | F2-07: two adds that differ only by case, or an add of a module that is also removed, are refus |
+| `vba/writeback.js:220` | check.vba | module missing after write | verifyVbaProject names a module that is missing or whose text changed |
+| `vba/writeback.js:221` | check.vba | module text changed during write | verifyVbaProject names a module that is missing or whose text changed |
+
+### No test, because no input reaches the check
+
+- `vba/cfb-read.js:89` chain longer than the FAT: the loop check (line 84) and the FAT index check (line 86) fire first. More distinct sectors than the FAT has entries cannot exist.
+- `vba/cfb-write.js:142`: sector accounting inside the writer; only a bug in the writer trips it.
+- `vba/writeback.js:143`: self-check that a compressed module decompresses to its text; only a bug in the compressor trips it.
+- `vba/writeback.js:207`: an added module stream missing after it was inserted; only a bug in the writer trips it.
+
+## Earlier work
+
 ## Changed
 
 - `30e7599` F2-03: `ChangeSet.queries.connect` writes the connection-only element for an added query. Files: `src/core/pq/members.js`, `tests/unit/batch-pq-members.test.js`. Opt-in; default behaviour unchanged.
@@ -105,9 +205,11 @@ test('the macro project of the workbook is unchanged after a sheet is added', as
 });
 ```
 
-## To the integrator: one more pack case (owns `scripts/make-excel-pack.mjs`)
+## One more pack case, for the integrator's word
 
-This is what lets the user check the `connect` element in real Excel, and so decide whether it ever becomes the default. The case is the last one, number 21, so cases 1 to 20 keep their numbers (the user opened part 1 by those numbers). Checked in a scratch copy: `excel-pack.test.js` and `excel-pack-claims.test.js` give 22 passed, 0 failed with the new counts, and `--only=writer-added` still builds. The output opens in `openWorkbook` with `Added` carrying `Query - Added` and no warnings.
+`scripts/make-excel-pack.mjs` is in the writer row since `cb02733`, so I can apply this, but it adds a case to the user's one sitting in Excel, so it waits for the integrator. It would go last, so no existing case changes number: it would be case 23 after the split in item 2, and the counts in `excel-pack.test.js` would become 23 cases and 28 outputs. The diff below was made before the split and needs those counts and context lines redone.
+
+This is what lets the user check the `connect` element in real Excel, and so decide whether it ever becomes the default. Checked in a scratch copy: `excel-pack.test.js` and `excel-pack-claims.test.js` give 22 passed, 0 failed with the new counts, and `--only=writer-added` still builds. The output opens in `openWorkbook` with `Added` carrying `Query - Added` and no warnings.
 
 ```diff
 diff --git a/scripts/make-excel-pack.mjs b/scripts/make-excel-pack.mjs
@@ -199,4 +301,4 @@ index 2833207..1dbae4b 100644
 - Safety lane: apply the `save.js` fix and add the test above; Finding 5 is the one open defect that stops a sheet from being added to an XlsxWriter workbook.
 - The `Claude-Session` trailer is left off these commits; this session has no session URL.
 
-HAND BACK 30e7599
+HAND BACK 0062158

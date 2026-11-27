@@ -8,7 +8,7 @@ The rule: one owner per file. A lane edits only the paths listed for it. Every o
 
 | Lane | Owns | Does not touch | Brief |
 |---|---|---|---|
-| integrator | everything not listed for a lane: `src/app/**`, `src/workers/**`, `src/batch/**`, `src/ui/strings.js`, `src/core/**` except `save.js` and `sheet/**`, `docs/**` except the lane notes, `asset-manifest.json`, `tests/lint/**`, `tests/fixtures/**`, `tests/unit/**` except the lane tests, `tests/__visual__/**`, `scripts/**`, `.github/workflows/ci.yml`, `openxml.yml`, `perf.yml`, `package*.json` | the paths below | this file |
+| integrator | everything not listed for a lane: `src/app/**`, `src/workers/**`, `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/batch/recipe/**`, `src/batch/index/**`, `src/ui/strings.js`, the rest of `src/core/`, `docs/**` except the lane notes, `asset-manifest.json`, `tests/lint/**`, `tests/fixtures/**`, `tests/unit/**` except the lane tests (see `ownership.json`), `tests/__visual__/**`, `scripts/**`, `.github/workflows/ci.yml`, `openxml.yml`, `perf.yml`, `package*.json` | the paths below | this file |
 | harness | `playwright.config.js`, `.github/workflows/browsers.yml`, `tests/e2e/helpers.js`, and the specs for apply and collect worker, recipe tokens, print, refinement, privacy, safety | `src/**`, `styles/**` | `docs/fable/lanes/harness.md` |
 | ui | `src/ui/grid.js`, `src/ui/set/**`, `styles/grid.css`, `styles/set.css`, and the specs for matrix, grid, grid limits, perf, row diff, responsive | `src/app/**`, `src/ui/strings.js`, `tests/e2e/helpers.js` | `docs/fable/lanes/ui.md` |
 | safety | `src/core/save.js`, `src/core/sheet/**`, `tests/unit/sheet-*.test.js`, `tests/unit/save-safety.test.js` | `src/batch/**`, `src/app/**`, anything in `src/core/` outside `sheet/` and `save.js` | `docs/fable/lanes/safety.md` |
@@ -48,17 +48,26 @@ Shared files and who changes them:
 - Local Chromium specs: `/home/claude/lanes/e2e-<lane>.sh tests/e2e/<spec>.spec.js`. Every lane has its own port, so lanes can run at the same time.
 - After a change under `src/` or `styles/` that a test reads the manifest for: `node scripts/build-manifest.mjs`, run the tests, then `git checkout -- asset-manifest.json`.
 
-## Earlier agents and work that has no lane yet
+## Agents in their own sessions: Writer and Scope
 
-The trunk, Writer and Scope agents were stopped by the user on 2026-11-26 and each left a handover: `docs/fable/handover/HANDOVER.md` (trunk), `docs/fable/HANDOVER-writer.md` on `fable-writer`, `docs/fable/HANDOVER-scope.md` on `fable-scope`. None of them runs now. If the user restarts one, it does not work until the integrator has given it a row in `ownership.json`, so it cannot land on a file a lane owns.
+Writer (branch `fable-writer`) and Scope (branch `fable-scope`) run in the user's own sessions, not in this clone. They have rows in `ownership.json` (`writer`, `scope`) and briefs: `docs/fable/lanes/writer.md`, `docs/fable/lanes/scope.md`. They work on their own existing branch, merge `origin/fable` before each push, never rebase, never force-push, never create a branch. The integrator merges their branches into `fable`. The trunk agent is finished: its work is merged and its handover is `docs/fable/handover/HANDOVER.md`.
 
-| Open work | Proposed owner | Why it is not running now |
+| Where | Owner | Rule |
 |---|---|---|
-| Writer's connection for an added query (`docs/fable/handover/writer-connection-wip.patch` on `fable-writer`: one escaping test fails, `connect` stays opt-in) | a `writer` lane: `src/core/pq/members.js`, `src/core/pq/writeback.js`, `src/batch/execute/changes.js`, `tests/unit/batch-pq-members.test.js` | the user has not said whether to continue it; shipping it as default needs the real-Excel result for pack 3 case 02 |
-| Scope's carry-over to `fable`: inject tokens (D1), skipped missing-column rows (D3), the contract test, the worked-example generator | a `scope` lane: `src/batch/resolve/**`, `src/batch/execute/units.js`, `transform.js`, `excel-compute.js`, `combine.js`, its tests and generators | section 9 decision 1 (missing-column rows read `failed`, not `skipped`) is open with the user, and Scope's commits are interleaved with F3-08 and F3-09, which stay held, so each piece must be taken by hand |
-| Scope's lane violations (items 1 to 5 and 7 in `HANDOVER-scope.md`) | integrator decides keep, move or revert, one by one | `save.js` and `sheet/**` go to the safety lane now; the rest waits |
-| F4-03 wiring (`createRecipeStore` in `main.js`, Stored recipes list, `rememberSet`), F4-02, F4-04 | integrator, after the lanes are merged | `main.js` and `strings.js` are integrator files and the lanes are not allowed to touch them |
-| F3-08 in place, F3-09 Excel computes on open | nobody | held until real Excel results exist |
+| `src/core/save.js`, `src/core/sheet/**`, the `sheet-*` tests | safety lane | Writer and Scope read them and send changes in their notes |
+| `src/core/pq/**`, `src/core/vba/**`, `changes.js`, `replace.js`, the writer tests | writer | no one else edits them |
+| `src/batch/resolve/**`, `units.js`, `transform.js`, `combine.js`, `src/core/export/xlsx.js`, the scope tests | scope | no one else edits them |
+| `src/batch/execute/index.js`, `collect.js`, `run-file.js` | integrator | Writer's three lines (commit `30e7599`) and Scope's two lines (the `withInjectTokens` import and call) are accepted exceptions; everything else is requested in notes |
+
+Work with no lane yet:
+
+| Open work | Owner | Why it is not running |
+|---|---|---|
+| F4-03 wiring (`createRecipeStore` in `main.js`, Stored recipes list, `rememberSet`), F4-02, F4-04 | integrator, after the ui lane is merged | `main.js` and `strings.js` are integrator files and the ui lane owns `src/ui/set/**` for now |
+| D2 (hide `unchanged` rows by default with a count and a filter), strings for Scope's codes, the closing run message when every non-changed row is skipped | integrator, after Scope's clean tree is merged | the codes must exist in code before the strings (lint T-E-11 rejects unused keys) |
+| Browser specs for F2-04 to F2-09 (query remove and rename, module replace, replace in code, align) | not assigned | needs a decision on who owns new `tests/e2e/` files for Writer's cards |
+| F3-08 in place, F3-09 Excel computes on open | nobody | held until X03 and the other Excel results exist (D4) |
+| Writer's recipe field for `connect` | nobody | held until the user reports pack 3 case 02 from Excel |
 
 ## What the integrator does
 

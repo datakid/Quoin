@@ -35,17 +35,6 @@
         "docs/fable/lanes/NOTES-ui.md"
       ]
     },
-    "safety": {
-      "brief": "docs/fable/lanes/safety.md",
-      "owns": [
-        "src/core/save.js",
-        "src/core/sheet/**",
-        "tests/unit/sheet-*.test.js",
-        "tests/unit/save-safety.test.js",
-        "tests/unit/batch-naming.test.js",
-        "docs/fable/lanes/NOTES-safety.md"
-      ]
-    },
     "writer": {
       "brief": "docs/fable/lanes/writer.md",
       "branch": "fable-writer",
@@ -73,40 +62,50 @@
         "docs/fable/HANDOVER-writer.md",
         "docs/fable/MEMORY-writer-summary.txt",
         "docs/fable/handover/writer-*",
-        "docs/fable/lanes/NOTES-writer.md"
+        "docs/fable/lanes/NOTES-writer.md",
+        "scripts/make-excel-kit.mjs",
+        "scripts/read-excel-results.mjs",
+        "tests/unit/excel-kit*.test.js",
+        "tests/unit/pq-*.test.js",
+        "tests/unit/vba-*.test.js"
       ]
     },
     "scope": {
       "brief": "docs/fable/lanes/scope.md",
       "branch": "fable-scope",
       "owns": [
-        "src/batch/resolve/**",
-        "src/core/snapshot.js",
-        "src/core/export/xlsx.js",
-        "src/core/export/limits.js",
-        "src/batch/execute/units.js",
-        "src/batch/execute/transform.js",
+        "docs/fable/HANDOVER-scope.md",
+        "docs/fable/MESSAGES-scope.md",
+        "docs/fable/PROGRESS-scope.md",
+        "docs/fable/REMAINING-WORK-scope.md",
+        "docs/fable/lanes/NOTES-scope.md",
+        "scripts/make-excel-pack-scope.mjs",
         "src/batch/execute/combine.js",
         "src/batch/execute/excel-compute.js",
-        "scripts/make-excel-pack-scope.mjs",
+        "src/batch/execute/transform.js",
+        "src/batch/execute/units.js",
+        "src/batch/resolve/**",
+        "src/core/export/limits.js",
+        "src/core/export/xlsx.js",
+        "src/core/save.js",
+        "src/core/sheet/**",
+        "src/core/snapshot.js",
         "tests/fixtures/generators/worked-example.js",
+        "tests/unit/batch-chain.test.js",
+        "tests/unit/batch-combined.test.js",
+        "tests/unit/batch-contract.test.js",
+        "tests/unit/batch-naming.test.js",
         "tests/unit/batch-resolve*.test.js",
         "tests/unit/batch-scope.test.js",
         "tests/unit/batch-tokens.test.js",
+        "tests/unit/batch-transform*.test.js",
         "tests/unit/batch-units.test.js",
-        "tests/unit/batch-chain.test.js",
-        "tests/unit/batch-transform.test.js",
-        "tests/unit/batch-combined.test.js",
-        "tests/unit/batch-contract.test.js",
         "tests/unit/batch-worked-example.test.js",
         "tests/unit/excel-pack-scope.test.js",
-        "tests/unit/export.test.js",
         "tests/unit/export-*.test.js",
-        "docs/fable/PROGRESS-scope.md",
-        "docs/fable/MESSAGES-scope.md",
-        "docs/fable/HANDOVER-scope.md",
-        "docs/fable/REMAINING-WORK-scope.md",
-        "docs/fable/lanes/NOTES-scope.md"
+        "tests/unit/export.test.js",
+        "tests/unit/save-safety.test.js",
+        "tests/unit/sheet-*.test.js"
       ]
     }
   }

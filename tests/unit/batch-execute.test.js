@@ -645,3 +645,42 @@ test('F2-07: a rename of a module in a file with no macros is refused the same w
   const res = await executeFile(await open(), modulePlan(['Module1'], 'rename'), { now: NOW, recipe: recipeFor({ target: 'module', op: 'rename', name: 'Module1', newName: 'Renamed' }) });
   assert.equal(res.rows[0].reason_code, 'refused.unsupported');
 });
+
+test('F2-03: a refresh-on-open request that cannot be applied is reported as a warning, not dropped silently', async () => {
+  const wb = await open();
+  const added = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra', refreshOnLoad: true }) });
+  assert.deepEqual(added.warnings, [{ code: 'refresh.notApplied', part: 'Extra' }]);
+  const quiet = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra', refreshOnLoad: false }) });
+  assert.deepEqual(quiet.warnings, []);
+  const unset = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra', refreshOnLoad: undefined }) });
+  assert.deepEqual(unset.warnings, []);
+  const refused = await executeFile(wb, filePlanFor(['StudentResults'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'StudentResults', refreshOnLoad: true }) });
+  assert.deepEqual(refused.warnings, []);
+});
+
+test('F2-02: a replace that can set refresh on open does not warn, and one on a query with no connection does', async () => {
+  const wb = await open();
+  const flagged = await executeFile(wb, filePlanFor(['StudentResults']), { now: NOW, recipe: recipeFor({ refreshOnLoad: true }) });
+  assert.deepEqual(flagged.warnings, []);
+  const base = await withAdded('Extra');
+  const noConnection = await executeFile(base, filePlanFor(['Extra']), { now: NOW, recipe: recipeFor({ name: 'Extra', text: 'let\n    Source = 9\nin\n    Source', refreshOnLoad: true }) });
+  assert.deepEqual(noConnection.warnings, [{ code: 'refresh.notApplied', part: 'Extra' }]);
+  const unchanged = await executeFile(base, filePlanFor(['Extra']), { now: NOW, recipe: recipeFor({ name: 'Extra', refreshOnLoad: true }) });
+  assert.deepEqual(unchanged.warnings, []);
+});
+
+test('F2-03: the warnings of a file are kept and the refresh warning comes after them', async () => {
+  const wb = await open();
+  wb.warnings = [{ code: 'pq.versionX', part: 'customXml/item1.xml' }];
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra', refreshOnLoad: true }) });
+  assert.deepEqual(res.warnings, [{ code: 'pq.versionX', part: 'customXml/item1.xml' }, { code: 'refresh.notApplied', part: 'Extra' }]);
+});
+
+test('F2-03: a write that fails does not report a refresh warning for a change that was never written', async () => {
+  const wb = await open();
+  const res = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra', text: 'let Source = in', refreshOnLoad: true }) });
+  assert.equal(res.rows[0].reason_code, 'm.parse');
+  assert.deepEqual(res.warnings, []);
+  const stopped = await executeFile(wb, filePlanFor(['Extra'], 'add'), { now: NOW, recipe: recipeFor({ op: 'add', name: 'Extra', refreshOnLoad: true }), shouldStop: () => true });
+  assert.deepEqual(stopped.warnings, []);
+});

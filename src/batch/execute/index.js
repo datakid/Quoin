@@ -5,10 +5,12 @@ import { sha256Bytes } from '../index/hash.js';
 import { zipClock } from './collect.js';
 import { planChanges, reportRow } from './changes.js';
 import { executeTransform } from './transform.js';
+import { withInjectTokens } from '../resolve/tokens.js';
 
 const withoutTexts = ({ texts, ...rest }) => rest;
 
 export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '', acknowledgeSignature = false, alignText, includeTexts = false, shouldStop = () => false }) {
+  recipe = withInjectTokens(recipe, meta || { name: wb.fileName, relPath: wb.fileName });
   if (recipe.recipe === 'transform') return executeTransform(wb, filePlan, recipe, { now, meta, runId, apply: (changeSet) => applyChangeSet(wb, changeSet, { now: zipClock(now), refreshOnLoad: false, checkSection }) });
   const started = performance.now();
   const file = meta || { name: wb.fileName, relPath: wb.fileName };
@@ -39,7 +41,8 @@ export async function executeFile(wb, filePlan, { now, recipe, meta, runId = '',
     return { ...none, rows: rowsFor((o) => (o.change ? { verdict, reason_code: e.code, verified: false } : { verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'unchanged' })) };
   }
   const sha256 = await sha256Bytes(written.bytes);
-  return { fileId: filePlan.fileId, bytes: written.bytes, sha256, changes, warnings, rows: rowsFor((o) => ({ verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'changed' || o.verdict === 'unchanged', signature_removed: o.verdict === 'changed' && written.signatureRemoved })) };
+  const notApplied = outcomes.filter((o) => o.warning).map((o) => o.warning);
+  return { fileId: filePlan.fileId, bytes: written.bytes, sha256, changes, warnings: [...warnings, ...notApplied], rows: rowsFor((o) => ({ verdict: o.verdict, reason_code: o.reason_code, verified: o.verdict === 'changed' || o.verdict === 'unchanged', signature_removed: o.verdict === 'changed' && written.signatureRemoved })) };
 }
 
 export function failedResult(filePlan, code, { recipe, meta, runId = '' }) {

@@ -120,6 +120,7 @@ function summarise(files) {
 function recipeErrors(recipe, indexes) {
   const errors = [];
   if (recipe.output && typeof recipe.output.name === 'string') for (const token of unknownTokens(recipe.output.name)) errors.push({ code: 'recipe.token', detail: token });
+  if (recipe.recipe === 'inject' && typeof recipe.inject.text === 'string') for (const token of unknownQueryTokens(recipe.inject.text)) errors.push({ code: 'recipe.token', detail: token });
   if (recipe.recipe === 'inject' && recipe.inject.op === 'add' && recipe.inject.match === 'pattern') errors.push({ code: 'recipe.patternAdd', detail: recipe.inject.name });
   if (recipe.recipe === 'align' && !alignSourceFor(recipe.align, indexes)) errors.push({ code: 'align.noSource', detail: recipe.align.hash });
   if (recipe.recipe === 'transform') {

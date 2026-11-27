@@ -184,3 +184,15 @@ test('a unit run keeps one result per unit and reports how long it took', async 
   assert.deepEqual(run.flags, []);
   assert.equal(run.outputName, null);
 });
+
+test('a query that names a column or field the unit does not have is skipped, with the name, and every other error stays an error', async () => {
+  const wb = await open('plain_table.xlsx');
+  const col = await runUnit(wb, FILE, sheetUnit('Toy Group Scores'), recipeWith('Table.SelectColumns(' + CONTENT + ', {"Nope"})'), { now: NOW });
+  assert.deepEqual([col.status, col.table, col.error.code, col.error.detail], ['skipped', null, 'unit.missingColumn', 'Nope']);
+  const field = await runUnit(wb, FILE, sheetUnit('Toy Group Scores'), recipeWith('Table.SelectRows(' + CONTENT + ', each [Nope] <> null)'), { now: NOW });
+  assert.deepEqual([field.status, field.error.code, field.error.detail], ['skipped', 'unit.missingColumn', 'Nope']);
+  const other = await runUnit(wb, FILE, sheetUnit('Toy Group Scores'), recipeWith('Excel.CurrentWorkbook(){[Name="Nope"]}[Content]'), { now: NOW });
+  assert.deepEqual([other.status, other.error.code], ['error', 'unit.error']);
+  const boom = await runUnit(wb, FILE, sheetUnit('Toy Group Scores'), recipeWith('error "boom"'), { now: NOW });
+  assert.deepEqual([boom.status, boom.error.code], ['error', 'unit.error']);
+});

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { openWorkbook } from '../../src/core/workbook.js';
 import { applyChangeSet, emptyChangeSet, selfCheck } from '../../src/core/save.js';
 import { buildDataMashup } from '../../src/core/pq/datamashup.js';
-import { removeMetadataItems, renameMetadataItems } from '../../src/core/pq/members.js';
+import { removeMetadataItems, renameMetadataItems, connectionFragment, queryReferencers, writeQueryChanges } from '../../src/core/pq/members.js';
 import { base64Encode } from '../../src/core/bytes.js';
 import { applyEdits, parseXml, textContentEdit } from '../../src/core/xml.js';
 import { checkSection } from '../../src/core/m/engine.js';
@@ -470,3 +470,217 @@ test('F2-03: trailing space after the last member is kept when a member is added
     assert.equal(gone.back.mashup.section.text, wb.mashup.section.text, JSON.stringify(tail));
   }
 });
+
+async function connectTo(wb, names, extra = {}) {
+  const cs = emptyChangeSet();
+  for (const [name, text] of names) cs.queries.add.set(name, text);
+  cs.queries.connect = new Set(names.map(([name]) => name));
+  for (const name of extra.refresh || []) cs.refreshOnLoad.add(name);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection, refreshOnLoad: false });
+  return { res, back: await openWorkbook(res.bytes, 'out.xlsx') };
+}
+
+test('F2-03: a connection written for an added query is the element Excel writes for a connection-only query', async () => {
+  const complex = await openWorkbook(fixture('pq_vba_complex.xlsm'), 'pq_vba_complex.xlsm');
+  const text = complex.connections.text.text;
+  const real = /<connection id="1" xr16:uid="\{[^}]+\}"[^>]*>.*?<\/connection>/s.exec(text)[0];
+  assert.ok(real.includes('Query - fGetNamedRange') && !real.includes('saveData'));
+  const uid = /xr16:uid="\{([^}]+)\}"/.exec(real)[1];
+  assert.equal(connectionFragment({ id: 1, name: 'fGetNamedRange', uid, refresh: false, withUid: true }), real);
+  assert.equal(connectionFragment({ id: 4, name: 'Extra', uid: 'AAAA', refresh: false, withUid: false }).includes('xr16:uid'), false);
+  assert.ok(connectionFragment({ id: 4, name: 'Extra', uid: 'AAAA', refresh: true, withUid: false }).includes('background="1" refreshOnLoad="1"'));
+});
+
+test('F2-03: an added query can get a connection-only connection, and then it is paired and opens clean', async () => {
+  const wb = await openSimple();
+  const { res, back } = await connectTo(wb, [['Extra', NEW_M]]);
+  assert.equal(res.queriesChanged, 1);
+  assert.deepEqual(back.warnings, []);
+  const added = back.queries.find((q) => q.name === 'Extra');
+  assert.deepEqual(added.load, { kind: 'connection' });
+  assert.equal(added.connection.name, 'Query - Extra');
+  assert.equal(added.connection.id, '2');
+  assert.equal(added.connection.refreshOnLoad, false);
+  assert.deepEqual(back.queries.map((q) => q.name), ['StudentResults', 'Extra']);
+  assert.deepEqual(back.pkg.zip.entries.map((e) => e.name), wb.pkg.zip.entries.map((e) => e.name));
+  const before = wb.connections.text.text;
+  const after = back.connections.text.text;
+  assert.equal(after, before.replace('</connections>', `${connectionFragment({ id: 2, name: 'Extra', uid: /xr16:uid="\{([^}]+)\}"/.exec(after.slice(before.length - 14))[1], refresh: false, withUid: true })}</connections>`));
+  assert.equal(back.queries[0].connection.id, '1');
+});
+
+test('F2-03: several connections get the next ids in order and the connection id is not reused', async () => {
+  const wb = await openSimple();
+  const { back } = await connectTo(wb, [['Zeta', NEW_M], ['Alpha', NEW_M]]);
+  assert.deepEqual(back.queries.map((q) => [q.name, q.connection && q.connection.id]), [['StudentResults', '1'], ['Zeta', '2'], ['Alpha', '3']]);
+  const complex = await openWorkbook(fixture('pq_vba_complex.xlsm'), 'pq_vba_complex.xlsm');
+  const more = await connectTo(complex, [['Extra', NEW_M]]);
+  assert.equal(more.back.queries.find((q) => q.name === 'Extra').connection.id, '4');
+});
+
+test('F2-03: a connection written for an added query can ask to refresh on open', async () => {
+  const wb = await openSimple();
+  const { back } = await connectTo(wb, [['Extra', NEW_M]], { refresh: ['Extra'] });
+  assert.equal(back.queries.find((q) => q.name === 'Extra').connection.refreshOnLoad, true);
+  assert.equal(back.queries[0].connection.refreshOnLoad, false);
+});
+
+test('F2-03: names that cannot sit in a connection string, a connect for a query that is not being added, and a workbook with no connections part are refused', async () => {
+  const wb = await openSimple();
+  for (const name of ['a;b', 'a"b', 'a]b', 'a=b']) {
+    await assert.rejects(() => connectTo(wb, [[name, NEW_M]]), TypeError, name);
+  }
+  const cs = emptyChangeSet();
+  cs.queries.add.set('Extra', NEW_M);
+  cs.queries.connect = new Set(['Other']);
+  await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError);
+  const bare = await openSimple();
+  bare.connections = { ...bare.connections, part: null };
+  await assert.rejects(() => connectTo(bare, [['Extra', NEW_M]]), (e) => e.code === 'pq.format');
+  const taken = await openSimple();
+  taken.connections.text.text = taken.connections.text.text.replace('</connections>', '<connection id="9" name="Query - Extra" type="5"/></connections>');
+  await assert.rejects(() => connectTo(taken, [['Extra', NEW_M]]), TypeError);
+});
+
+test('F2-03: without the connect request an added query still has no connection', async () => {
+  const wb = await openSimple();
+  const { back } = await addTo(wb, [['Extra', NEW_M]]);
+  assert.equal(back.queries.find((q) => q.name === 'Extra').connection, null);
+  assert.equal(back.connections.text.text, wb.connections.text.text);
+});
+
+test('F2-03: a query added with a connection cannot be removed, because it now has a connection', async () => {
+  const wb = await openSimple();
+  const { back } = await connectTo(wb, [['Extra', NEW_M]]);
+  const cs = emptyChangeSet();
+  cs.queries.remove.add('Extra');
+  await assert.rejects(() => applyChangeSet(back, cs, { now: NOW }), (e) => e instanceof TypeError && /refused.loaded/.test(e.message));
+});
+
+test('F2-03: a connections part that does not declare the xr16 namespace gets a connection with no uid, and still parses', async () => {
+  const wb = await openSimple();
+  wb.connections.text.text = wb.connections.text.text.replace(/ xmlns:xr16="[^"]*"/, '').replace(/ xr16:uid="[^"]*"/g, '').replace(/ mc:Ignorable="[^"]*"/, '');
+  assert.ok(!wb.connections.text.text.includes('xr16'));
+  const { back } = await connectTo(wb, [['Extra', NEW_M]]);
+  assert.ok(!back.connections.text.text.includes('xr16'));
+  assert.equal(back.queries.find((q) => q.name === 'Extra').connection.name, 'Query - Extra');
+  assert.deepEqual(back.warnings, []);
+});
+
+function rawConnections(back) {
+  return back.connections.text.text.match(/<connection [^]*?<\/connection>/g) || [];
+}
+
+function assertStrictAttributes(raw) {
+  assert.ok(!/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-f]+;)/i.test(raw), `bare ampersand in ${raw}`);
+  assert.ok(!/="[^"]*<[^"]*"/.test(raw), `bare less-than in an attribute value in ${raw}`);
+}
+
+test('F2-03: a name with characters that XML must escape is escaped in the connection and read back', async () => {
+  const wb = await openSimple();
+  const { back } = await connectTo(wb, [['R&D (2026) <draft>', NEW_M]]);
+  const added = back.queries.find((q) => q.name === 'R&D (2026) <draft>');
+  assert.equal(added.connection.name, 'Query - R&D (2026) <draft>');
+  assert.equal(added.connection.location, 'R&D (2026) <draft>');
+  const raw = rawConnections(back).find((c) => c.includes('draft'));
+  assertStrictAttributes(raw);
+  assert.ok(raw.includes('name="Query - R&amp;D (2026) &lt;draft'));
+  assert.ok(raw.includes("description=\"Connection to the 'R&amp;D (2026) &lt;draft"));
+  assert.ok(raw.includes('Location=R&amp;D (2026) &lt;draft'));
+  assert.ok(raw.includes('command="SELECT * FROM [R&amp;D (2026) &lt;draft'));
+  const el = parseXml(back.connections.text.text, 'xl/connections.xml').root.childrenNamed('connection').find((c) => c.attr('name') === 'Query - R&D (2026) <draft>');
+  assert.equal(el.attr('description'), "Connection to the 'R&D (2026) <draft>' query in the workbook.");
+  assert.equal(el.child('dbPr').attr('command'), 'SELECT * FROM [R&D (2026) <draft>]');
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-03: names with an apostrophe, an ampersand or angle brackets survive the connection round trip', async () => {
+  const names = ["Owner's list", 'a&b', 'x<y', 'x>y', '100% (net)'];
+  const wb = await openSimple();
+  const { back } = await connectTo(wb, names.map((n) => [n, NEW_M]));
+  const raws = rawConnections(back);
+  assert.equal(raws.length, names.length + 1);
+  for (const raw of raws) assertStrictAttributes(raw);
+  const root = parseXml(back.connections.text.text, 'xl/connections.xml').root;
+  for (const name of names) {
+    const el = root.childrenNamed('connection').find((c) => c.attr('name') === `Query - ${name}`);
+    assert.ok(el, name);
+    assert.equal(el.child('dbPr').attr('command'), `SELECT * FROM [${name}]`);
+    assert.equal(back.queries.find((q) => q.name === name).connection.location, name);
+  }
+  assert.deepEqual(back.warnings, []);
+});
+
+async function wrappedWorkbook(width) {
+  const wb = await openSimple();
+  const doc = parseXml(wb.mashup.text.text, wb.mashup.part);
+  const flat = doc.root.text().replace(/\s+/g, '');
+  const wrapped = flat.match(new RegExp(`.{1,${width}}`, 'g')).join('\r\n');
+  const pkg = wb.pkg.clone();
+  await pkg.setText(wb.mashup.part, applyEdits(wb.mashup.text.text, [textContentEdit(doc.root, wrapped)]), wb.mashup.text);
+  return openWorkbook(await pkg.write({ now: NOW }), 'wrapped.xlsx');
+}
+
+test('F2-03: a DataMashup stored in wrapped lines is written back in lines of the same width', async () => {
+  const wb = await wrappedWorkbook(76);
+  assert.equal(wb.mashup.lineLength, 76);
+  const cs = emptyChangeSet();
+  cs.queries.replace.set('StudentResults', NEW_M);
+  const res = await applyChangeSet(wb, cs, { now: NOW, checkSection });
+  const back = await openWorkbook(res.bytes, 'out.xlsx');
+  assert.equal(back.mashup.lineLength, 76);
+  const lines = parseXml(back.mashup.text.text, back.mashup.part).root.text().split('\r\n');
+  assert.ok(lines.length > 2);
+  for (const line of lines.slice(0, -1)) assert.equal(line.length, 76);
+  assert.ok(lines.at(-1).length > 0 && lines.at(-1).length <= 76);
+  assert.equal(back.queries.find((q) => q.name === 'StudentResults').original, NEW_M);
+  assert.deepEqual(back.warnings, []);
+});
+
+test('F2-04: the list of queries that use a name is empty for a workbook with no query data', async () => {
+  const wb = await openWorkbook(fixture('plain_table.xlsx'), 'plain_table.xlsx');
+  assert.ok(!wb.mashup);
+  assert.deepEqual(queryReferencers(wb, 'Anything'), []);
+});
+
+const replaceOnly = (name, text = NEW_M) => {
+  const cs = emptyChangeSet();
+  cs.queries.replace.set(name, text);
+  return cs.queries;
+};
+
+async function writeDirect(wb, queries, options = {}) {
+  const pkg = wb.pkg.clone();
+  const result = await writeQueryChanges(wb, pkg, queries, { now: NOW, checkSection, ...options });
+  return { pkg, result };
+}
+
+async function refreshFlag(pkg, wb, name) {
+  const query = wb.queries.find((x) => x.name === name);
+  const doc = parseXml((await pkg.text(wb.connections.part)).text, wb.connections.part);
+  return doc.root.childrenNamed('connection').find((c) => c.attr('id') === query.connection.id).attr('refreshOnLoad');
+}
+
+test('F2-02: a replaced query refreshes on open by default, and only when asked otherwise', async () => {
+  const wb = await openSimple();
+  assert.notEqual(await refreshFlag(wb.pkg, wb, 'StudentResults'), '1');
+  const byDefault = await writeDirect(wb, replaceOnly('StudentResults'));
+  assert.ok(byDefault.result.touched.includes(wb.connections.part));
+  assert.equal(await refreshFlag(byDefault.pkg, wb, 'StudentResults'), '1');
+  const off = await writeDirect(wb, replaceOnly('StudentResults'), { refreshOnLoad: false });
+  assert.ok(!off.result.touched.includes(wb.connections.part));
+  assert.notEqual(await refreshFlag(off.pkg, wb, 'StudentResults'), '1');
+  const named = await writeDirect(wb, replaceOnly('StudentResults'), { refreshOnLoad: false, refreshNames: new Set(['StudentResults']) });
+  assert.ok(named.result.touched.includes(wb.connections.part));
+  assert.equal(await refreshFlag(named.pkg, wb, 'StudentResults'), '1');
+});
+
+test('F2-02: a connection that already refreshes on open is not rewritten', async () => {
+  const first = await writeDirect(await openSimple(), replaceOnly('StudentResults'));
+  const again = await openWorkbook(await first.pkg.write({ now: NOW }), 'again.xlsx');
+  assert.equal(await refreshFlag(again.pkg, again, 'StudentResults'), '1');
+  const second = await writeDirect(again, replaceOnly('StudentResults', 'let\n    Source = 2\nin\n    Source'));
+  assert.deepEqual(second.result.touched, [again.mashup.part]);
+  assert.equal((await second.pkg.text(again.connections.part)).text, again.connections.text.text);
+});
+

@@ -14,13 +14,13 @@ test('T-B-05: a dirty session asks before the page is reloaded', async ({ page }
   await openApp(page);
   await dirtyQuery(page);
   await page.keyboard.press('End');
-  const seen = [];
-  page.on('dialog', async (d) => {
-    seen.push(d.type());
-    await d.accept();
+  const asked = page.waitForEvent('dialog');
+  await page.evaluate(() => {
+    setTimeout(() => location.reload(), 0);
   });
-  await page.reload();
-  expect(seen).toContain('beforeunload');
+  const dialog = await asked;
+  expect(dialog.type()).toBe('beforeunload');
+  await dialog.accept();
 });
 
 test('T-B-05: a clean session reloads without a prompt, also after reverting by hand', async ({ page }) => {

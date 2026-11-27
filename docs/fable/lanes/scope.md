@@ -12,9 +12,9 @@ You are the Scope agent, working in your own session on branch `fable-scope`. Th
 
 ## Your files
 
-The `scope` row in `docs/fable/ownership.json`: `src/batch/resolve/**`, `src/core/snapshot.js`, `src/core/export/xlsx.js` and `limits.js`, `src/batch/execute/units.js`, `transform.js`, `combine.js`, `excel-compute.js`, `scripts/make-excel-pack-scope.mjs`, `tests/fixtures/generators/worked-example.js`, your tests (`batch-resolve*`, `batch-scope`, `batch-tokens`, `batch-units`, `batch-chain`, `batch-transform`, `batch-combined`, `batch-contract`, `batch-worked-example`, `excel-pack-scope`, `export`, `export-*`), your progress, messages, handover and remaining-work files.
+The `scope` row in `docs/fable/ownership.json`: `src/batch/resolve/**`, `src/core/snapshot.js`, `src/core/export/xlsx.js` and `limits.js`, `src/batch/execute/units.js`, `transform.js`, `combine.js`, `excel-compute.js`, `scripts/make-excel-pack-scope.mjs`, `tests/fixtures/generators/worked-example.js`, `src/core/save.js` and `src/core/sheet/**` with the `sheet-*`, `save-safety` and `batch-naming` tests (moved to you on 2026-11-27: the safety lane never ran), your tests (`batch-resolve*`, `batch-scope`, `batch-tokens`, `batch-units`, `batch-chain`, `batch-transform*`, `batch-combined`, `batch-contract`, `batch-worked-example`, `excel-pack-scope`, `export`, `export-*`), your progress, messages, handover and remaining-work files.
 
-Not yours: `src/core/save.js` and `src/core/sheet/**` and the `sheet-*` and `batch-naming` tests (the safety lane owns them now), `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/batch/recipe/**`, `src/app/**`, `src/ui/**`, workers, `strings.js`, the manifest, `tests/e2e/**`, `tests/unit/outputs.test.js`.
+Not yours: `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/batch/recipe/**`, `src/app/**`, `src/ui/**`, workers, `strings.js`, the manifest, `tests/e2e/**`, `tests/unit/outputs.test.js`.
 
 ## Decisions on your questions
 
@@ -22,7 +22,7 @@ The user answered yes to D1 to D6 in `REMAINING-WORK-scope.md`. So D1 (tokens in
 
 1. F3-08 and F3-09. Neither goes to `fable`. Your answer is a mix of your options (a) and (b): your branch gets a new commit after which the tree is `fable` plus your row files, with no in-place and no Excel-compute code. The earlier commits (`c15016d`, `aeb32f6` and the rest) stay in your branch history, so the work is not lost and can come back when D4 allows it. The integrator then merges `fable-scope` (or squashes it).
 2. Your lane items from `HANDOVER-scope.md`:
-   - item 1 (`save.js`, `sheet/**`): take `fable`'s version of every file there, and delete the files `fable` does not have (`write-ranges.js`, `styles.js`, the `sheet-*` tests, `batch-naming`). The safety lane builds the F3-11 insertion check on `fable` with the `<numFmts>` false refusal (Writer's finding 5) already fixed, reading your `49d0ceb` and `sheet-selfcheck.test.js` from your branch history.
+   - item 1 (`save.js`, `sheet/**`): done on `fable`. They are yours again, for milestone S1 below. Never bring `write-ranges.js`, `styles.js` or `allowInPlace` back.
    - item 2 (`execute/index.js`): the one exception. Your tree may carry the import of `withInjectTokens` and the single line `recipe = withInjectTokens(recipe, meta)` and nothing else in that file. Write the exact lines in your notes; the integrator merges them next to Writer's three lines.
    - item 3 (`export/xlsx.js`): keep, it is in your row now. Keep `outputs.test.js` as `fable` has it and write the one assertion you changed in your notes; the integrator applies it.
    - item 4 (`resolve/tokens.js`): keep, it is in `resolve/**`.
@@ -30,18 +30,29 @@ The user answered yes to D1 to D6 in `REMAINING-WORK-scope.md`. So D1 (tokens in
    - item 7 (`make-excel-pack-scope.mjs`): keep, it is in your row.
 3. Branch: you push only `fable-scope`, as you have. No new branch.
 
-## Queue
+## Milestones (replace the old queue; work them in this order, do not wait for me)
 
-1. The clean tree. `git merge origin/fable`. Run `node scripts/check-ownership.mjs lane scope origin/fable` and put every foreign file back as item 2 says. Remove the `allowInPlace` path and the write-ranges calls, and the whole Excel-compute path (`excel-compute.js`, its test, the `compute` handling in `resolve.js` and `transform.js`), following `PROGRESS-scope.md`. A recipe that asks for in place or for Excel compute must produce a `refused` row, not a crash: say in the notes which refusal codes you use. The commit message names what was taken out. Lint 0, unit 0 failures on this tree. Push. This is the item the integrator is waiting for, so it comes first and alone.
-2. Strings. In the notes, a table of every code in section 6 of `REMAINING-WORK-scope.md` that your tree now emits, with the English text for the person, one short sentence each, in the style of `src/ui/strings.js` (read it first). Drop the codes of the removed paths. The integrator adds them in one pass.
-3. The worked example. Check that `batch-worked-example.test.js` asserts every number of Fable section 9: 13 units, 10 workbooks, 11 changed, 2 skipped. Write the exact Preview note text and the report counts in the notes, so the integrator can make `fable-worked-example.spec.js` match.
-4. Audit of `src/batch/resolve/**` and `units.js`: every `planning error` and refusal code in a table in the notes with the test that reaches it. For a code with no test, add one. Then break each once on purpose (edit, run that test file, `git checkout` the edit) and record that a test fails.
-5. The decisions text for `docs/decisions.md` (plan P11): in the notes, a short section for each of D1, D3, the chain and unit semantics, and output naming, in the words of the user's decisions. Nothing about in place except that it is held and why.
-6. When 1 to 5 are done, write the notes and `HAND BACK <hash>`. Stop.
+Each milestone has a deliverable you can show and a test that proves it. Push `fable-scope` at the end of each milestone and add one line to `docs/fable/lanes/NOTES-scope.md` (milestone, commit, evidence). Dependencies are stated: when a milestone is blocked by another owner, do the next one and come back.
+
+**S1. The sheet-write trust gate (F3-11). You own `src/core/save.js` and `src/core/sheet/**` now.** Writer's review findings 1, 2 and 5 and your own finding on sheet names are all here, so the work has one owner. The spec is `docs/fable/lanes/safety.md` (read it fully; ignore "lane", "safety lane" and "clone": you work on `fable-scope`). Deliverables:
+- the declared-insertions check on `fable` (`addSheetsToPackage` returns `texts` and `insertions`; `selfCheck` verifies that each touched part is the original plus only what was declared), built on `fable`'s files, with the `<numFmts>` false refusal (finding 5) fixed from the start; no `write-ranges.js`, no `styles.js`, no `allowInPlace`; `refuseUnapplied` stays as it is
+- Writer's nine probes from `docs/fable/excel-pack/repro-sheet-gap.mjs` as a unit test through `applyChangeSet`, plus the three regression cases of the Gemini draft in `docs/fable/lanes/draft-gemini-sheet-no-numfmts.test.js` (comments stripped)
+- `MESSAGES-writer.md` findings 2 (read it) and the UTF-16 sheet-name cut in `names.js`, with emoji tests for the base name, the `-2` suffix and `combine.js`
+- the mutation proof: every new check broken once on purpose and a test fails
+- Acceptance: unit 0 failures, lint 0, `node scripts/check-ownership.mjs lane scope origin/fable` prints `all owned`. Writer reviews this when merged, so push it as soon as it is green and say so in `MESSAGES-scope.md`.
+
+**S2. Transform over the whole fixture corpus.** Run all three output modes (a new file per unit, a new sheet in a copy, one combined workbook) over every workbook in `tests/fixtures` (XlsxWriter, Excel-made, macro-enabled, tables with dates, percentages, long text, empty tables, a table at the row limit) with scope rules and pins. For each output: it reopens with Quoin's own reader, `verify` accepts it, row and column counts match the source, number formats and date serials survive, names are unique, at most 31 UTF-16 units, and no output exists for a refused or skipped unit. New file `tests/unit/batch-transform-corpus.test.js`. Every defect this finds is fixed in your files or written into the notes as an exact request. Acceptance: the corpus test passes, and the notes list how many fixture-and-mode pairs were run and what it found.
+
+**S3. Resolve properties.** A seeded generator of random recipes (scope rules, pins, tokens, naming templates, chain order) over random indexes, with invariants: the same input gives the same plan; the unit count equals the sum of per-file units; no two outputs share a name; no output name has a path separator, a control character or a reserved Windows name; every name is within limits; no unit appears twice. New file `tests/unit/batch-resolve-properties.test.js`, 500 seeded cases, the seed printed in any failure. Acceptance: passes, and breaking each invariant in `resolve/**` once makes it fail.
+
+**S4. Scale.** Grow `tests/fixtures/generators/worked-example.js` to take a size, and add `tests/unit/batch-scale.test.js`: 300 workbooks and 1,200 units through resolve and execute with a stop signal fired in the middle: no partial output, the report accounts for every unit, the order is stable, memory ceiling holds as in `docs/fable/performance.md`. Acceptance: passes within the time budget of the unit suite (under 30 seconds added).
+
+**S5. Close the loop.** `docs/fable/lanes/NOTES-scope.md`: the decisions text for `docs/decisions.md` (plan P11) for D1, D3, chains, naming, and what S1 changed; the strings table for the codes your tree emits; the list of everything you found in S2 to S4 that belongs to another owner, as exact requests. Then `HAND BACK <hash>`.
+
+Blocked and not yours to unblock: real Excel for both packs, F3-08 and F3-09 until X03 passes, section 9 decision 2.
 
 ## Ruled out
 
-- Anything in `save.js` or `sheet/**`, even to make one of your tests pass: write the change in your notes.
 - Releasing in place or Excel compute in any form, including behind a flag.
 - Marking anything verified in Excel. Pack 1 is "opened without repair, queries and VBA ran, outputs not reviewed".
 - Editing a file outside your row, except the two lines in `execute/index.js` named above.

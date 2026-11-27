@@ -12,25 +12,35 @@ You are the Writer agent, working in your own session on branch `fable-writer`. 
 
 ## Your files
 
-The `writer` row in `docs/fable/ownership.json`: `src/core/pq/**`, `src/core/vba/**`, `src/batch/execute/changes.js`, `src/batch/execute/replace.js`, `scripts/make-excel-pack.mjs`, the writer tests (`batch-pq-members`, `batch-vba-members`, `batch-writer-*`, `batch-replace`, `batch-align`, `batch-save`, `pq`, `vba`, `vba-validate`, `wb-outline`, `excel-pack`, `excel-pack-claims`), `docs/fable/excel-pack/**`, your progress, messages and handover files.
+The `writer` row in `docs/fable/ownership.json`: `src/core/pq/**`, `src/core/vba/**`, `src/batch/execute/changes.js`, `src/batch/execute/replace.js`, `scripts/make-excel-pack.mjs`, `scripts/make-excel-kit.mjs`, `scripts/read-excel-results.mjs`, the writer tests (`batch-pq-members`, `batch-vba-members`, `batch-writer-*`, `batch-replace`, `batch-align`, `batch-save`, `pq`, `vba`, `vba-validate`, `wb-outline`, `excel-pack`, `excel-pack-claims`), `docs/fable/excel-pack/**`, your progress, messages and handover files.
 
-Not yours: `src/core/save.js` and `src/core/sheet/**` (the safety lane, see below), `src/batch/resolve/**` and `transform.js` (Scope), `src/batch/recipe/**`, `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/app/**`, workers, `strings.js`, the manifest, baselines.
+Not yours: `src/core/save.js` and `src/core/sheet/**` (Scope), `src/batch/resolve/**` and `transform.js` (Scope), `src/batch/recipe/**`, `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/app/**`, workers, `strings.js`, the manifest, baselines.
 
 ## Decisions on your questions
 
 1. Your `writer` row: accepted and widened to the list above.
 2. `connect`: stays opt-in in the core. No recipe field and no `executeFile` wiring until the user reports pack 3 case 02 from real Excel (decision D6). Commit `30e7599` is accepted, including its three lines in `src/batch/execute/index.js` and the 39 lines in `tests/unit/batch-execute.test.js`: those two files are the integrator's and the integrator takes your edits as they are. From now on you write such a change in your notes instead.
-3. Your finding 1 (the sheet writer's touched parts are exempt from every check) is being built on `fable` by the safety lane in `src/core/save.js` and `src/core/sheet/**`: declared insertions, the count-attribute fix from finding 5, and your nine probes from `repro-sheet-gap.mjs` ported as unit tests. You do not edit those files. When it is on `fable`, review it (queue item 6).
+3. Your finding 1 (the sheet writer's touched parts are exempt from every check) is being built on `fable` by Scope, who owns `src/core/save.js` and `src/core/sheet/**` (milestone S1): declared insertions, the count-attribute fix from finding 5, and your nine probes ported as unit tests. You do not edit those files. When it is on `fable`, review it (milestone W4).
 
-## Queue
+## Milestones (replace the old queue; work them in this order, do not wait for me)
 
-1. `git merge origin/fable`. Run `node scripts/check-ownership.mjs lane writer origin/fable`. The only files it may list outside your row are `src/batch/execute/index.js` and `tests/unit/batch-execute.test.js`. Put every other foreign file back with `git checkout origin/fable -- <file>` and record it in the notes.
-2. Finding 7 of your review: split the three-output case `module-excel-made` in `scripts/make-excel-pack.mjs` into three cases, one per output, so the person can say which one failed. Update `excel-pack.test.js` and `excel-pack-claims.test.js`. Keep every existing claim test.
-3. Mutation audit of `src/core/pq/**` and `src/core/vba/**`: every refusal and check (`refused.*`, `QuoinError` codes, `anomalies`) in a table in the notes with the test that reaches it. For a check with no test, add one in your test files. Then break each check once on purpose (edit, run the one test file, `git checkout` the edit) and record that a test fails.
-4. Corpus gap check: list every `xw_macro*.xlsm` and other Excel-made workbook in `tests/fixtures` and say which writer operations (add, replace, remove module; signature removal; query replace, add, remove, rename) `batch-writer-corpus.test.js` runs on each. Add the missing combinations, with reopen and a byte check of every part that must not change.
-5. The user runs both Excel packs in one sitting (D6). Make `docs/fable/excel-pack/README.md` start with one page for a person who has only desktop Excel: which zip to open, in what order, what to write down (Excel edition and version first), what "no repair message" looks like. Do not tick or pre-fill any box.
-6. When the safety lane's work is on `fable` (the integrator tells you in `NOTES-writer.md` of `fable`, or you see `docs/fable/lanes/NOTES-safety.md` ending in `HAND BACK` on `origin/fable`), merge `origin/fable`, run `node docs/fable/excel-pack/repro-sheet-gap.mjs` and `excel-pack*.test.js` against it and write what you find in your notes. A probe that is accepted is a finding for the safety lane: write it exactly in your notes.
-7. When 1 to 6 are done, write the notes and `HAND BACK <hash>`. Stop.
+Each milestone has a deliverable you can show and a test that proves it. Push `fable-writer` at the end of each milestone and add one line to `docs/fable/lanes/NOTES-writer.md` (milestone, commit, evidence). When a milestone is blocked by another owner, do the next one and come back.
+
+**W1. The Excel sitting kit.** The user will run both Excel packs in one sitting (decision D6) and then tell the project what happened. Make that sitting short and its result machine-readable:
+- `scripts/make-excel-kit.mjs`: runs `scripts/make-excel-pack.mjs` and `scripts/make-excel-pack-scope.mjs` (as separate processes, by command line, no import of Scope's file) and writes one zip: one `START-HERE.md`, one combined `CHECKLIST.md` in the order the cases should be opened, one folder per case with input and output, and one empty `RESULTS.csv` with a row per case and the columns `case, opened_without_repair, queries_ran, macros_ran, output_looked_right, note` and a first row for the Excel edition and version
+- `scripts/read-excel-results.mjs <RESULTS.csv>`: reads the filled file and prints the exact wording for `docs/observations.md` and the README sentence about real Excel, claiming only what the filled cells justify (an empty cell is "not checked", never "yes"), and a list of cases that failed with their pack and checklist step
+- tests `tests/unit/excel-kit*.test.js`: the kit lists every case once, both packs are in it, `RESULTS.csv` has one row per case, an empty results file claims nothing, a partly filled one claims only those cases
+- Acceptance: tests pass; `node scripts/make-excel-kit.mjs /tmp/kit.zip` produces a zip you unzip and read as if you had only desktop Excel; say in the notes what you changed in `START-HERE.md` after doing that.
+
+**W2. Writer sequences, randomized.** Seeded random sequences (length 1 to 6) of query and module operations (add, replace, remove, rename, replaceText, align) over every Excel-made and XlsxWriter workbook in `tests/fixtures`, through `executeFile`. Invariants: a result that is not a refusal reopens with Quoin's reader; every part the operation did not declare is byte-identical; `verify` accepts it; a refusal writes nothing; applying the same plan to the same input twice gives the same bytes. New file `tests/unit/batch-writer-fuzz.test.js`, 300 seeded cases, seed printed in any failure. Acceptance: passes and breaking one invariant in `changes.js` makes it fail.
+
+**W3. Hostile inputs.** For every fixture that holds a compound file (`vbaProject.bin`) or a `DataMashup`: truncate it at 60 evenly spread lengths, flip a bit at 60 spread positions, and set each length and sector field in turn to its extreme values. Invariant: the result is a refusal with a code or a normal result; never an uncaught `TypeError` or `RangeError`; never longer than 2 seconds; never a growing output. New file `tests/unit/pq-hostile.test.js` (and `vba-hostile.test.js` if the VBA reader needs its own). Fix what it finds in your files; request the rest in the notes. Acceptance: passes, the notes list the defects found.
+
+**W4. Review of the sheet gate.** When Scope's S1 is on `origin/fable` (its notes end S1 with a commit hash, or `src/core/sheet/` has `insertions` in `add-sheets.js`): merge `origin/fable`, run `docs/fable/excel-pack/repro-sheet-gap.mjs` and your corpus tests against it, and write what you find as exact requests for Scope in `MESSAGES-writer.md`. A probe that is accepted is a defect. Do W1 to W3 first; this one waits for S1, nothing else does.
+
+**W5. Close the loop.** Your notes: a table of every check in `pq/**` and `vba/**` with its test; everything you found in W2 and W3 that belongs to another owner; then `HAND BACK <hash>`.
+
+Blocked and not yours to unblock: real Excel for both packs, making `connect` the default.
 
 ## Ruled out
 

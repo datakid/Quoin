@@ -13,6 +13,7 @@ async function dirtyQuery(page) {
 test('T-B-05: a dirty session asks before the page is reloaded', async ({ page }) => {
   await openApp(page);
   await dirtyQuery(page);
+  await page.keyboard.press('End');
   const seen = [];
   page.on('dialog', async (d) => {
     seen.push(d.type());

@@ -39,7 +39,8 @@ Shared files and who changes them:
 7. Do not fix a failing test by changing its expectation. A test changes only when your brief names that change, or when the notes file records why the expectation was wrong.
 8. Do not chase `T-WB-05` and `T-WB-09`. They are flaky timing tests.
 9. When a Playwright run takes more than two minutes, start it with `nohup`, write to a log, and poll the log. Never put `pkill -f "playwright test"` in the same command as the run.
-10. When you finish, write the notes file: what you changed (file and commit hash), what you proved and how, what is still open, what you need from another owner. Short lines, no narrative. Then stop. The last line of the notes file is `HAND BACK <commit hash>`.
+10. Never wait for the integrator. Work your brief top to bottom, then the queue under "Then" in your brief. An item that needs a file you do not own is written into your notes with the exact change and you move to the next item. Stop only when the queue is empty or every remaining item is blocked.
+11. When you finish, write the notes file: what you changed (file and commit hash), what you proved and how, what is still open, what you need from another owner. Short lines, no narrative. Then stop. The last line of the notes file is `HAND BACK <commit hash>`.
 
 ## How to run things
 

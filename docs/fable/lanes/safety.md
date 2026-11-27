@@ -48,6 +48,13 @@ A fragment that was not declared still cannot be removed, so the gap stays close
 5. Prove the fix is needed: run the new regression cases against the old behaviour (strip counts first) and record in your notes that they fail there with `write.selfcheck: check.part xl/styles.xml`, and pass with the fix.
 6. Prove the gap is closed: record in your notes which of the probes were accepted before your change on `fable` and that none is accepted after.
 
+## Then (queue, in order, do not wait for me)
+
+7. Dead code in `save.js`: `writeQueryEdits` and `buildDataMashup` may have no caller. Search `src/`, `tests/` and `scripts/`. If nothing calls them, remove them and their imports, with no test changed. If something does, leave them and say who calls them in the notes.
+8. Mutation audit of `selfCheck`: for every `throw new QuoinError('check.*'` and `write.*` path in `save.js`, find the test that reaches it. Where none does, add a test in `save-safety.test.js`. Then break each check once on purpose (comment-free: edit, run the one test, restore with `git checkout`) and record in the notes that the test fails, so no check is unproven.
+9. `sheet-xml.js`, `grid.js`, `names.js`: add tests in your `sheet-*.test.js` files for the edge cases the code handles but no test shows (sheet name length 31, forbidden characters, duplicate names with different case, empty table, one million rows hitting the limit). Each new test must fail when you break the code it covers.
+10. Write in the notes the list of checks and the test that covers each, as a table.
+
 ## Ruled out
 
 - `write-ranges.js`, `styles.js` from F3-08, any in-place path, `allowInPlace`, anything that makes `sheets.write` do something.

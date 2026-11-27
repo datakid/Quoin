@@ -47,6 +47,13 @@ Log with full errors: `gh run view 45857877573 -R datakid/quoin --log-failed`.
 5. Item 5. Firefox limits the height of a scrolled element (about 17.8 million px) and Chromium does not. 1,000,000 rows at the row height is above it. If the grid uses one tall spacer, scale the scroll range so the last row is reachable in every engine. If it is not that, find the actual cause. If you decide it is an engine limit, record it as Blocked with the number in your notes and skip by `browserName` with the reason.
 6. Keep a table in `docs/fable/lanes/NOTES-ui.md`: item, root cause (one line), commit, verified (Chromium local, or "unverified until CI").
 
+## Then (queue, in order, do not wait for me)
+
+7. Phone and tablet audit of the Set screen at 320, 375 and 768 px wide with Chromium mobile emulation: no horizontal page scroll, no clipped controls, the result grid and the diff stay inside the shell. Add the assertions that fail on a regression to `fable-responsive.spec.js`. Fix what the audit finds in `styles/set.css`, `styles/grid.css` and `src/ui/set/**`.
+8. Forced-colors and dark mode: check that grid selection, focus ring and status colours remain distinguishable in `forced-colors: active` and dark. Fix in `styles/grid.css` and `styles/set.css`. Add a Chromium spec case that emulates `forced-colors` and asserts the focus and selection rules are not colour-only.
+9. Grid keyboard completeness: Home, End, PageUp, PageDown, Ctrl+Home, Ctrl+End, Shift+arrows, Ctrl+A, Ctrl+C on the grid. Make sure each works and has a test in `grid.spec.js` or `fable-matrix.spec.js`.
+10. Write in the notes what you looked at and found fine, so it is not looked at twice.
+
 ## Ruled out
 
 - Changing an expectation to make a Firefox or WebKit result pass, except item 4 if you prove the test is wrong.

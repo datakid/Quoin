@@ -16,7 +16,7 @@ Run in a separate session from the integrator's clones, with Chromium 141 from t
 | 4 | refinement.spec.js:60 | Firefox | skipped | c8af1fd, a12bffe | Playwright does not support the `isMobile` context option in Firefox. The skip is Firefox only, so WebKit keeps running it. | Chromium local. CI: skipped on Firefox, passes on WebKit |
 | 5 | privacy.spec.js:127, :151 | WebKit | skipped | c8af1fd, a12bffe | Playwright WebKit fails `page.reload` and `page.goto` after `setOffline(true)` with an internal error. The cause is taken from the CI error text; I could not reproduce WebKit here. | Chromium local. CI: skipped on WebKit, passes on Firefox |
 | 6 | safety.spec.js:13 | Firefox | fixed (test limit, not an app finding) | eb4798a | The leave guard is installed and the page has user activation (probe on Firefox), but Playwright's `page.reload()` never surfaces the `beforeunload` prompt there. A reload started from inside the page does, on Firefox and WebKit. The test now reloads from the page and still expects a `beforeunload` dialog. The key press from the first attempt (7bdec5d) stays. | Chromium local, twice. CI run 45954575509 (eb4798a), `safety.spec.js` alone: 2 passed on Firefox and 2 on WebKit |
-| 7 | browsers.yml summary | both | done | da1d92b | A table of failed tests (file, line, title, first error line) is written to the job summary. The run also writes a JSON and an HTML report and keeps traces for failures, and the failure artifact carries them. Triggers and matrix are unchanged. | YAML parses and the shell extracts and passes `bash -n`. The summary script ran on Chromium against a real report with a failing test. It has not yet run in Actions, so the job summary page is unchecked |
+| 7 | browsers.yml report | both | done | da1d92b, 997d41a | A `Report failed tests` step that always runs writes a table of failed tests (file, line, title, first error line) to the job summary. It also writes one error annotation per failed test (file, line, first twelve error lines, up to the ten GitHub allows per step), a note for any beyond ten, and a notice that mirrors the summary text so the API can read it. The run also writes a JSON and an HTML report and keeps traces for failures, and the failure artifact carries them. Triggers and matrix are unchanged. | Chromium local with 12 failing tests and awkward characters in titles. Actions run 45998051576 (997d41a): the annotations and the mirrored summary text appeared on both engines. I could not see the rendered job summary page itself |
 | 8 | flake audit | Chromium | done, no change | none | See the audit below | Chromium local |
 | 9 | uniform skip form | all | done | a12bffe | `skipUnlessChromium(test, browserName, reason)` and `skipOnEngines(test, browserName, engines, reason)` in `helpers.js`, additive. Print uses the first, refinement and privacy the second, so the Firefox-only and WebKit-only skips keep the other engines. | Both helpers skip and run in the right cases (throwaway spec) |
 | extra | browsers.yml `spec` input | both | added | d02d529 | `workflow_dispatch` takes an optional spec path appended to the Playwright command through an environment variable. No input means the whole suite. | Used for the probe and the safety run |
@@ -41,24 +41,23 @@ No `test.fixme` exists in `tests/e2e/` or `tests/a11y/`. Offline start in real S
 
 ## Open
 
-- Whole-suite CI run 45952953452 (a70284d, before the item 6 fix): WebKit 2 failed, 4 skipped, 382 passed. Firefox 5 failed, 3 skipped, 380 passed. The one harness failure left, `safety.spec.js:13` on Firefox, is fixed in eb4798a and passes alone. A whole-suite run on the final commit has not been done.
-- The failures left are all in specs the ui lane owns, none in this lane:
-  - WebKit `fable-matrix.spec.js:80`: five thousand rows paint 5000 `.grid-row` elements, expected fewer than 80. Looks like an app finding in the matrix virtualization on WebKit.
+- Whole-suite CI on the final code commit, run 45998051576 (997d41a): WebKit 1 failed, 383 passed, 4 skipped. Firefox 4 failed, 381 passed, 3 skipped. The earlier run 45952953452 (a70284d) had WebKit 2 failed and Firefox 5 failed, 11 and 12 before this lane's changes.
+- Every failure left is in a spec the ui lane owns, none in this lane:
   - WebKit `fable-row-diff.spec.js:111`: on a phone viewport a pane bottom is 1484.8, expected at most 797.
   - Firefox `fable-matrix.spec.js:96` (`not.toBeFocused` failed after Tab) and `:124` (drag selection, deep equality).
-  - Firefox `grid.spec.js:46` (selection and copy event text) and `perf.spec.js:39` (T-PERF-3, 1,000,000 rows). I did not see the full error for these two.
+  - Firefox `grid.spec.js:46` (selection and copy event text) and `perf.spec.js:39` (T-PERF-3, 1,000,000 rows, `toBeGreaterThan`).
+  - WebKit `fable-matrix.spec.js:80` (five thousand rows painted 5000 `.grid-row` elements, expected fewer than 80) failed in run 45952953452 and passed in 45998051576, so it is flaky or timing dependent. The ui lane should look at it before trusting either result.
 - The artifact host (`productionresultssa2.blob.core.windows.net`) is blocked from this environment, so full CI logs and the failure artifacts could not be read. Only check-run annotations were readable, and those keep the first few failures.
 - Commit trailers carry `Co-Authored-By` only. The `Claude-Session` line names the integrator's session, so I did not copy it.
 
 ## Needed from another owner
 
-- ui lane or integrator: the six failures above.
-- integrator: fold this file into PROGRESS.md and merge `fable-trunk-handover` (`eb4798a` plus the notes commit) into `fable`. I did not push to `fable` after the lane rules changed.
-- integrator, from the user: do not leave a lane idle. This lane had nothing to do after item 10 and stopped. A lane should wait only when something named in its brief has to finish first, or when it is throttled. Otherwise keep its queue filled. Next items that fit this lane's files:
-  1. Run `browsers.yml` on the whole suite at the final commit and record the Firefox and WebKit totals here.
-  2. Check that the failed-test table renders in an Actions job summary, and fix the script if it does not.
-  3. In `browsers.yml`, write one annotation per failed test from the JSON report, so failures stay readable where artifacts cannot be downloaded.
-  4. Re-run the specs the ui lane fixes on Firefox and WebKit and report which still fail.
-  Items 1 and 4 wait on the ui lane's fixes.
+- ui lane or integrator: the five failures above and the flaky WebKit matrix test.
+- integrator: fold this file into PROGRESS.md and merge `fable-trunk-handover` (its tip, which is the notes commit after `997d41a`) into `fable`. I did not push to `fable` after the lane rules changed.
+- integrator, from the user: do not leave a lane idle. This lane had nothing to do after item 10 and stopped. A lane should wait only when something named in its brief has to finish first, or when it is throttled. Otherwise keep its queue filled. The user told the harness lane to do the proposed items below once, so they were not self-assigned:
+  1. Whole-suite `browsers.yml` run at the final commit: done, totals above.
+  2. Check the failed-test table in an Actions job summary: done through the mirrored notice. The rendered page was not seen.
+  3. One annotation per failed test: done, 997d41a.
+  4. Re-run the specs the ui lane fixes on Firefox and WebKit and report which still fail: waiting on the ui lane's fixes. The manual run takes a spec path, so one spec runs in a few minutes.
 
-HAND BACK eb4798a
+HAND BACK 997d41a

@@ -54,5 +54,11 @@ No `test.fixme` exists in `tests/e2e/` or `tests/a11y/`. Offline start in real S
 
 - ui lane or integrator: the six failures above.
 - integrator: fold this file into PROGRESS.md and merge `fable-trunk-handover` (`eb4798a` plus the notes commit) into `fable`. I did not push to `fable` after the lane rules changed.
+- integrator, from the user: do not leave a lane idle. This lane had nothing to do after item 10 and stopped. A lane should wait only when something named in its brief has to finish first, or when it is throttled. Otherwise keep its queue filled. Next items that fit this lane's files:
+  1. Run `browsers.yml` on the whole suite at the final commit and record the Firefox and WebKit totals here.
+  2. Check that the failed-test table renders in an Actions job summary, and fix the script if it does not.
+  3. In `browsers.yml`, write one annotation per failed test from the JSON report, so failures stay readable where artifacts cannot be downloaded.
+  4. Re-run the specs the ui lane fixes on Firefox and WebKit and report which still fail.
+  Items 1 and 4 wait on the ui lane's fixes.
 
 HAND BACK eb4798a

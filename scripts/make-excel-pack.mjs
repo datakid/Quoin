@@ -207,14 +207,32 @@ async function build() {
   const x2 = await execute('xw_macro01.xlsm', xw, inject({ target: 'module', op: 'add', name: 'Module2', text: NEW_MODULE }));
   const x3 = await execute('xw_macro01.xlsm', xw, inject({ target: 'module', op: 'remove', name: 'Module1' }));
   add({
-    slug: 'module-excel-made', title: 'Replace, add and remove a module in an Excel-made macro workbook', input: ['xw_macro01.xlsm', xw],
-    outputs: [['output-replace.xlsm', written(x1)], ['output-add.xlsm', written(x2)], ['output-remove.xlsm', written(x3)]],
+    slug: 'module-excel-made-replace', title: 'Replace a module in an Excel-made macro workbook', input: ['xw_macro01.xlsm', xw],
+    outputs: [['output.xlsm', written(x1)]],
     look: [
-      'All three outputs open with no repair or recovery message. Enable macros if asked.',
-      'output-replace: Alt+F11 > Module1 holds the new code; Alt+F8 > Macro1 > Run shows \"Macro1 replaced by Quoin\".',
-      'output-add: Alt+F11 lists Module2 next to Module1, ThisWorkbook and Sheet1, with the procedure quoin_added; Alt+F8 > quoin_added > Run shows \"Added by Quoin\"; Macro1 still sets cell A1 to 123.',
-      'output-remove: Module1 is gone, ThisWorkbook and Sheet1 remain, and Alt+F8 lists no Macro1.',
-      'In all three, Debug > Compile VBAProject gives no error, and File > Save As .xlsm then reopening keeps the same modules.'
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'Alt+F11 > Module1 holds the new code; Alt+F8 > Macro1 > Run shows \"Macro1 replaced by Quoin\".',
+      'Debug > Compile VBAProject gives no error, and File > Save As .xlsm then reopening keeps the same modules.'
+    ]
+  });
+
+  add({
+    slug: 'module-excel-made-add', title: 'Add a module to an Excel-made macro workbook', input: ['xw_macro01.xlsm', xw],
+    outputs: [['output.xlsm', written(x2)]],
+    look: [
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'Alt+F11 lists Module2 next to Module1, ThisWorkbook and Sheet1, with the procedure quoin_added; Alt+F8 > quoin_added > Run shows \"Added by Quoin\"; Macro1 still sets cell A1 to 123.',
+      'Debug > Compile VBAProject gives no error, and File > Save As .xlsm then reopening keeps the same modules.'
+    ]
+  });
+
+  add({
+    slug: 'module-excel-made-remove', title: 'Remove a module from an Excel-made macro workbook', input: ['xw_macro01.xlsm', xw],
+    outputs: [['output.xlsm', written(x3)]],
+    look: [
+      'The output opens with no repair or recovery message. Enable macros if asked.',
+      'Module1 is gone, ThisWorkbook and Sheet1 remain, and Alt+F8 lists no Macro1.',
+      'Debug > Compile VBAProject gives no error, and File > Save As .xlsm then reopening keeps the same modules.'
     ]
   });
 
@@ -351,7 +369,7 @@ function checklist(sums) {
   return lines.join('\n');
 }
 
-export const WRITER_ADDED = ['query-replace-refresh', 'query-add-awkward-names', 'module-excel-made', 'signed-add-remove', 'module-locked-project', 'new-sheet-macro-workbook', 'new-sheet-signed-workbook'];
+export const WRITER_ADDED = ['query-replace-refresh', 'query-add-awkward-names', 'module-excel-made-replace', 'module-excel-made-add', 'module-excel-made-remove', 'signed-add-remove', 'module-locked-project', 'new-sheet-macro-workbook', 'new-sheet-signed-workbook'];
 
 export async function makePack({ only = null } = {}) {
   cases.length = 0;

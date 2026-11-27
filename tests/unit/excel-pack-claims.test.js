@@ -96,14 +96,26 @@ test('excel pack claims: the checklist never says a table is listed in Queries &
   for (const line of checklist.split('\n').filter((l) => /Queries & Connections/.test(l))) assert.ok(!/StudentNames/.test(line.replace(/\(StudentNames is a table[^)]*\)/g, '').replace(/table StudentNames/g, '')), line);
 });
 
-test('excel pack claims: the Excel-made module case has what each output line says', async () => {
+test('excel pack claims: each Excel-made module case has what its output line says', async () => {
   const { files } = await pack();
-  const mods = async (name) => (await openFile(files, 'module-excel-made', 'output', name)).vba.project.modules;
-  const replace = await mods('output-replace.xlsm');
+  const mods = async (slug) => (await openFile(files, slug, 'output', 'output.xlsm')).vba.project.modules;
+  const replace = await mods('module-excel-made-replace');
   assert.ok(replace.find((m) => m.name === 'Module1').model.visible.includes('Macro1 replaced by Quoin'));
-  assert.deepEqual((await mods('output-add.xlsm')).map((m) => m.name), ['Module1', 'ThisWorkbook', 'Sheet1', 'Module2']);
-  assert.ok((await mods('output-add.xlsm')).find((m) => m.name === 'Module2').model.visible.includes('quoin_added'));
-  assert.deepEqual((await mods('output-remove.xlsm')).map((m) => m.name), ['ThisWorkbook', 'Sheet1']);
+  const added = await mods('module-excel-made-add');
+  assert.deepEqual(added.map((m) => m.name), ['Module1', 'ThisWorkbook', 'Sheet1', 'Module2']);
+  assert.ok(added.find((m) => m.name === 'Module2').model.visible.includes('quoin_added'));
+  assert.deepEqual((await mods('module-excel-made-remove')).map((m) => m.name), ['ThisWorkbook', 'Sheet1']);
+});
+
+test('excel pack claims: each Excel-made module case holds one output and one pass box', async () => {
+  const { files, checklist } = await pack();
+  for (const slug of ['module-excel-made-replace', 'module-excel-made-add', 'module-excel-made-remove']) {
+    assert.ok(files.has(pathIn(files, slug, 'input', 'xw_macro01.xlsm')), slug);
+    const folder = `cases/${folderOf(files, slug)}/output/`;
+    assert.equal([...files.keys()].filter((k) => k.startsWith(folder)).length, 1, slug);
+    assert.equal((block(checklist, slug).match(/^- \[ \] pass$/gm) || []).length, 1, slug);
+    assert.ok(!/output-(replace|add|remove)/.test(block(checklist, slug)), slug);
+  }
 });
 
 test('excel pack claims: the signed add and remove cases start signed and end unsigned', async () => {

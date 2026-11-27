@@ -28,10 +28,10 @@ const built = async () => {
 
 test('the pack has a checklist first and an input and an output folder for every case', async () => {
   const { made, files } = await built();
-  assert.equal(made.cases, 20);
+  assert.equal(made.cases, 22);
   assert.equal(files.has('CHECKLIST.md'), true);
   const folders = new Set([...files.keys()].filter((n) => n.startsWith('cases/')).map((n) => n.split('/')[1]));
-  assert.equal(folders.size, 20);
+  assert.equal(folders.size, 22);
   for (const f of folders) {
     assert.ok([...files.keys()].some((n) => n.startsWith(`cases/${f}/input/`)), f);
     const manual = [...files.keys()].some((n) => n.startsWith(`cases/${f}/recipe/`)) && ![...files.keys()].some((n) => n.startsWith(`cases/${f}/output/`));
@@ -54,9 +54,9 @@ test('every output opens with Quoin and appears in the checklist with its SHA-25
 test('the checklist lists every case, marks nothing as verified, and tells the person how to report', async () => {
   const { files } = await built();
   const list = new TextDecoder().decode(files.get('CHECKLIST.md'));
-  assert.equal((list.match(/^## \d\d /gm) || []).length, 20);
-  assert.equal((list.match(/^- \[ \] pass$/gm) || []).length, 20);
-  assert.equal((list.match(/^- \[ \] fail\./gm) || []).length, 20);
+  assert.equal((list.match(/^## \d\d /gm) || []).length, 22);
+  assert.equal((list.match(/^- \[ \] pass$/gm) || []).length, 22);
+  assert.equal((list.match(/^- \[ \] fail\./gm) || []).length, 22);
   assert.equal(/\[x\]/i.test(list), false);
   assert.match(list, /Nothing here is marked verified until you say so\./);
   assert.match(list, /repair or recovery message on opening is a fail/);

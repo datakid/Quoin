@@ -381,3 +381,12 @@ test('§3.3 an exclude is part of the rule, so a pin on the same name still wins
   const plan = resolvePlan(transform({ exclude: ['Data'] }, { overrides: [{ file: 'a.xlsx', path: 'a.xlsx', units: ['Data'] }] }), [withSheets('f1', 'a.xlsx', ['Data', 'Notes'])], { now: NOW });
   assert.deepEqual(namesOf(plan), ['Data']);
 });
+
+test('a regular expression that does not compile is the planning error scope.pattern and no unit matches', () => {
+  const recipe = transform({ match: 'pattern', pattern: 'Data' });
+  recipe.scope = { ...recipe.scope, patternKind: 'regex', pattern: '(' };
+  const plan = resolvePlan(recipe, [withSheets('f1', 'a.xlsx', ['Data', 'Notes'])], { now: NOW });
+  assert.deepEqual(plan.errors, [{ code: 'scope.pattern', detail: '(' }]);
+  assert.deepEqual(plan.files[0].units, []);
+  assert.deepEqual(plan.files[0].skipped, { code: 'skip.noMatchingUnit', detail: null });
+});

@@ -123,3 +123,9 @@ Found on the way: a lone surrogate in a text cell and a negative zero both make 
 - The integrator's lines: items 1 and 3 under "For the integrator to apply", and the strings.
 
 HAND BACK 63eb47a
+
+## Mutation check of Scope's files (2026-11-27)
+
+- 218 mutants (comparison, equality, logical and boolean flips) over `resolve/*.js`, `snapshot.js`, `units.js`, `transform.js`, `combine.js`, run against the nine Scope test files. 187 killed, 31 survived. Eleven survivors were real gaps and are killed by new tests in `b35739c`; the new-test mutants were re-run and all die. Unit: 1795 tests, 1790 pass, 0 fail, 5 skipped.
+- Left, none worth a test: tie-break comparators (`compare`, `byIndex`, the sort at `scope.js:63`; keys are unique, so `<` and `<=` give the same order), `test: () => true` in `scope.js:27` (never called for a non-pattern scope), the `readsBack` and `readsBackAs` catches that return `false` (our own writer cannot produce bytes that fail to open), `runs.length + 1 < units.length` in `units.js:75` (registering the last unit's output changes nothing, nobody reads it), `flags || []` in `units.js:32,33` (no flags in any fixture), the second `||` of `failureReason`, `localOffsetMin` in `units.js:49` (needs a local-time query; none in the tests), and `.length > 0` for an empty output name in `units.js:59`.
+- One thing found on the way is in `MESSAGES-scope.md`: sheet names cut by code points in `names.js` (safety row).

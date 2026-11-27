@@ -12,7 +12,16 @@
 - Raw text is checked because the XML reader accepts a bare `&` and a bare `<` in an attribute, so a parse-only test cannot see a missing escape.
 - Mutations, each run against `batch-pq-members.test.js`: name attribute unescaped (2 fail), description unescaped (2), command unescaped (2), connection string unescaped (8). All caught. The two that survived before are dead.
 - Names with `;`, `"`, `]` or `=` are refused for a connection, so `Location=` needs no quoting.
-- Lint 0 findings. Unit 1752 tests, 1747 pass, 0 fail, 5 skipped.
+- Lint 0 findings. Unit 1759 tests, 1754 pass, 0 fail, 5 skipped.
+
+## Mutation testing of the writer files (2026-11-27)
+
+One operator changed at a time (`===`, `!==`, `&&`, `||`, comparisons, `true`, `false`) in `members.js`, `writeback.js` and `changes.js`: 139 mutants. Run against the `batch-*`, `plan-run`, `dirty`, `excel-pack*` and `save*` tests, 120 were caught and 19 survived (86%).
+
+- 12 survivors were in `writeQueryEdits` and its copy of `wrapBase64`, which nothing has called since `save.js` moved to `writeQueryChanges`. Deleted in its own commit; `changedQueryEdits` stays.
+- 7 survivors were real gaps and are now caught by new tests: wrapped base64 width, the no-mashup guard of `queryReferencers`, the refresh-on-open default and its three forms, the no-rewrite case of a connection that already refreshes, the `verified` and `signature_removed` defaults of a report row, the default of `acknowledgeSignature` in `planChanges`, and the hash an add refused for an existing name reports. Each test was run against its own mutant and fails on it.
+- 4 survivors are left. `members.js` line 212 (two `||`): the item is skipped one line later anyway, so the result is the same. Line 262: a section text with no line break at all does not occur in a real file. Line 319: with nothing flagged the block changes nothing.
+- The new tests for `changes.js` are in `tests/unit/batch-writer-changes.test.js`. The file is added to the writer row in `ownership.json` (integrator file; revert if you disagree).
 
 ## Cross-checks done for other lanes (2026-11-27)
 

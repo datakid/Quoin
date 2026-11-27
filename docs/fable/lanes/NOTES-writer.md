@@ -7,7 +7,7 @@
 | 1 merge `origin/fable`, run the ownership check | `8189766` | `check-ownership map` ok; `lane writer origin/fable` lists only `src/batch/execute/index.js` and `tests/unit/batch-execute.test.js`, both accepted by the integrator |
 | 2 split `module-excel-made` into three cases | `135fbe5` | pack tests 23 pass; lint 0; 22 cases, 27 outputs; the later cases move up by two |
 | 3 check audit of `src/core/pq/**` and `src/core/vba/**` | `4e69548`, `41248a6`, `0062158` | table below; unit 1779 tests, 1774 pass, 0 fail, 5 skipped; lint 0 |
-| 4 corpus gap check | not started | |
+| 4 corpus gap check | `25af289` and the commit after it | corpus file 54 tests, all pass; unit 1801 tests, 1796 pass, 0 fail, 5 skipped; lint 0; matrix below |
 | 5 one-page Excel README | not started | |
 | 6 review of the safety lane | not started | |
 | 7 final hand-back | not started | |
@@ -97,6 +97,25 @@ Method: each refusal, error code and anomaly in the two directories was disabled
 - `vba/cfb-write.js:142`: sector accounting inside the writer; only a bug in the writer trips it.
 - `vba/writeback.js:143`: self-check that a compressed module decompresses to its text; only a bug in the compressor trips it.
 - `vba/writeback.js:207`: an added module stream missing after it was inserted; only a bug in the writer trips it.
+
+## Item 4: which writer operations run on which fixture
+
+Made by, from `tests/fixtures/external/NOTICE.md`: `pq_simple`, `pq_vba_complex`, `plain_table`, `binary.xlsb` were saved by Excel; `xw_*` are the reference files of the XlsxWriter project, which it checks itself against Excel; `ms_template_query` is the Microsoft connected-workbooks template; everything in `workbooks/` comes from `tests/fixtures/generators/build.js`. Operations: Q+ add query, Q~ replace query, Q- remove query, Qr rename query, M+ add module, M~ replace module, M- remove module, S refuse without confirmation, S- remove the signature, Q+M+ both in one run, B every untouched part compared byte for byte after reopen.
+
+| fixture | before | after |
+|---|---|---|
+| `ms_template_query.xlsx`, `pq_simple.xlsx`, `big-grid.xlsx`, `csv-query.xlsx`, `long-run.xlsx`, `unsupported.xlsx` | Q+ (two), Q~ (first query only), Q- (added only), Qr (added only), refusal to remove a loaded query | the same, plus Q~ for every query with and without refresh, the other queries unchanged, and B for each |
+| `pq_vba_complex.xlsm`, `mixed.xlsm` | the query set above; M+ and a project-level add and remove cycle | plus M~ for every module, M- for every removable module through `applyChangeSet`, Q+M+, and B for each |
+| `signed.xlsm` | the query set above; M+ with confirmation | plus S for add, replace and remove, S- (the signature part, its rels and the content-types entry go, nothing else changes), M~, M-, Q+M+, and B. A query change leaves the signature byte for byte |
+| `xw_button07.xlsm`, `xw_macro01.xlsm`, `xw_macro02.xlsm`, `xw_macro03.xlsm` | M+ with confirmation and the project-level cycle | plus M~ for every module, M- for every removable module through `applyChangeSet`, and B |
+| `xw_macro04.xlsm` | M+ with confirmation and the project-level cycle | plus S, S-, M~, M-, and B |
+| `xw_vbaProject01.bin` to `05.bin` | project-level add and remove cycle | unchanged |
+| `plain_table.xlsx` | no writer operation applies; an add is refused in `batch-pq-members.test.js` | unchanged |
+| `binary.xlsb`, `encrypted.xlsx` | refused at open, in `workbook.test.js`, `batch-index.test.js` and `batch-inspect.test.js` | unchanged |
+
+What the byte check pins, on every fixture it runs on: a query add changes the query data part only; a replace changes the query data part and `connections.xml`, or the query data part only when refresh is off; a rename changes the query data part only; a module change changes `xl/vbaProject.bin` only; on a signed workbook it changes `xl/vbaProject.bin` and `[Content_Types].xml` and removes `xl/vbaProjectSignature.bin` and `xl/_rels/vbaProject.bin.rels`. The workbook warnings after each run equal the warnings before it.
+
+Nothing was found wrong. One assertion was weak: the refusal to remove a loaded query was checked only as a `TypeError`; it now also checks that the message starts with `refused.loaded` or `refused.usedBy`.
 
 ## Earlier work
 

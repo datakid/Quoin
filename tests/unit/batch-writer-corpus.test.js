@@ -78,7 +78,7 @@ for (const f of queryFiles) {
     for (const q of wb.queries.filter((x) => x.connection || x.load.kind !== 'connection')) {
       const cs = emptyChangeSet();
       cs.queries.remove.add(q.name);
-      await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError, q.name);
+      await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /^refused\.(loaded|usedBy): /.test(e.message), q.name);
     }
   });
 }

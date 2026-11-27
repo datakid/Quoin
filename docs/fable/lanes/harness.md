@@ -46,6 +46,13 @@ Log with full errors: `gh run view 45857877573 -R datakid/quoin --log-failed`.
 5. Every skip uses the same form so the integrator can list them: `test.skip(browserName !== 'chromium', 'reason')` at the top of the test, with the reason naming the engine and the cause.
 6. In `docs/fable/lanes/NOTES-harness.md`, keep a table: test, engine, decision (fixed, skipped, app finding), reason, verified (Chromium local or "unverified until CI").
 
+## Then (queue, in order, do not wait for me)
+
+7. `.github/workflows/browsers.yml`: after the Playwright step on every engine, write a compact summary of failed tests (file, line, title, first error line) to `$GITHUB_STEP_SUMMARY`, and upload the Playwright report and traces as an artifact when a test fails. Keep the existing triggers and the `--project` matrix. Check the YAML parses (`node -e` with a YAML parse is not available: use `python3 -c "import yaml,sys;yaml.safe_load(open(sys.argv[1]))" <file>`).
+8. Flake audit of your own specs: replace fixed `waitForTimeout` sleeps with condition waits where the spec waits for something observable. Run each of your specs five times in a row on Chromium and record the pass count in the notes. Do not touch a spec's expectations.
+9. `tests/e2e/helpers.js`: add one exported helper for the skip form (`skipUnlessChromium(test, browserName, reason)` or similar) and use it in your specs so the skip lines are uniform and greppable. Additive: no existing export changes behaviour.
+10. Write in the notes a list of every skip in the whole `tests/e2e/` folder with its reason (read-only grep), so the integrator can see the full set of engine limits in one place.
+
 ## Ruled out
 
 - Changing any expectation to make a Firefox or WebKit result pass, other than the digest rule in item 1.

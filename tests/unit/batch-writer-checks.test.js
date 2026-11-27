@@ -7,6 +7,7 @@ import { encodeText } from '../../src/core/vba/codepages.js';
 import { parseDir, REC } from '../../src/core/vba/dir-stream.js';
 import { readVbaProject } from '../../src/core/vba/vba-project.js';
 import { writeVbaProject, verifyVbaProject } from '../../src/core/vba/writeback.js';
+import { DEFAULT_LIMITS } from '../../src/core/limits.js';
 import { fixture } from './helpers.js';
 
 const refuses = (fn, code, pattern) => assert.throws(fn, (e) => e.code === code && pattern.test(e.message), `${code} ${pattern}`);
@@ -86,4 +87,98 @@ test('verifyVbaProject names a module that is missing or whose text changed', ()
   assert.equal(verifyVbaProject(writeVbaProject(project, same), same).modules.length, project.modules.length);
   refuses(() => verifyVbaProject(writeVbaProject(project, same), new Map([['NoSuchModule', 'x']])), 'check.vba', /module missing after write/);
   refuses(() => verifyVbaProject(writeVbaProject(project, same), new Map([[first.name, `${first.model.visible}\n' other`]])), 'check.vba', /module text changed during write/);
+});
+
+const SECTOR = 512;
+const sectorAt = (n) => (n + 1) * SECTOR;
+const view = (b) => new DataView(b.buffer, b.byteOffset, b.byteLength);
+const getU32 = (b, o) => view(b).getUint32(o, true);
+const setU32 = (b, o, v) => view(b).setUint32(o, v >>> 0, true);
+const patternOf = (n) => Uint8Array.from({ length: n }, (_, i) => (i * 7) & 255);
+
+function cfbBase() {
+  const children = [{ name: 'Small', type: 2, data: patternOf(3000) }, { name: 'Big', type: 2, data: patternOf(70000) }];
+  return writeCfb({ name: 'Root Entry', type: 5, children });
+}
+
+function entriesOf(b) {
+  const dirAt = sectorAt(getU32(b, 48));
+  return [0, 1, 2].map((i) => {
+    const at = dirAt + 128 * i;
+    const length = b[at + 64] | (b[at + 65] << 8);
+    let name = '';
+    for (let k = 0; k < (length - 2) / 2; k++) name += String.fromCharCode(b[at + 2 * k] | (b[at + 2 * k + 1] << 8));
+    return { at, name, id: i, left: getU32(b, at + 68), right: getU32(b, at + 72), child: getU32(b, at + 76), start: getU32(b, at + 116), size: getU32(b, at + 120) };
+  });
+}
+
+const entry = (b, name) => entriesOf(b).find((e) => e.name === name);
+const fatAt = (b, n) => sectorAt(getU32(b, 76 + 4 * Math.floor(n / 128))) + 4 * (n % 128);
+const miniFatAt = (b, n) => sectorAt(getU32(b, 60)) + 4 * n;
+
+function broken(change) {
+  const b = Uint8Array.from(cfbBase());
+  change(b);
+  return b;
+}
+
+test('the compound file used for the reader checks is sound and has the shape the corruptions rely on', () => {
+  const b = cfbBase();
+  const cfb = readCfb(b);
+  assert.equal(cfb.find('Small').data.length, 3000);
+  assert.equal(cfb.find('Big').data.length, 70000);
+  assert.deepEqual(entriesOf(b).map((e) => e.name).sort(), ['Big', 'Root Entry', 'Small']);
+  assert.equal(getU32(b, 44), 2);
+  assert.ok(getU32(b, 60) !== 0xFFFFFFFE);
+});
+
+test('readCfb names the header check that refused a file', () => {
+  refuses(() => readCfb(new Uint8Array(600)), 'cfb.header', /signature mismatch/);
+  refuses(() => readCfb(cfbBase().slice(0, 100)), 'cfb.header', /signature mismatch/);
+  refuses(() => readCfb(broken((b) => { b[28] = 0xFF; b[29] = 0xFE; })), 'cfb.header', /byte order/);
+  refuses(() => readCfb(broken((b) => { b[26] = 5; })), 'cfb.header', /version or sector size/);
+  refuses(() => readCfb(broken((b) => { b[30] = 12; })), 'cfb.header', /version or sector size/);
+  refuses(() => readCfb(broken((b) => { b[32] = 7; })), 'cfb.header', /mini sector size/);
+});
+
+test('readCfb refuses a file with too many sectors, and a header that claims too many FAT sectors', () => {
+  refuses(() => readCfb(cfbBase(), { ...DEFAULT_LIMITS, maxCfbSectors: 2 }), 'limit.cfb', /too many sectors/);
+  refuses(() => readCfb(broken((b) => setU32(b, 44, 0x7FFFFFFF))), 'limit.cfb', /too many FAT sectors/);
+});
+
+test('readCfb refuses a DIFAT chain that loops and a sector number past the end of the file', () => {
+  refuses(() => readCfb(broken((b) => {
+    const dir = getU32(b, 48);
+    setU32(b, 72, 2);
+    setU32(b, 68, dir);
+    setU32(b, sectorAt(dir) + 508, dir);
+  })), 'cfb.loop', /DIFAT chain loops/);
+  refuses(() => readCfb(broken((b) => setU32(b, 48, 99999))), 'cfb.range', /sector 99999 is out of range/);
+});
+
+test('readCfb names what is wrong with a FAT chain', () => {
+  const second = (b) => getU32(b, fatAt(b, entry(b, 'Big').start));
+  refuses(() => readCfb(broken((b) => setU32(b, entry(b, 'Big').at + 116, 0xFFFFFFFF))), 'cfb.chain', /special sector/);
+  refuses(() => readCfb(broken((b) => setU32(b, fatAt(b, entry(b, 'Big').start), 0xFFFFFFFD))), 'cfb.chain', /special sector/);
+  refuses(() => readCfb(broken((b) => setU32(b, fatAt(b, second(b)), entry(b, 'Big').start))), 'cfb.loop', /FAT chain loops/);
+  refuses(() => readCfb(broken((b) => setU32(b, 44, 1))), 'cfb.range', /FAT index out of range/);
+  refuses(() => readCfb(broken((b) => setU32(b, entry(b, 'Big').at + 120, 200000))), 'cfb.short', /stream shorter than its declared size/);
+});
+
+test('readCfb refuses a directory with no root entry, an object of an unknown type, and a tree that loops or leaves the directory', () => {
+  refuses(() => readCfb(broken((b) => { b[entry(b, 'Root Entry').at + 66] = 2; })), 'cfb.root', /root entry missing/);
+  refuses(() => readCfb(broken((b) => { b[entry(b, 'Small').at + 66] = 3; })), 'cfb.type', /unexpected object type 3/);
+  refuses(() => readCfb(broken((b) => setU32(b, entry(b, 'Root Entry').at + 76, 99))), 'cfb.range', /directory id out of range/);
+  refuses(() => readCfb(broken((b) => {
+    const top = entriesOf(b)[0].child;
+    setU32(b, entriesOf(b)[top].at + 72, top);
+  })), 'cfb.loop', /directory tree loops/);
+});
+
+test('readCfb names what is wrong with a chain in the mini stream', () => {
+  const small = (b) => entry(b, 'Small');
+  refuses(() => readCfb(broken((b) => setU32(b, miniFatAt(b, small(b).start), small(b).start))), 'cfb.loop', /MiniFAT chain loops/);
+  refuses(() => readCfb(broken((b) => setU32(b, small(b).at + 116, 99999))), 'cfb.range', /mini sector out of range/);
+  refuses(() => readCfb(broken((b) => setU32(b, small(b).at + 120, 100))), 'cfb.loop', /mini chain longer than the stream/);
+  refuses(() => readCfb(broken((b) => setU32(b, miniFatAt(b, getU32(b, miniFatAt(b, small(b).start))), 0xFFFFFFFE))), 'cfb.short', /mini stream shorter than its declared size/);
 });

@@ -87,6 +87,15 @@ test('combining the results of several files gives one workbook with unique shee
   assert.deepEqual(await grid(combined.bytes, 'StudentResults-2'), await grid(combined.bytes, 'StudentResults'));
 });
 
+test('sheet names made of emoji stay within 31 UTF-16 units and stay unique in the combined workbook', async () => {
+  const recipe = recipeOf(CURRENT, { mode: 'combined', name: '\u{1F600}'.repeat(40) });
+  const results = [await runFile('pq_simple.xlsx', recipe, 'f1'), await runFile('pq_simple.xlsx', recipe, 'f2')];
+  const combined = await combineOutputs(results, { now: CLOCK });
+  const names = (await openWorkbook(combined.bytes, 'c.xlsx')).sheets.map((s) => s.name);
+  assert.deepEqual(names, ['\u{1F600}'.repeat(15), `${'\u{1F600}'.repeat(14)}-2`, `${'\u{1F600}'.repeat(14)}-3`, `${'\u{1F600}'.repeat(14)}-4`]);
+  assert.ok(names.every((n) => n.length <= 31));
+});
+
 test('a unit that failed is not in the workbook and its row stays as it was', async () => {
   const m = `let T = ${CURRENT} in if {unit.index} = 1 then error "boom" else T`;
   const result = await runFile('pq_simple.xlsx', recipeOf(m, { mode: 'combined', name: 'Out' }), 'f1');

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openWorkbook } from '../../src/core/workbook.js';
-import { buildSnapshot, buildUnitSnapshot } from '../../src/core/snapshot.js';
+import { buildSnapshot, buildBindingWorkbook, buildUnitSnapshot } from '../../src/core/snapshot.js';
 import { readUsedGrid } from '../../src/core/cells.js';
 import { serializeValue } from '../../src/core/m/engine.js';
 import { parseRecipe } from '../../src/batch/recipe/recipe.js';
@@ -150,6 +150,25 @@ test('a query that asks for a file is a row error because a batch has no files t
   const wb = await open('plain_table.xlsx');
   const run = await runUnit(wb, FILE, sheetUnit('Toy Group Scores'), recipeWith('Csv.Document(File.Contents("c:\\\\x.csv"))'), { now: NOW });
   assert.deepEqual([run.status, run.error.code, run.error.detail], ['error', 'unit.binding', 'c:\\\\x.csv']);
+});
+
+test('the binding workbook lists hidden and visible sheets, leaves out chart sheets and sheets without a part, and lists tables as tables that are never hidden', async () => {
+  const wb = await open('pq_simple.xlsx');
+  wb.sheets[0].state = 'hidden';
+  wb.sheets.push({ name: 'Chart1', type: 'chartsheet', state: 'visible', part: 'xl/chartsheets/sheet1.xml' }, { name: 'NoPart', type: 'worksheet', state: 'visible', part: null });
+  const { items } = await buildBindingWorkbook(wb);
+  assert.deepEqual(items.map((i) => [i.name, i.kind, i.hidden]), [['Input', 'Sheet', true], ['StudentResults', 'Sheet', false], ['StudentNames', 'Table', false], ['StudentResults', 'Table', false]]);
+});
+
+test('a snapshot marks the tables that a query loads', async () => {
+  const wb = await open('pq_simple.xlsx');
+  assert.deepEqual((await buildSnapshot(wb)).sources.map((x) => [x.name, x.kind, x.queryLoaded]), [['StudentNames', 'table', false], ['StudentResults', 'table', true]]);
+});
+
+test('a unit stopped by a limit carries the limit in the detail of its error', async () => {
+  const wb = await open('plain_table.xlsx');
+  const run = await runUnit(wb, FILE, sheetUnit('Toy Group Scores'), recipeWith('Table.FromList(List.Numbers(1, 50))', { limits: { maxRows: 5 } }), { now: NOW });
+  assert.deepEqual([run.error.code, run.error.detail], ['m.rows', { rows: 50 }]);
 });
 
 test('the run limits of the recipe stop a unit and say which limit', async () => {

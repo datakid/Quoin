@@ -4,6 +4,7 @@ import { changedQueryEdits } from './pq/writeback.js';
 import { writeQueryChanges } from './pq/members.js';
 import { writeVbaProject } from './vba/writeback.js';
 import { openWorkbook } from './workbook.js';
+import { parseXml } from './xml.js';
 import { equalBytes } from './bytes.js';
 import { suggestedFileName } from './filename.js';
 import { addSheetsToPackage, verifyAddedSheets } from './sheet/add-sheets.js';
@@ -65,10 +66,15 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
     for (const part of written.touched) touched.add(part);
   }
   const addedParts = new Set();
+  const partTexts = new Map();
+  const insertions = new Map();
+  const touchedBefore = new Set(touched);
   if (cs.sheets.add.length) {
     const written = await addSheetsToPackage(wb, pkg, cs.sheets.add);
     for (const part of written.touched) touched.add(part);
     for (const part of written.addedParts) addedParts.add(part);
+    for (const [part, text] of written.texts) partTexts.set(part, text);
+    for (const [part, ins] of written.insertions) insertions.set(part, ins);
   }
   let signatureRemoved = false;
   if (cs.modules.replace.size || cs.modules.add.size || cs.modules.remove.size) {
@@ -84,7 +90,7 @@ export async function applyChangeSet(wb, changeSet, { now, refreshOnLoad = true,
   }
   const bytes = await pkg.write({ now });
   if (faultInject) throw new QuoinError('write.selfcheck', 'injected fault');
-  await selfCheck(wb, bytes, { changes: cs, touched, addedParts, removedParts: new Set(), signatureRemoved });
+  await selfCheck(wb, bytes, { changes: cs, touched, addedParts, removedParts: new Set(), signatureRemoved, partTexts, insertions, touchedBefore });
   return {
     bytes,
     name: suggestedFileName(wb),
@@ -114,7 +120,35 @@ function expectedModules(wb, m) {
   return out;
 }
 
-export async function selfCheck(wb, bytes, { changes, touched, addedParts, removedParts, signatureRemoved }) {
+const COUNT_CHILD = { fonts: 'font', cellXfs: 'xf', numFmts: 'numFmt' };
+
+function withoutCounts(text, elements) {
+  return elements.length ? text.replace(new RegExp(`(<(?:${elements.join('|')})\\b[^>]*?)\\s+count="\\d+"`, 'g'), '$1') : text;
+}
+
+function removable(text, fragments, target, counts) {
+  if (!fragments.length) return counts(text) === counts(target);
+  const [first, ...rest] = fragments;
+  const inserted = typeof first === 'string' ? first : first.to;
+  const original = typeof first === 'string' ? '' : first.from;
+  for (let at = text.indexOf(inserted); at !== -1; at = text.indexOf(inserted, at + 1)) if (removable(text.slice(0, at) + original + text.slice(at + inserted.length), rest, target, counts)) return true;
+  return false;
+}
+
+function onlyInsertions(base, output, { fragments, countElements }) {
+  return removable(output, fragments, base, (text) => withoutCounts(text, countElements));
+}
+
+function countsMatchChildren(text, part, elements) {
+  const root = parseXml(text, part).root;
+  for (const name of elements) {
+    const element = root.child(name);
+    if (element && element.attr('count') !== null && Number(element.attr('count')) !== element.childrenNamed(COUNT_CHILD[name]).length) return false;
+  }
+  return true;
+}
+
+export async function selfCheck(wb, bytes, { changes, touched, addedParts, removedParts, signatureRemoved, partTexts = new Map(), insertions = new Map(), touchedBefore = new Set() }) {
   try {
     const back = await openWorkbook(bytes, wb.fileName, wb.limits);
     const knownWarnings = new Set(wb.warnings.map((w) => w.code));
@@ -149,6 +183,18 @@ export async function selfCheck(wb, bytes, { changes, touched, addedParts, remov
     for (const name of addedParts) if (!present.has(name)) throw new QuoinError('check.part', 'declared part is missing', name);
     for (const name of removedParts) if (present.has(name)) throw new QuoinError('check.part', 'declared removal is still present', name);
     const signatureParts = signatureRemoved ? (n) => /vbaProjectSignature/i.test(n) || /vbaProject\.bin\.rels$/i.test(n) || n === '[Content_Types].xml' : () => false;
+    for (const [name, text] of partTexts) {
+      const got = await back.pkg.text(name);
+      if (!got || got.text !== text) throw new QuoinError('check.part', 'part differs from what was written', name);
+    }
+    for (const [name, ins] of insertions) {
+      const got = await back.pkg.text(name);
+      const original = await wb.pkg.text(name);
+      if (!got || !original) throw new QuoinError('check.part', 'part is missing', name);
+      if (!touchedBefore.has(name) && ins.base !== original.text) throw new QuoinError('check.part', 'part was not the original when it was changed', name);
+      if (!onlyInsertions(ins.base, got.text, ins)) throw new QuoinError('check.part', 'part changed beyond what was inserted', name);
+      if (!countsMatchChildren(got.text, name, ins.countElements)) throw new QuoinError('check.part', 'a count does not match its children', name);
+    }
     for (const e of wb.pkg.zip.entries) {
       if (touched.has(e.name) || removedParts.has(e.name) || signatureParts(e.name)) continue;
       const n = back.pkg.zip.get(e.name);

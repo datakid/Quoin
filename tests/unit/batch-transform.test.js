@@ -9,6 +9,7 @@ import { resolvePlan } from '../../src/batch/resolve/resolve.js';
 import { executeTransform } from '../../src/batch/execute/transform.js';
 import { executeFile } from '../../src/batch/execute/index.js';
 import { REPORT_COLUMNS } from '../../src/batch/execute/collect.js';
+import { QuoinError } from '../../src/core/errors.js';
 import { fixture } from './helpers.js';
 
 const NOW = '2026-11-14T10:00:00.000Z';
@@ -75,6 +76,11 @@ test('a unit that fails is a failed row with its reason and the substituted quer
   assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code, r.output, r.verified]), [['failed', 'unit.parse', '', false], ['failed', 'unit.parse', '', false]]);
   assert.equal(result.failures[0].m.startsWith('if 1 = 1 then 1 + else'), true);
   assert.equal(result.failures[0].error.code, 'unit.parse');
+});
+
+test('a row whose error has no message shows its detail as the reason', async () => {
+  const { result } = await run('pq_simple.xlsx', recipeOf('{1, 2}', { mode: 'newFile' }));
+  assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code, r.reason]), [['failed', 'unit.notTable', 'list'], ['failed', 'unit.notTable', 'list']]);
 });
 
 test('a parse error is reported in the row reason with its line and column', async () => {
@@ -259,6 +265,14 @@ test('a combined sheet part whose content does not read back as written is not r
   assert.deepEqual(result.sheetParts, []);
 });
 
+test('a new sheet whose write the self-check stops is not released and any other write error is a failed row, both unverified with no output', async () => {
+  for (const [code, verdict] of [['write.selfcheck', 'not-released'], ['write.refused', 'failed']]) {
+    const { result } = await run('pq_simple.xlsx', recipeOf(CURRENT, { mode: 'newSheet', name: 'Out' }), { apply: async () => { throw new QuoinError(code, 'stopped'); } });
+    assert.deepEqual(result.rows.map((r) => [r.verdict, r.reason_code, r.verified]), [[verdict, code, false], [verdict, code, false]]);
+    assert.deepEqual([result.outputs, result.bytes, result.sha256, result.sheetParts], [[], null, null, []]);
+  }
+});
+
 test('a unit whose query names a column it does not have is a skipped row with the column and nothing is written for it', async () => {
   const m = 'let T = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content] in Table.SelectColumns(T, {"Age"})';
   const { result } = await run('pq_simple.xlsx', recipeOf(m, { mode: 'newFile' }));
@@ -266,6 +280,7 @@ test('a unit whose query names a column it does not have is a skipped row with t
   const bad = 'let T = Excel.CurrentWorkbook(){[Name="{unit.name}"]}[Content] in Table.SelectColumns(T, {"DateTimeGenerated"})';
   const second = await run('pq_simple.xlsx', recipeOf(bad, { mode: 'newFile' }));
   assert.deepEqual(second.result.rows.map((r) => [r.unit, r.verdict, r.reason_code, r.reason]), [['StudentNames', 'skipped', 'skip.missingColumn', "The column 'DateTimeGenerated' of the table wasn't found."], ['StudentResults', 'changed', '', '']]);
+  assert.deepEqual(second.result.rows.map((r) => r.verified), [false, true]);
   assert.deepEqual(second.result.outputs.map((o) => o.name), ['pq_simple__StudentResults.xlsx']);
   assert.deepEqual(second.result.failures, []);
 });

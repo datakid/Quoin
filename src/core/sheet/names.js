@@ -7,10 +7,18 @@ const EDGE_APOSTROPHES = /^'+|'+$/g;
 
 const lower = (text) => text.toLowerCase();
 const takeCodePoints = (text, n) => [...text].slice(0, Math.max(0, n)).join('');
+const takeUnits = (text, n) => {
+  let out = '';
+  for (const point of text) {
+    if (out.length + point.length > n) break;
+    out += point;
+  }
+  return out;
+};
 
 export function sheetNameBase(raw) {
   const cleaned = String(raw === undefined || raw === null ? '' : raw).replace(FORBIDDEN, '_').replace(EDGE_APOSTROPHES, '');
-  const cut = takeCodePoints(cleaned, MAX_SHEET).replace(EDGE_APOSTROPHES, '');
+  const cut = takeUnits(cleaned, MAX_SHEET).replace(EDGE_APOSTROPHES, '');
   return cut.length ? cut : 'Sheet';
 }
 
@@ -25,7 +33,7 @@ export class NameBook {
     let name = base;
     for (let n = 2; this.sheets.has(lower(name)) || lower(name) === 'history'; n++) {
       const suffix = `-${n}`;
-      name = takeCodePoints(base, MAX_SHEET - [...suffix].length).replace(EDGE_APOSTROPHES, '') + suffix;
+      name = takeUnits(base, MAX_SHEET - suffix.length).replace(EDGE_APOSTROPHES, '') + suffix;
     }
     this.sheets.add(lower(name));
     return name;

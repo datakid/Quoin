@@ -73,7 +73,9 @@ jobs:
                       Console.WriteLine($"         {text}");
                   }
               }
-              foreach (var output in Directory.GetFiles(Path.Combine(dir, "output")).OrderBy(f => f))
+              var outputDir = Path.Combine(dir, "output");
+              if (!Directory.Exists(outputDir)) continue;
+              foreach (var output in Directory.GetFiles(outputDir).OrderBy(f => f))
               {
                   var found = Check(output);
                   files++;

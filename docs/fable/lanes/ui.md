@@ -47,7 +47,9 @@ Not yours, read only: the rest of `src/app/**` (including `src/app/row-diff.js`)
 
 **U5. Grid keyboard completeness.** Home, End, PageUp, PageDown, Ctrl+Home, Ctrl+End, Shift+arrows, Ctrl+A, Ctrl+C: each works and has a test. Then write in the notes what you looked at and found fine.
 
-After U5, take the docs lane (`lanes/docs.md`). Do not stop between milestones: a milestone that waits for CI is paused, and the next one starts while the run is going.
+**U6. Hide `unchanged` rows by default (the user's decision D2).** In the result grid of Preview and of the report, rows whose verdict is `unchanged` are hidden by default, with a line above the grid that says how many are hidden and a button that shows them. Strings are ready in `src/ui/strings.js`: `S.matrixHiddenCount(n)`, `S.matrixShowUnchanged`, `S.matrixHideUnchanged`. Rules: the CSV report and `report.csv` still hold every row (they are built outside your files and must not change); the row index that `onSelectRow` passes to `src/app/main.js` (`rowDiff(preview, i)`) must stay the index in the full row list, so keep a visible-to-source map in `ResultMatrix`; the toggle is a real button with `aria-pressed`, keyboard reachable, with its state kept when the grid redraws; when no row is unchanged the line and the button are not drawn; the count is in the live region the grid already uses or in a new one, and axe passes in both themes. Spec: add cases to `fable-matrix.spec.js` (hidden by default, count correct, toggle shows them, selecting a row after the toggle opens the right diff, report CSV still has every row). Any string you need beyond those three goes in your notes with the exact text, the integrator adds it.
+
+After U6, take the docs lane (`lanes/docs.md`). Do not stop between milestones: a milestone that waits for CI is paused, and the next one starts while the run is going.
 
 ## Ruled out
 

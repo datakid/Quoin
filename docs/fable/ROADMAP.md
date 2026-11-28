@@ -33,11 +33,12 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 | trunk agent | U3 | phone and tablet audit at 320, 375 and 768 px with assertions | nothing |
 | trunk agent | U4 | forced colours and dark, with a spec case | nothing |
 | trunk agent | U5 | grid keyboard completeness with tests | nothing |
+| trunk agent | U6 | hide `unchanged` rows by default with a count and a toggle (user decision D2), strings already in place | nothing |
 | trunk agent | D1 | README checked claim by claim against code and tests | nothing |
 | trunk agent | D2 | `docs/decisions.md`: every deviation, decision and Blocked item | S5, W5 for their text; starts without them |
 | trunk agent | D3 | `FINAL-GATE.md`: sections 9 and 10 row by row with evidence | nothing |
 | trunk agent | D4 | prepared replacement text for the Excel sitting outcomes | W1 for the case list |
-| integrator | I1 | strings for Scope's codes, D2 (hide `unchanged` rows with a count), closing run message | Scope's tree (merged) |
+| integrator | I1 | strings for Scope's codes, the closing run message, strings for D2: done (`9c964a3` and after); the D2 grid work moved to the trunk agent as U6 | done |
 | integrator | I3 | CI loop: push, read the `browsers` run, send each failure to its owner | lanes pushing |
 | integrator | I2 | merge each push, regenerate the manifest, strings for new codes from the notes | lanes pushing |
 | integrator | I4 | check `FINAL-GATE.md` rows against the repo; the check is read by someone who did not write the code | D3 and everything above |

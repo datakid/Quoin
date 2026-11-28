@@ -1,6 +1,6 @@
 # Lane: docs
 
-Agent: the trunk agent, on branch `fable-trunk-handover`, after milestone U5 of `lanes/ui.md`. Plan part: F5-05 (README and decisions) and F5-06 (final gate). You write what the product is, what differs from the spec, and what is proven. You change no code and no test.
+Agent: the trunk agent, on branch `fable-trunk-handover`, after milestone U6 of `lanes/ui.md`. Plan part: F5-05 (README and decisions) and F5-06 (final gate). You write what the product is, what differs from the spec, and what is proven. You change no code and no test.
 
 Read `docs/fable/OWNERSHIP.md` and `docs/fable/ROADMAP.md` first. Their rules apply to you in full. Branch rules are the ones in `lanes/ui.md`: your own existing branch, merge `origin/fable` before each push, never rebase or force-push, no new branch, push after each milestone.
 

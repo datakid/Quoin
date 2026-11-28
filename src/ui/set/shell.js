@@ -239,6 +239,15 @@ export class SetShell {
   }
 
   revealResult() {
+    const scroller = this.root;
+    if (scroller.scrollHeight > scroller.clientHeight) {
+      const view = scroller.getBoundingClientRect();
+      const box = this.result.getBoundingClientRect();
+      const down = box.bottom - view.bottom;
+      const up = box.top - view.top;
+      if (down > 0) scroller.scrollTop += Math.min(down, Math.max(0, up));
+      else if (up < 0) scroller.scrollTop += up;
+    }
     this.result.scrollIntoView({ block: 'nearest' });
   }
 

@@ -108,6 +108,10 @@ test('fable matrix: the keyboard moves between cells and Tab leaves the table', 
   await page.evaluate((rows) => {
     window.__quoin.set.addFiles([{ name: 'a.xlsx', relPath: 'a.xlsx', size: 1, lastModified: 1, file: new Blob([new Uint8Array(1)]) }]);
     window.__quoin.shell.showResult(rows, 'report');
+    const after = document.createElement('button');
+    after.textContent = 'After the table';
+    after.style.cssText = 'position:fixed;left:0;bottom:0';
+    document.body.append(after);
   }, fakeRows(20));
   await matrix(page).focus();
   await page.keyboard.press('ArrowDown');

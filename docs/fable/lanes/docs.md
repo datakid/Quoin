@@ -8,6 +8,8 @@ The rule of this lane: a sentence goes into a file only if you checked it agains
 
 If you are starting in a new chat: read `docs/fable/AGENTS.md` first (section "Picking up in a new chat"), then this brief, then the `## State` block at the top of `docs/fable/lanes/NOTES-docs.md`. Keep that block current at every push, in the format AGENTS.md gives. Continue at the first milestone below that the notes do not mark done.
 
+The quality bar is in `docs/fable/AGENTS.md` ("The quality bar for every agent"): evidence for every milestone, every new test shown to fail without its change, no weakened test, Firefox and WebKit fixed only when CI says so. The integrator sends back work that does not meet it.
+
 ## Your files
 
 - `README.md`

@@ -631,5 +631,13 @@ Fails without: not checked, for the same reason.
 Changed expectations: the removed Save recipe button is now Download recipe file, and the binary refusal sentence is the integrator's.
 Deviations: two of my tests (save under the loaded name, a file over 256 KB) are dropped because `fable-recipes.spec.js` covers both on the integrator's UI.
 
+### Integrator log, 2026-11-27 and 2026-11-28
+Layer: docs, ownership, merges, strings
+Files: docs/fable/ownership.json, OWNERSHIP.md, ROADMAP.md, DECIDED.md, AGENTS.md, lanes/*.md, src/ui/strings.js, src/app/main.js, tests/unit/strings-run-closing.test.js, .github/workflows/openxml.yml, asset-manifest.json
+Do: five lanes with one owner per file (`check-ownership.mjs map`, `lane`, `who`); merged trunk harness (`00c322c`), Writer through W1 (`8dc0644`) and Scope through S2 (`1ab7281`, squashed so the F3-08 and F3-09 commits stay out); strings for Scope's skip, unit, scope and held-output codes; closing run message when no workbook changed; Open XML check skips pack cases that have no output folder; the twelve questions that waited on the user are decided in `DECIDED.md` from the plan; `AGENTS.md` is the first file of a new chat, with every agent's branch, plan and resume line, the `## State` rule and the quality bar.
+Result: `fable` at `c9b7b88`: ci success; lint 0 findings; unit 1925 tests, 1919 pass, 0 fail, 5 skipped. The whole-suite `browsers` run on `c65c9a2` had Firefox 5 failed and WebKit 1 failed, all in ui lane files; the trunk agent's own run on `aeee8aa` is down to 1 Firefox and 2 WebKit.
+Changed expectations: none.
+Deviations: none.
+
 ### Next
-The F3 gate (F3-11) needs the person's decision on the three differences under F3-10. F4 is through its gate. F5 is waiting on the first Firefox and WebKit run in CI, the final gate, and the open decisions on section 9. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.
+The F3 gate (F3-11): the sheet-write check (S1) is on `fable` and the three differences are decided in `DECIDED.md`. F4 is through its gate. F5: Firefox and WebKit are being closed by the trunk agent (U1), the README, decisions and final gate are its docs lane (D1 to D3), and the Excel sitting is the only item that needs the person. Start from `docs/fable/AGENTS.md`. Scope's in-place output (F3-08, `c15016d` on `fable-scope`) stays unmerged until a person has opened an in-place result in Excel; Excel-computes-on-open (F3-09) likewise.

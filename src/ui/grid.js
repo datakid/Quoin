@@ -112,6 +112,13 @@ export class Grid {
     this.el.addEventListener('pointerup', () => {
       this.drag = false;
     });
+    this.el.addEventListener('pointercancel', () => {
+      this.drag = false;
+    });
+    this.el.addEventListener('lostpointercapture', () => {
+      this.drag = false;
+    });
+    this.el.addEventListener('pointermove', (ev) => this.onDragMove(ev));
     new ResizeObserver(() => this.paint()).observe(this.el);
   }
 
@@ -358,6 +365,27 @@ export class Grid {
     return r >= r1 && r <= r2 && c >= c1 && c <= c2;
   }
 
+  captureDrag(ev) {
+    if (!this.el.setPointerCapture || typeof ev.pointerId !== 'number') return;
+    try {
+      this.el.setPointerCapture(ev.pointerId);
+    } catch {
+      return;
+    }
+  }
+
+  onDragMove(ev) {
+    if (!this.drag) return;
+    if (ev.buttons !== 1) {
+      this.drag = false;
+      return;
+    }
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const cell = under && under.closest ? under.closest('.grid-cell[role=gridcell]') : null;
+    const at = cell && /^gc-(\d+)-(\d+)$/.exec(cell.id);
+    if (at) this.extend(Number(at[1]), Number(at[2]));
+  }
+
   onCellDown(ev, r, c, v, cell) {
     this.el.focus();
     if (v && typeof v === 'object' && v.k === 'error') {
@@ -372,6 +400,7 @@ export class Grid {
       this.anchor = { r, c };
       this.sel = { r1: r, r2: r, c1: c, c2: c };
       this.drag = true;
+      this.captureDrag(ev);
     }
     this.repaintAll();
   }

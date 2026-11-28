@@ -6,11 +6,11 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 
 | Plan item | State | Milestones that close it |
 |---|---|---|
-| F5-01 Firefox and WebKit | first CI run: Firefox 12 failures, WebKit 10 | harness brief items 1 to 10, ui brief items 1 to 10 |
+| F5-01 Firefox and WebKit | after the harness lane: Firefox 4 failures, WebKit 2 (one flaky), all in ui lane files | U1 |
 | F3 gate (F3-11) | needs the sheet-write check and three decisions of the user | S1, then the user |
 | F5-04 real Excel closure | the person has not yet run the packs in one sitting | W1, then the user |
-| F5-05 README and decisions | partly done | S5, W5, I2 |
-| F5-06 final gate | not started | I4 |
+| F5-05 README and decisions | partly done | S5, W5, D1, D2 |
+| F5-06 final gate | not started | D3, I4 |
 | Not in the plan, found on the way | sheet names cut by code points, undeclared parts in sheet writes, hostile-input behaviour of the readers, writer behaviour over random sequences | S1, S3, W2, W3 |
 
 ## Lanes and milestones
@@ -27,12 +27,20 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 | writer | W3 | hostile inputs for the compound-file and query readers | nothing |
 | writer | W4 | review of Scope's S1 against the nine probes | S1 on `fable` |
 | writer | W5 | table of checks and tests, requests to other owners | W1 to W4 |
-| harness | brief items 1 to 10 | the six test-side and engine-limit failures, CI summary, flake audit, skip helper | nothing |
-| ui | brief items 1 to 10 | WebKit virtualisation, row-diff on phones, Firefox drag and Tab, copy, 1,000,000-row scroll; phone audit; forced colours; keyboard | nothing |
+| trunk agent | harness lane | done: CI summary, flake audit, skip helper, test-side fixes (merged `00c322c`) | done |
+| trunk agent | U1 | Firefox and WebKit to zero failures in a whole-suite `browsers.yml` run | nothing |
+| trunk agent | U2 | the Preview stall at 2,000 files profiled, fixed, before and after in `performance.md` | nothing |
+| trunk agent | U3 | phone and tablet audit at 320, 375 and 768 px with assertions | nothing |
+| trunk agent | U4 | forced colours and dark, with a spec case | nothing |
+| trunk agent | U5 | grid keyboard completeness with tests | nothing |
+| trunk agent | D1 | README checked claim by claim against code and tests | nothing |
+| trunk agent | D2 | `docs/decisions.md`: every deviation, decision and Blocked item | S5, W5 for their text; starts without them |
+| trunk agent | D3 | `FINAL-GATE.md`: sections 9 and 10 row by row with evidence | nothing |
+| trunk agent | D4 | prepared replacement text for the Excel sitting outcomes | W1 for the case list |
 | integrator | I1 | strings for Scope's codes, D2 (hide `unchanged` rows with a count), closing run message | Scope's tree (merged) |
-| integrator | I2 | README features, entry paths, storage keys and limits; `docs/decisions.md` | S5, W5, lane notes |
 | integrator | I3 | CI loop: push, read the `browsers` run, send each failure to its owner | lanes pushing |
-| integrator | I4 | final gate: section 9 and 10 checklist with evidence, checked by an agent that did not write the code | everything above |
+| integrator | I2 | merge each push, regenerate the manifest, strings for new codes from the notes | lanes pushing |
+| integrator | I4 | check `FINAL-GATE.md` rows against the repo; the check is read by someone who did not write the code | D3 and everything above |
 
 ## Waiting on the user, not on any agent
 
@@ -45,4 +53,4 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 
 - scope: output formats for the combined workbook (freeze panes, widths, header style) with tests, only if the user wants them; otherwise help harness on the Safari offline question by reading how the service worker caches.
 - writer: password-protected macro project fixture and its refusal path; signature removal corner cases.
-- harness and ui: the visual baselines for each new surface in Firefox and WebKit, once the first browsers run is green.
+- trunk agent: the visual baselines for each new surface in Firefox and WebKit, once the whole-suite browsers run is green (CI regenerates them; the agent reviews the images).

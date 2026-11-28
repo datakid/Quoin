@@ -9,8 +9,9 @@ The rule: one owner per file. A lane edits only the paths listed for it. Every o
 | Lane | Owns | Does not touch | Brief |
 |---|---|---|---|
 | integrator | everything not listed for a lane: `src/app/**`, `src/workers/**`, `src/batch/execute/index.js`, `collect.js`, `run-file.js`, `src/batch/recipe/**`, `src/batch/index/**`, `src/ui/strings.js`, the rest of `src/core/`, `docs/**` except the lane notes, `asset-manifest.json`, `tests/lint/**`, `tests/fixtures/**`, `tests/unit/**` except the lane tests (see `ownership.json`), `tests/__visual__/**`, `scripts/**`, `.github/workflows/ci.yml`, `openxml.yml`, `perf.yml`, `package*.json` | the paths below | this file |
-| harness | `playwright.config.js`, `.github/workflows/browsers.yml`, `tests/e2e/helpers.js`, and the specs for apply and collect worker, recipe tokens, print, refinement, privacy, safety | `src/**`, `styles/**` | `docs/fable/lanes/harness.md` |
-| ui | `src/ui/grid.js`, `src/ui/set/**`, `styles/grid.css`, `styles/set.css`, and the specs for matrix, grid, grid limits, perf, row diff, responsive | `src/app/**`, `src/ui/strings.js`, `tests/e2e/helpers.js` | `docs/fable/lanes/ui.md` |
+| harness | `playwright.config.js`, `.github/workflows/browsers.yml`, `tests/e2e/helpers.js`, and the specs for apply and collect worker, recipe tokens, print, refinement, privacy, safety | `src/**`, `styles/**` | `docs/fable/lanes/harness.md` (finished by the trunk agent, merged `00c322c`) |
+| ui | `src/ui/grid.js`, `src/ui/set/**`, `styles/grid.css`, `styles/set.css`, `src/app/plan-run.js`, `docs/fable/performance.md`, and the specs for matrix, grid, grid limits, perf, row diff, responsive | the rest of `src/app/**`, `src/ui/strings.js`, `tests/e2e/helpers.js` | `docs/fable/lanes/ui.md` (trunk agent) |
+| docs | `README.md`, `docs/decisions.md`, `docs/fable/FINAL-GATE.md` | everything else | `docs/fable/lanes/docs.md` (trunk agent) |
 
 Each lane also owns its own notes file, `docs/fable/lanes/NOTES-<lane>.md`. Only that lane writes it. The integrator reads it and moves what matters into `PROGRESS.md` and `MANAGER.md`.
 
@@ -22,7 +23,8 @@ Shared files and who changes them:
 | `src/ui/strings.js` | integrator | write the keys and text into the notes file |
 | `src/app/main.js`, `src/app/**` | integrator | write the call or field the lane needs into the notes file |
 | `tests/__visual__/**` | CI only | never regenerate by hand |
-| `PROGRESS.md`, `MANAGER.md`, `README.md`, `docs/observations.md` | integrator | send the summary in the notes file |
+| `PROGRESS.md`, `MANAGER.md`, `docs/observations.md` | integrator | send the summary in the notes file |
+| `README.md`, `docs/decisions.md` | docs lane | other lanes send their text in their notes |
 | `tests/e2e/helpers.js` | harness | other lanes ask in their notes; harness changes are additive, existing exports keep their behaviour |
 
 ## Rules for every lane
@@ -47,9 +49,11 @@ Shared files and who changes them:
 - Local Chromium specs: `/home/claude/lanes/e2e-<lane>.sh tests/e2e/<spec>.spec.js`. Every lane has its own port, so lanes can run at the same time.
 - After a change under `src/` or `styles/` that a test reads the manifest for: `node scripts/build-manifest.mjs`, run the tests, then `git checkout -- asset-manifest.json`.
 
-## Agents in their own sessions: Writer and Scope
+## Agents in their own sessions: Writer, Scope and the trunk agent
 
-Writer (branch `fable-writer`) and Scope (branch `fable-scope`) run in the user's own sessions, not in this clone. They have rows in `ownership.json` (`writer`, `scope`) and briefs: `docs/fable/lanes/writer.md`, `docs/fable/lanes/scope.md`. They work on their own existing branch, merge `origin/fable` before each push, never rebase, never force-push, never create a branch. The integrator merges their branches into `fable`. The trunk agent is finished: its work is merged and its handover is `docs/fable/handover/HANDOVER.md`.
+Writer (branch `fable-writer`), Scope (branch `fable-scope`) and the trunk agent (branch `fable-trunk-handover`) run in the user's own sessions, not in this clone. Rules 1 and 6 to 9 below were written for lanes in a clone and apply to them as follows: each works on its own existing branch, merges `origin/fable` before each push, never rebases, never force-pushes, never creates a branch, and pushes after each milestone. Writer and Scope can run Chromium unit and spec runs where their sessions allow it. Firefox and WebKit are verified by `browsers.yml` with `workflow_dispatch`.
+
+They have rows in `ownership.json` (`writer`, `scope`, `ui`, `docs`, and `harness` which is finished) and briefs: `docs/fable/lanes/writer.md`, `docs/fable/lanes/scope.md`, `docs/fable/lanes/ui.md`, `docs/fable/lanes/docs.md`. The integrator merges their branches into `fable`. The trunk agent's harness work is merged (`00c322c`, `NOTES-harness.md`); its handover from earlier is `docs/fable/handover/HANDOVER.md`. Its next work is the ui lane, then the docs lane.
 
 | Where | Owner | Rule |
 |---|---|---|

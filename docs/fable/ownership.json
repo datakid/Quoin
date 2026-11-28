@@ -16,7 +16,8 @@
         "tests/e2e/privacy.spec.js",
         "tests/e2e/safety.spec.js",
         "docs/fable/lanes/NOTES-harness.md"
-      ]
+      ],
+      "agent": "trunk agent (finished, 2026-11-27)"
     },
     "ui": {
       "brief": "docs/fable/lanes/ui.md",
@@ -32,8 +33,14 @@
         "tests/e2e/fable-row-diff.spec.js",
         "tests/e2e/fable-responsive.spec.js",
         "tests/unit/grid-labels.test.js",
+        "src/app/plan-run.js",
+        "tests/unit/plan-run.test.js",
+        "tests/e2e/fable-perf.spec.js",
+        "docs/fable/performance.md",
         "docs/fable/lanes/NOTES-ui.md"
-      ]
+      ],
+      "agent": "trunk agent, branch fable-trunk-handover",
+      "branch": "fable-trunk-handover"
     },
     "writer": {
       "brief": "docs/fable/lanes/writer.md",
@@ -68,7 +75,8 @@
         "tests/unit/excel-kit*.test.js",
         "tests/unit/pq-*.test.js",
         "tests/unit/vba-*.test.js"
-      ]
+      ],
+      "agent": "writer agent, branch fable-writer"
     },
     "scope": {
       "brief": "docs/fable/lanes/scope.md",
@@ -106,6 +114,18 @@
         "tests/unit/export.test.js",
         "tests/unit/save-safety.test.js",
         "tests/unit/sheet-*.test.js"
+      ],
+      "agent": "scope agent, branch fable-scope"
+    },
+    "docs": {
+      "brief": "docs/fable/lanes/docs.md",
+      "agent": "trunk agent, branch fable-trunk-handover",
+      "branch": "fable-trunk-handover",
+      "owns": [
+        "README.md",
+        "docs/decisions.md",
+        "docs/fable/FINAL-GATE.md",
+        "docs/fable/lanes/NOTES-docs.md"
       ]
     }
   }

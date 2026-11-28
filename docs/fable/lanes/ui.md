@@ -1,8 +1,10 @@
 # Lane: ui
 
-Plan part: F5-01, Firefox and WebKit. You own the result grid, the Set screen layout and the specs for them. The failures here are product bugs until proven to be an engine limit.
+Agent: the trunk agent, on branch `fable-trunk-handover` (it finished the harness lane, `NOTES-harness.md`). Plan part: F5-01, Firefox and WebKit, then F5-02 follow-up. You own the result grid, the Set screen layout, the Preview path in `plan-run.js` and the specs for them. A failure here is a product bug until it is proven to be an engine limit.
 
-Read `docs/fable/OWNERSHIP.md` first. Its rules apply to you in full.
+Read `docs/fable/OWNERSHIP.md` and `docs/fable/ROADMAP.md` first. Their rules apply to you in full. Branch rules are the ones in `lanes/writer.md` ("How you work"): your own existing branch, merge `origin/fable` before each push, never rebase or force-push, no new branch, push after each milestone. Your harness work is merged into `fable` (`00c322c`).
+
+How you verify: Chromium locally as you did for the harness lane; Firefox and WebKit through `browsers.yml` with `workflow_dispatch` and the `spec` input, so one spec runs in minutes. A fix for one engine is "fixed" only after that engine's run is green; until then it is "unverified until CI".
 
 ## Your files
 
@@ -17,42 +19,35 @@ Read `docs/fable/OWNERSHIP.md` first. Its rules apply to you in full.
 - `tests/e2e/fable-row-diff.spec.js`
 - `tests/e2e/fable-responsive.spec.js`
 - `tests/unit/grid-labels.test.js`
+- `src/app/plan-run.js`, `tests/unit/plan-run.test.js`, `tests/e2e/fable-perf.spec.js`, `docs/fable/performance.md` (for U2)
 - `docs/fable/lanes/NOTES-ui.md` (your notes)
 
-Not yours, read only: `src/app/**` (including `src/app/row-diff.js`), `src/ui/strings.js`, `tests/e2e/helpers.js`, `tests/__visual__/**`. If a fix needs a change there, write the exact change in your notes.
+Not yours, read only: the rest of `src/app/**` (including `src/app/row-diff.js`), `src/ui/strings.js`, `tests/e2e/helpers.js`, `tests/__visual__/**`. If a fix needs a change there, write the exact change in your notes.
 
-## Setup
+## What is left in CI (your own notes, run 46033109587 on `c5914ae`)
 
-Your clone is `/home/claude/lanes/ui`, port 5302. Run specs with `/home/claude/lanes/e2e-ui.sh tests/e2e/<spec>.spec.js`. Chromium only. Firefox and WebKit run only in CI. After a change under `src/` or `styles/` that a test needs the manifest for: `node scripts/build-manifest.mjs`, run, then `git checkout -- asset-manifest.json` before you commit.
-
-## What failed in CI (run 45857877573, commit 6e513d2)
-
-Log with full errors: `gh run view 45857877573 -R datakid/quoin --log-failed`.
-
-| # | Test | Engine | Error in CI |
+| # | Test | Engine | Error |
 |---|---|---|---|
-| 1 | `fable-matrix.spec.js:80` five thousand rows paint only the visible ones | WebKit | `.grid-row` count is 5000, expected under 80. Virtualisation is not applied |
-| 2 | `fable-matrix.spec.js:96` the keyboard moves between cells and Tab leaves the table | Firefox | after Tab the grid is still focused |
-| 3 | `fable-matrix.spec.js:124` dragging across cells extends the selection | Firefox | selection stays `{r1:0,r2:0,c1:0,c2:0}`, expected `{r1:0,r2:3,c1:0,c2:1}` |
-| 4 | `grid.spec.js:46` selection and the copy event produce tab-separated text | Firefox | copied text is empty |
-| 5 | `perf.spec.js:39` scrolling a 1,000,000 by 12 result stays smooth | Firefox | `stats.top` is 50394, expected over 100000 |
-| 6 | `fable-row-diff.spec.js:111` on a phone the panes stack and the result and diff come into view | WebKit | a part's bottom is 1484.8 but the shell bottom is 797 |
+| 1 | `fable-row-diff.spec.js:111` on a phone the panes stack and the result and the diff come into view | WebKit | a pane bottom is 1484.8, the shell bottom 797 |
+| 2 | `fable-matrix.spec.js:96` the keyboard moves between cells and Tab leaves the table | Firefox | grid still focused after Tab |
+| 3 | `fable-matrix.spec.js:124` dragging across cells extends the selection | Firefox | selection stays on one cell |
+| 4 | `grid.spec.js:46` selection and the copy event produce tab-separated text | Firefox | copied text empty |
+| 5 | `perf.spec.js:39` scrolling 1,000,000 rows by 12 columns | Firefox | scroll top 50394, expected over 100000 |
+| 6 | `fable-matrix.spec.js:80` five thousand rows paint only the visible ones | WebKit | passed in one run and painted 5000 rows in another: timing dependent |
 
-## What to do, in this order
+## Milestones (work them in this order, do not wait for me)
 
-1. Item 1 first, it is the one the handover flagged. Look at `paint()` in `src/ui/grid.js` (rows between `first` and `last` from `scrollTop` and `clientHeight`) and at the scroll container rules in `styles/grid.css` and `styles/set.css` (`.set-result[data-matrix]` at lines 193 to 199 and 270). Probably `clientHeight` is 0 or the full height in WebKit under the test viewport because the container is not height-bounded. Find the cause from the code and a Chromium reproduction with a forced unbounded container before you change anything. The fix must give a bounded scroll container in every engine.
-2. Item 6. The row-diff panes on a phone. Same files. Find which element is 1484 px tall and why the stack is not bounded by the shell.
-3. Items 2 and 3. Read the keydown, mousedown, mousemove and mouseup handling in `grid.js`. Firefox differs in how it sets `event.buttons` on mousemove and in what `Tab` does when the grid calls `preventDefault`. Fix in `grid.js` if the handler relies on an engine-specific detail. Add a unit-level or Chromium spec that would have caught it where you can.
-4. Item 4. Check whether the copy handler reads the selection when the event comes from a synthetic `ClipboardEvent` in Firefox. If the app handler is right and the test's synthetic event is what fails, change the test and say so in the notes.
-5. Item 5. Firefox limits the height of a scrolled element (about 17.8 million px) and Chromium does not. 1,000,000 rows at the row height is above it. If the grid uses one tall spacer, scale the scroll range so the last row is reachable in every engine. If it is not that, find the actual cause. If you decide it is an engine limit, record it as Blocked with the number in your notes and skip by `browserName` with the reason.
-6. Keep a table in `docs/fable/lanes/NOTES-ui.md`: item, root cause (one line), commit, verified (Chromium local, or "unverified until CI").
+**U1. Firefox and WebKit to zero.** Fix items 1 to 6 at the root: read `src/ui/grid.js`, `styles/grid.css`, `styles/set.css` and reproduce the engine-specific condition in Chromium where you can (a forced unbounded container, synthetic events, a narrower viewport). Item 6 first: find what makes the paint depend on timing (the scroll container's height before layout, a missing resize or first-paint measure) and make it deterministic. Item 5: Firefox limits the height of a scrolled element to about 17.8 million px; 1,000,000 rows at the row height is above it; scale the scroll range so the last row is reachable in every engine, and say so in the notes. If an item is a Playwright or engine limit, record it as Blocked with the evidence and skip by engine with the reason, never by changing an expectation. Acceptance: a whole-suite `browsers.yml` run with Firefox and WebKit at 0 failed, run ids in the notes.
 
-## Then (queue, in order, do not wait for me)
+**U2. The Preview stall at 2,000 files.** `docs/fable/performance.md` records a 484 ms stall with the cause unknown. Scope measured `resolvePlan` in node at 20 to 25 ms for 2,000 index entries, so the time is in `src/app/plan-run.js` or the report or the ui (`MESSAGES-scope.md`, the last section). Profile one Preview at 2,000 files in Chromium (DevTools protocol, a CPU profile of the main thread), name the function, fix it, and record before and after in `performance.md`. Acceptance: the stall is measured again at 2,000 and 5,000 files, the numbers are in the doc, `plan-run` tests and the Preview specs pass.
 
-7. Phone and tablet audit of the Set screen at 320, 375 and 768 px wide with Chromium mobile emulation: no horizontal page scroll, no clipped controls, the result grid and the diff stay inside the shell. Add the assertions that fail on a regression to `fable-responsive.spec.js`. Fix what the audit finds in `styles/set.css`, `styles/grid.css` and `src/ui/set/**`.
-8. Forced-colors and dark mode: check that grid selection, focus ring and status colours remain distinguishable in `forced-colors: active` and dark. Fix in `styles/grid.css` and `styles/set.css`. Add a Chromium spec case that emulates `forced-colors` and asserts the focus and selection rules are not colour-only.
-9. Grid keyboard completeness: Home, End, PageUp, PageDown, Ctrl+Home, Ctrl+End, Shift+arrows, Ctrl+A, Ctrl+C on the grid. Make sure each works and has a test in `grid.spec.js` or `fable-matrix.spec.js`.
-10. Write in the notes what you looked at and found fine, so it is not looked at twice.
+**U3. Phone and tablet audit** of the Set screen at 320, 375 and 768 px wide: no horizontal page scroll, no clipped controls, grid and diff inside the shell. Add assertions to `fable-responsive.spec.js` that fail on a regression and fix what they find in your CSS.
+
+**U4. Forced colors and dark.** Selection, focus and status colours stay distinguishable in `forced-colors: active` and dark. Add a Chromium spec case that emulates `forced-colors` and asserts that focus and selection are not colour only.
+
+**U5. Grid keyboard completeness.** Home, End, PageUp, PageDown, Ctrl+Home, Ctrl+End, Shift+arrows, Ctrl+A, Ctrl+C: each works and has a test. Then write in the notes what you looked at and found fine.
+
+After U5, take the docs lane (`lanes/docs.md`). Do not stop between milestones: a milestone that waits for CI is paused, and the next one starts while the run is going.
 
 ## Ruled out
 

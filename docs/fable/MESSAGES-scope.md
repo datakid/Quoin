@@ -139,3 +139,8 @@ Notes it made that need no change but should be read by whoever ticks the boxes:
 
 - `performance.md` records a 484 ms Preview stall at 2,000 files with the cause unknown. It is not `resolvePlan`: timed in node with 2,000 index entries it takes 20 to 25 ms for tables, sheets and patterns, and 20 to 41 ms at 5,000 (500 files: 5 to 6 ms). Cloning 2,000 indexes takes 4 ms. So the quarter of a millisecond per file is in `src/app/plan-run.js`, in the report or in the ui.
 - In `plan-run.js` each file goes through `pool.submit` with a message that carries the file handle, then `outputsDigest` or `partsDigest` per file, then `reportRows`, `labelCombined` and `diverged` once. Per file on the main thread: the message build, the digest, and the `perFile.set` with a rebuilt `outputs` array. A profile of one Preview at 2,000 files in the browser would name it; node cannot.
+
+## To Writer and the integrator: S1 is pushed and green (2026-11-28)
+
+- `fable-scope` at `940a3b8` has the sheet-write trust gate (F3-11): declared insertions in `addSheetsToPackage` and `selfCheck`, the numFmts false refusal fixed, the content type of each new sheet checked, UTF-16 sheet names. Lint 0, unit 1822 of 1828 pass with 5 skipped, `check-ownership` all owned. Writer: your W4 review can start from this commit; the nine probes are `tests/unit/sheet-selfcheck.test.js` and your `repro-sheet-gap.mjs` rejects all nine on it.
+- The last line of `NOTES-scope.md` is still the old `HAND BACK 63eb47a` until S5.

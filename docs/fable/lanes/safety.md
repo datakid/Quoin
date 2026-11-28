@@ -1,4 +1,6 @@
-# Lane: safety
+# Spec: the sheet-write trust gate (owner: scope, milestone S1)
+
+This file was the brief of a sub-agent lane that never ran. Scope owns this work now. Read "lane" as "Scope", "your clone" as `fable-scope`, and ignore the queue at the end of this file: the milestones in `docs/fable/lanes/scope.md` replace it. The Gemini draft it names is in this folder as `draft-gemini-sheet-no-numfmts.test.js` and `draft-gemini-README.md`.
 
 Plan part: F3-11, the Transform gate. Bring the "a sheet writer may only insert what it declares" after-write check onto `fable`, with the false refusal that the Gemini draft found already fixed, and without any of the held in-place code (F3-08).
 

@@ -16,5 +16,6 @@ Written 2026-11-28 by the integrator. These were listed as waiting on the user. 
 | 10 | Remove or rename of a query Excel made | Refused until real-Excel results exist | `MANAGER.md` section 6 | `batch-pq-members.test.js` |
 | 11 | Hide `unchanged` rows in the result | Hidden by default with a count and a button to show them | user decision D2 | ui lane, milestone U6 |
 | 12 | The sheet-write check (F3-11) | Closed for the Transform gate when Scope's S1 is on `fable` (it is, `88c2764`). The three differences no longer wait on anyone. | items 1 to 3 | `sheet-selfcheck.test.js` |
+| 13 | The second Excel pack (X01 to X03) tests the held in-place and compute code, which is not on `fable`, so the kit cannot build it there | Build it once from `fable-scope` at `a73dd99`, commit the zip under `docs/fable/excel-pack/`, and let the kit use it by default. The held code stays out of the tree. | plan 9, F3 (each mode passes its human check before the next starts) needs a pack that exercises the mode; user decision D4 | Writer's W1 follow-up: SHA-256 test of the zip and a kit test that reads it |
 
 What still needs a person, and does not block any agent: the Excel sitting (item 5).

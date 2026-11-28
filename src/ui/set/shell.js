@@ -229,10 +229,10 @@ export class SetShell {
   showResult(rows, mode = 'report', { detailFor = null } = {}) {
     this.clearResult();
     this.detailFor = detailFor;
+    this.result.dataset.matrix = 'true';
     this.matrix = new ResultMatrix(this.result, { mode, onSelectRow: (i) => this.showDetail(i) });
     this.matrix.setRows(rows);
     this.resultMode = mode;
-    this.result.dataset.matrix = 'true';
     this.detail = h('div', { class: 'set-detail' });
     this.result.append(this.detail);
     this.showDetail(-1);

@@ -93,6 +93,16 @@ test('fable matrix: five thousand rows paint only the visible ones and the last 
   await expect(matrix(page).locator('.grid-row', { hasText: 'book0000.xlsx' })).toHaveCount(1);
 });
 
+test('fable matrix: five thousand rows are trimmed to the visible ones before the call that shows them returns', async ({ page }) => {
+  await openApp(page);
+  const painted = await page.evaluate((rows) => {
+    window.__quoin.set.addFiles([{ name: 'a.xlsx', relPath: 'a.xlsx', size: 1, lastModified: 1, file: new Blob([new Uint8Array(1)]) }]);
+    window.__quoin.shell.showResult(rows, 'report');
+    return document.querySelectorAll('.grid .grid-row').length;
+  }, fakeRows(5000));
+  expect(painted).toBeLessThan(80);
+});
+
 test('fable matrix: the keyboard moves between cells and Tab leaves the table', async ({ page }) => {
   await openApp(page);
   await page.evaluate((rows) => {

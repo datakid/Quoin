@@ -17,6 +17,7 @@ const INDEX_W = 56;
 const COL_VIRTUAL_AFTER = 50;
 const PAGE = 200;
 const SORT_LIMIT = 200000;
+const MAX_SCROLL_PX = 10000000;
 
 export function typeLabel(col) {
   const t = String(col.type || 'any').replace(/^nullable /, '');
@@ -123,12 +124,31 @@ export class Grid {
   remeasure() {
     if (!this.columns.length) return;
     syncMetrics();
-    const shown = this.rowCount === 0 ? 1 : this.rowCount;
-    this.sizer.style.height = `${HEAD_H + shown * ROW_H}px`;
+    this.applyHeights();
+    this.repaintAll();
+  }
+
+  fullHeight() {
+    return HEAD_H + (this.rowCount === 0 ? 1 : this.rowCount) * ROW_H;
+  }
+
+  applyHeights() {
+    const physical = Math.min(this.fullHeight(), MAX_SCROLL_PX);
+    this.sizer.style.height = `${physical}px`;
     this.head.style.height = `${HEAD_H}px`;
     this.body.style.top = `${HEAD_H}px`;
-    this.body.style.height = `${shown * ROW_H}px`;
-    this.repaintAll();
+    this.body.style.height = `${physical - HEAD_H}px`;
+  }
+
+  scale() {
+    const full = this.fullHeight();
+    if (full <= MAX_SCROLL_PX) return 1;
+    const view = Math.max(1, this.el.clientHeight);
+    return (full - view) / Math.max(1, MAX_SCROLL_PX - view);
+  }
+
+  rowTop(i, top, scale) {
+    return scale === 1 ? i * ROW_H : this.el.scrollTop + i * ROW_H - top;
   }
 
   rerender() {
@@ -159,12 +179,8 @@ export class Grid {
     this.el.setAttribute('aria-rowcount', String(rowCount + 1));
     this.el.setAttribute('aria-colcount', String(columns.length + 1));
     this.sizer.style.width = `${this.totalWidth}px`;
-    const shown = rowCount === 0 ? 1 : rowCount;
-    this.sizer.style.height = `${HEAD_H + shown * ROW_H}px`;
     this.head.style.width = `${this.totalWidth}px`;
-    this.head.style.height = `${HEAD_H}px`;
-    this.body.style.top = `${HEAD_H}px`;
-    this.body.style.height = `${shown * ROW_H}px`;
+    this.applyHeights();
     this.el.scrollTop = 0;
     this.el.scrollLeft = 0;
     clear(this.body);
@@ -228,7 +244,8 @@ export class Grid {
       clear(this.body);
       return;
     }
-    const top = this.el.scrollTop;
+    const scale = this.scale();
+    const top = this.el.scrollTop * scale;
     const first = Math.max(0, Math.floor(top / ROW_H) - 4);
     const last = Math.min(this.rowCount - 1, Math.ceil((top + this.el.clientHeight) / ROW_H) + 4);
     const [c0, c1] = this.visibleColumns();
@@ -251,6 +268,7 @@ export class Grid {
       this.body.append(el);
       this.rowEls.set(i, el);
     }
+    if (scale !== 1) for (const [i, el] of this.rowEls) el.style.top = `${this.rowTop(i, top, scale)}px`;
     if (this.loader) for (const [i, el] of this.rowEls) if (el.dataset.loading === '1' && this.rowAt(i)) {
       el.remove();
       this.rowEls.delete(i);
@@ -291,7 +309,8 @@ export class Grid {
     const data = this.rowAt(i);
     const realIndex = this.order ? this.order[i] : i;
     const row = h('div', { class: 'grid-row', role: 'row', 'aria-rowindex': String(i + 2) });
-    row.style.top = `${i * ROW_H}px`;
+    const scale = this.scale();
+    row.style.top = `${this.rowTop(i, this.el.scrollTop * scale, scale)}px`;
     row.style.height = `${ROW_H}px`;
     row.style.width = `${this.totalWidth}px`;
     row.dataset.loading = data ? '0' : '1';
@@ -437,9 +456,14 @@ export class Grid {
   }
 
   scrollTo(r, c) {
+    const scale = this.scale();
+    const view = this.el.scrollTop * scale;
     const top = r * ROW_H;
-    if (top < this.el.scrollTop) this.el.scrollTop = top;
-    else if (top + ROW_H + HEAD_H > this.el.scrollTop + this.el.clientHeight) this.el.scrollTop = top + ROW_H + HEAD_H - this.el.clientHeight;
+    if (top < view) this.el.scrollTop = scale === 1 ? top : Math.floor(top / scale);
+    else if (top + ROW_H + HEAD_H > view + this.el.clientHeight) {
+      const target = top + ROW_H + HEAD_H - this.el.clientHeight;
+      this.el.scrollTop = scale === 1 ? target : Math.ceil(target / scale);
+    }
     const left = this.xs[c];
     if (left - INDEX_W < this.el.scrollLeft) this.el.scrollLeft = left - INDEX_W;
     else if (left + this.widths[c] > this.el.scrollLeft + this.el.clientWidth) this.el.scrollLeft = left + this.widths[c] - this.el.clientWidth;

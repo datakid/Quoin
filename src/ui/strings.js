@@ -246,6 +246,12 @@ export const S = {
   signedConfirm: 'Remove and get',
   signedBack: 'Go back',
   recipeResult: (c) => [`${c.changed} changed`, c.unchanged ? `${c.unchanged} unchanged` : '', c.skipped ? `${c.skipped} skipped` : '', c.refused ? `${c.refused} refused` : '', c.failed ? `${c.failed} failed` : '', c['not-released'] ? `${c['not-released']} not released` : ''].filter(Boolean).join(' · '),
+  runClosing: (c) => {
+    if (c.changed > 0) return '';
+    if (c.failed || c.refused || c['not-released']) return 'No workbook was changed. The report says why for each row.';
+    if (c.skipped) return 'No workbook was changed. Every row was skipped and none failed. The report says why for each row.';
+    return 'No workbook was changed.';
+  },
   folderUnavailable: 'The folder could not be opened. Nothing was written.',
   recipeGotZip: (name) => `Downloaded ${name}.`,
   recipeStopped: (n, name) => `Stopped. ${n} ${n === 1 ? 'workbook was' : 'workbooks were'} written to ${name}. The rest were not.`,

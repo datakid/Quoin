@@ -606,6 +606,8 @@ export class App {
       this.preview = null;
       this.shell.showResult(output.rows, 'report');
       const notes = [S.recipeResult(out.counts), folder ? S.recipeGotFolder(output.name, output.files.length) : S.recipeGotZip(output.name)];
+      const closing = S.runClosing(out.counts);
+      if (closing) notes.push(closing);
       if (out.defect) {
         notes.push(S.runDefect(out.diverged.length));
         this.status.set({ alertText: S.runDefect(out.diverged.length) });

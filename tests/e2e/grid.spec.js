@@ -50,8 +50,9 @@ test('selection and the copy event produce tab-separated text', async ({ page })
   await cells.nth(3).dispatchEvent('pointerdown', { shiftKey: true });
   const text = await page.evaluate(() => {
     const dt = new DataTransfer();
-    document.querySelector('.grid').dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, cancelable: true, bubbles: true }));
-    return dt.getData('text/plain');
+    const copy = new ClipboardEvent('copy', { clipboardData: dt, cancelable: true, bubbles: true });
+    document.querySelector('.grid').dispatchEvent(copy);
+    return (copy.clipboardData || dt).getData('text/plain');
   });
   expect(text).toBe('1\ta\n2\tb');
 });

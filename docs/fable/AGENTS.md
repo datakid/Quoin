@@ -10,7 +10,7 @@ Repo: `datakid/Quoin` (renamed from `power-query-manager`; GitHub redirects the 
 |---|---|---|---|---|---|
 | Integrator (Claude on `fable`) | `fable` | everything not listed for a lane | `docs/fable/ROADMAP.md`, `docs/fable/DECIDED.md`, `docs/fable/MANAGER.md` section 6, `docs/fable/OWNERSHIP.md` | the status table below, `docs/fable/PROGRESS.md` | `docs/fable/HANDOVER.md` |
 | Trunk agent | `fable-trunk-handover` | `harness` (finished), `ui`, `docs` | `docs/fable/lanes/ui.md` (U1 to U6), then `docs/fable/lanes/docs.md` (D1 to D4) | `docs/fable/lanes/NOTES-ui.md`, `NOTES-docs.md`, `NOTES-harness.md` | `docs/fable/handover/HANDOVER.md`, `MESSAGES-trunk.md` |
-| Writer | `fable-writer` | `writer` | `docs/fable/lanes/writer.md` (W1 to W5) | `docs/fable/lanes/NOTES-writer.md`, `PROGRESS-writer.md`, `MESSAGES-writer.md` | `docs/fable/HANDOVER-writer.md` |
+| Writer | `fable-writer` | `writer` | `docs/fable/lanes/writer.md` (W1 to W6) | `docs/fable/lanes/NOTES-writer.md`, `PROGRESS-writer.md`, `MESSAGES-writer.md` | `docs/fable/HANDOVER-writer.md` |
 | Scope | `fable-scope` | `scope` | `docs/fable/lanes/scope.md` (S1 to S5) | `docs/fable/lanes/NOTES-scope.md`, `PROGRESS-scope.md`, `MESSAGES-scope.md` | `docs/fable/HANDOVER-scope.md`, `REMAINING-WORK-scope.md` |
 
 Who owns which file: `docs/fable/ownership.json`. Check with `node scripts/check-ownership.mjs who <files>`, and before handing back with `node scripts/check-ownership.mjs lane <lane> origin/fable`. A file has one owner. A change to a file you do not own is written in your notes with the exact change; the owner applies it.
@@ -27,7 +27,7 @@ The user says "continue quoin" and names the agent. The new chat then does exact
 Paste-ready lines:
 
 - Trunk agent: `Continue quoin as the trunk agent (branch fable-trunk-handover). Read docs/fable/AGENTS.md, docs/fable/lanes/ui.md and the State block of docs/fable/lanes/NOTES-ui.md. Merge origin/fable, continue at the first milestone not done (U1 to U6, then docs.md D1 to D4), push after each milestone, do not wait for me.`
-- Writer: `Continue quoin as Writer (branch fable-writer). Read docs/fable/AGENTS.md, docs/fable/lanes/writer.md and the State block of docs/fable/lanes/NOTES-writer.md. Merge origin/fable, continue at the first milestone not done (W1 to W5), push after each milestone, do not wait for me.`
+- Writer: `Continue quoin as Writer (branch fable-writer). Read docs/fable/AGENTS.md, docs/fable/lanes/writer.md and the State block of docs/fable/lanes/NOTES-writer.md. Merge origin/fable, continue at the first milestone not done (W1 to W6), push after each milestone, do not wait for me.`
 - Scope: `Continue quoin as Scope (branch fable-scope). Read docs/fable/AGENTS.md, docs/fable/lanes/scope.md and the State block of docs/fable/lanes/NOTES-scope.md. Merge origin/fable, continue at the first milestone not done (S1 to S5), push after each milestone, do not wait for me.`
 - Integrator: `Continue quoin as the integrator. Read docs/fable/AGENTS.md, ROADMAP.md, DECIDED.md and MANAGER.md section 6. Fetch all branches, merge what finished by the ownership rules, run lint and unit tests, regenerate the manifest, push fable, read CI, route each failure to its owner.`
 
@@ -55,7 +55,7 @@ Updated by the integrator at each merge. As of `fable` `a9422d3` (2026-11-28).
 |---|---|---|---|
 | Integrator | merges of Writer `8dc0644`, Scope `1ab7281` (squashed, F3-08 and F3-09 history kept out), trunk harness `00c322c`; strings for Scope's codes; closing run message; Open XML check fix; ownership, roadmap, decisions, this file | merge trunk's UI work when U1 finishes; CI loop; I4 check of `FINAL-GATE.md` | trunk U1, D3 |
 | Trunk agent | harness lane (browsers CI summary, skip helpers, specs; `NOTES-harness.md`) | U1: probe commit `bc5d5c9` on its branch ("temporary, removed next"); then U2 to U6, then D1 to D4 | nothing |
-| Writer | queue items 1 to 5 (pack split, check audit, corpus tests, one-page Excel README); W1 kit and results reader (`9be5a03`) | the second pack's zip (`DECIDED.md` item 13), then W2, W3, W4 (S1 is on `fable`), W5 | nothing |
+| Writer | queue items 1 to 5 (pack split, check audit, corpus tests, one-page Excel README); W1 kit and results reader (`9be5a03`) | the second pack's zip (`DECIDED.md` item 13), then W2, W3, W4 (S1 is on `fable`), W5, W6 | nothing |
 | Scope | S1 (`940a3b8`: sheet-write trust gate, numFmts refusal fixed, UTF-16 sheet names), S2 (`1ab7281`: Transform over the whole corpus) | S3 to S5 in `lanes/scope.md` | nothing |
 
 Needs a person, and blocks no agent: the Excel sitting with Writer's kit (`DECIDED.md` item 5). Everything else the user used to be asked is decided in `DECIDED.md`.

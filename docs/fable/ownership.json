@@ -74,7 +74,8 @@
         "scripts/read-excel-results.mjs",
         "tests/unit/excel-kit*.test.js",
         "tests/unit/pq-*.test.js",
-        "tests/unit/vba-*.test.js"
+        "tests/unit/vba-*.test.js",
+        "tests/e2e/fable-writer-*.spec.js"
       ],
       "agent": "writer agent, branch fable-writer"
     },

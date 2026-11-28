@@ -27,6 +27,7 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 | writer | W3 | hostile inputs for the compound-file and query readers | nothing |
 | writer | W4 | review of Scope's S1 against the nine probes | S1 on `fable` |
 | writer | W5 | table of checks and tests, requests to other owners | W1 to W4 |
+| writer | W6 | browser specs for query remove and rename, module replace, replace in code with a pathological regex, align (plan F2-04 to F2-09) | nothing |
 | trunk agent | harness lane | done: CI summary, flake audit, skip helper, test-side fixes (merged `00c322c`) | done |
 | trunk agent | U1 | Firefox and WebKit to zero failures in a whole-suite `browsers.yml` run | nothing |
 | trunk agent | U2 | the Preview stall at 2,000 files profiled, fixed, before and after in `performance.md` | nothing |

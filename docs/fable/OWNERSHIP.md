@@ -70,7 +70,7 @@ Work with no lane yet:
 | Open work | Owner | Why it is not running |
 |---|---|---|
 | F4-03 wiring (`createRecipeStore` in `main.js`, Stored recipes list, `rememberSet`), F4-02, F4-04 | integrator, after the ui lane is merged | `main.js` and `strings.js` are integrator files and the ui lane owns `src/ui/set/**` for now |
-| Browser specs for F2-04 to F2-09 (query remove and rename, module replace, replace in code, align) | not assigned | needs a decision on who owns new `tests/e2e/` files for Writer's cards |
+| Browser specs for F2-04 to F2-09 (query remove and rename, module replace, replace in code, align) | writer, milestone W6 | new files `tests/e2e/fable-writer-*.spec.js` are in the writer row |
 | F3-08 in place, F3-09 Excel computes on open | nobody | held until X03 and the other Excel results exist (D4) |
 | Writer's recipe field for `connect` | nobody | held until the user reports pack 3 case 02 from Excel |
 

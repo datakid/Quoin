@@ -36,6 +36,8 @@ Each item has an acceptance line. Tick it in `PROGRESS.md`, not here.
 
 ### A. Land the merge (first, before anything else)
 
+The merge was pushed to `beta` before this gate was finished, on purpose, so the work does not live in one sandbox only. Item 1 below is therefore a check on what is already on GitHub, not a condition for pushing it.
+
 1. Run lint, unit, `npm run build`, one full browser run, the visual spec twice. Acceptance: everything green except the recorded flake.
 2. Rewrite the stale part of `HANDOVER.md` (its "Where the work stands" and "What is left" describe the state before the merge) so it points here.
 3. Add one section to `PROGRESS.md` for the merge (what came from the bundle, what was corrected, the flake).

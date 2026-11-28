@@ -6,6 +6,8 @@ Read `docs/fable/OWNERSHIP.md` and `docs/fable/ROADMAP.md` first. Their rules ap
 
 How you verify: Chromium locally as you did for the harness lane; Firefox and WebKit through `browsers.yml` with `workflow_dispatch` and the `spec` input, so one spec runs in minutes. A fix for one engine is "fixed" only after that engine's run is green; until then it is "unverified until CI".
 
+If you are starting in a new chat: read `docs/fable/AGENTS.md` first (section "Picking up in a new chat"), then this brief, then the `## State` block at the top of `docs/fable/lanes/NOTES-ui.md`. Keep that block current at every push, in the format AGENTS.md gives. Continue at the first milestone below that the notes do not mark done.
+
 ## Your files
 
 - `src/ui/grid.js`

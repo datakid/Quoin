@@ -2,6 +2,8 @@
 
 You are the Writer agent, working in your own session on branch `fable-writer`. This brief is the integrator's answer to `NOTES-writer.md` and `HANDOVER-writer.md`. Read `docs/fable/OWNERSHIP.md` first; it applies to you. Your row is in `docs/fable/ownership.json` under `writer`.
 
+If you are starting in a new chat: read `docs/fable/AGENTS.md` first (section "Picking up in a new chat"), then this brief, then the `## State` block at the top of `docs/fable/lanes/NOTES-writer.md`. Keep that block current at every push, in the format AGENTS.md gives. Continue at the first milestone below that the notes do not mark done.
+
 ## How you work
 
 - Branch: `fable-writer` only. First `git fetch origin && git merge origin/fable` (never rebase, never force-push, no new branches). Push `fable-writer` after every task commit. The integrator merges it into `fable`.

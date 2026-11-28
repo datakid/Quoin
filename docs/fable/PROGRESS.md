@@ -510,6 +510,7 @@ Differences from section 9, for the person to decide (nothing was changed to hid
 1. Section 9 says the two rows whose query names a missing column are "skipped with reasons". The engine reports them as `failed`, with the reason in words. Nothing in the M engine tells "a column is missing" from any other error by code (only by message), and calling a data problem "skipped" would make it look like nothing was wrong. If skipped is wanted, the engine needs a code for it first.
 2. Section 9 counts 13 rows. There are 13 unit rows, plus one row for each of the two `.xls` files (verdict `refused`, shown as `skipped` on the file in the Files list), so the report has 15 lines.
 3. Section 9 says the two excluded rows' files "fall back to inject only". A new-sheet transform has no inject step to fall back to; those files still release a copy with the sheets that worked, and the failed rows say why. Not built.
+Decided 2026-11-28 (`DECIDED.md` items 1 to 3): difference 1 is closed by the user's D3 (verdict `skipped`, built), difference 2 is closed by plan 1.3 and section 10 (15 lines is right), difference 3 is closed by D3 (no fallback).
 Changed expectations: none.
 
 ### Conflict markers in this file, and a lint rule (integrator)

@@ -9,7 +9,7 @@ Written 2026-11-21 by the integrator (Claude on `fable`). The user has told all 
 | F0 Set | Done on `fable` (F0-00 to F0-16) |
 | F1 Collect and Variants | Done on `fable`, gate recorded (F1-08) |
 | F2 Inject and Replace | Done on `fable`, gate recorded (F2-16) except the real-Excel check, which only the user can do |
-| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit), F3-06 (a new sheet in a copy) and F3-07 (one combined workbook) are wired in the app: Preview and Get work. F3-10 (section 9) passes with three differences waiting on the person. F3-08 (in place) and F3-09 (Excel computes on open) are held: no real-Excel case exists for them |
+| F3 Transform | Scope's F3-01 to F3-07 engines are merged. F3-05 (a new file per unit), F3-06 (a new sheet in a copy) and F3-07 (one combined workbook) are wired in the app: Preview and Get work. F3-10 (section 9) passes; its three differences are decided in `DECIDED.md`. F3-08 (in place) and F3-09 (Excel computes on open) are held: no real-Excel case exists for them |
 | F4 Recipes | Done through the gate (F4-05). Load, Save, Download, Saved recipes, a recipe dropped with a folder going straight to Preview, and the Tokens list with unknown tokens flagged. Recent sets are deliberately not wired |
 | F5 Trust | F5-02 (performance, with a quadratic indexing fault fixed), F5-02b (pool budget counts inflated bytes), F5-03 (memory) and F5-04 (Excel results in the docs) are done. F5-01 (Firefox and WebKit) is set up and waiting for its first CI run. F5-06 final gate is open |
 
@@ -78,7 +78,7 @@ Decided, and recorded here so nobody asks again:
 - A1, A2, A3: as the plan recommends, already built by Scope.
 - Remove and rename of a query that has a connection or load target stay refused until the real-Excel results are in.
 
-Open for the user: nothing at the moment.
+Open for the user: nothing at the moment. Questions that were open are decided in `DECIDED.md`; the first file of a new chat is `AGENTS.md`.
 
 Integrator status, updated as work lands:
 

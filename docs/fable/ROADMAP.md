@@ -43,12 +43,11 @@ Written 2026-11-27 by the integrator. One owner per milestone. A milestone is bl
 | integrator | I2 | merge each push, regenerate the manifest, strings for new codes from the notes | lanes pushing |
 | integrator | I4 | check `FINAL-GATE.md` rows against the repo; the check is read by someone who did not write the code | D3 and everything above |
 
-## Waiting on the user, not on any agent
+## Decided, and what still needs a person
 
-1. The three differences under F3-10 and the 15-line report (section 9 decision 2).
-2. The Excel sitting with the kit from W1.
-3. Whether to build a recipe editor (there is none today; recipes are authored by hand or by the screens). Nothing is started on it.
-4. F3-08 (in place) and F3-09 (Excel computes on open): held until X03 and the other Excel results exist.
+All four questions that were listed here as waiting on the user are decided in `DECIDED.md` from the plan and the user's earlier answers: the 15-line report is right, the three F3-10 differences are closed, there is no recipe editor in Fable, and F3-08 and F3-09 stay held until the in-place Excel case passes.
+
+Needs a person and blocks no agent: the Excel sitting with the kit from W1. Its rows in `FINAL-GATE.md` are marked `user` until `RESULTS.csv` comes back.
 
 ## Next packages, ready when a lane finishes
 

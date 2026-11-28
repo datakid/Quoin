@@ -1,10 +1,10 @@
 # quoin vNext — handover for a fresh chat
 
-Read this first. It is short on purpose. Everything else is in the plan files listed at the end.
+Read this first, then `FINISH_PLAN.md`. This file is short on purpose. Everything else is in the plan files listed at the end.
 
 ## Hard rules
 
-1. Repo: `github.com/datakid/power-query-manager`. Work **only on the branch `beta`**. Do not read from, merge into, push to, or create any other branch. If the clone is not on `beta`, stop and fix that first.
+1. Repo: `github.com/datakid/power-query-manager`. Work **only on the branch `beta`**. Do not read from, merge into, push to, or create any other remote branch (`fable`, `fable-scope` and `fable-writer` are another path: leave them alone). If the clone is not on `beta`, stop and fix that first.
 2. No code comments, ever, in anything you write.
 3. The owner supplies a GitHub token in chat when needed. Use it only as an HTTP header for `git` (`-c http.extraHeader="Authorization: Basic <base64 x-access-token:TOKEN>"`). Never write it into a file, a commit, a log or memory. Remind the owner to revoke it only when the whole plan is finished and confirmed.
 4. Updates to the owner: one line per phase or milestone, in the style of a commit message, then carry on to the next item without asking. Do not write long reports mid-work. At the very end, one honest summary.
@@ -13,7 +13,7 @@ Read this first. It is short on purpose. Everything else is in the plan files li
 
 ## Sandbox facts
 
-- No network access to Playwright's browser CDN. A Chromium exists at `/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`. Use a local config outside the repo (`/home/claude/pw.local.config.js`):
+- No network access to Playwright's browser CDN. A Chromium exists at `/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`. The config for it is in the repo as `scripts/pw.sandbox.config.mjs` (use `-c scripts/pw.sandbox.config.mjs`); the older out-of-repo version is kept below for reference:
 
 ```js
 import base from '/home/claude/quoin/playwright.config.js';
@@ -55,50 +55,11 @@ export default {
 - Style rules: `border-radius` and control heights must come from tokens (T-LINT-17); colours only in `tokens.css`; user-visible text only in `src/ui/strings.js` (T-LINT-9).
 - When editing CSS with a script, match whole rules; a regexp on the first line of a multi-selector rule corrupts the next rule (happened twice).
 
-## Where the work stands (branch `beta`)
+## Where the work stands and what is left
 
-Done and pushed, each with tests (details and deviations: `docs/next/PROGRESS.md`):
+This file keeps the rules, the sandbox facts and the pitfalls. The state of the work and the plan to the end are in **`FINISH_PLAN.md`**: read it next. What each module is called, where its tests are, and every deviation are in `PROGRESS.md` (read it from the bottom up).
 
-- Phase 2R: Glaze palette and the 02B visual refinement.
-- WB-1 to WB-9: dependency index, step model, let-block edits, VBA outline, fuzzy matcher, M generation, engine batch evaluation, result store and worker protocol v2, run planner, status book, orchestrator, and its UI (Run all, Run stale, status dots, stored results).
-- WB-13 palette and command registry. WB-14 Steps panel (partial). WB-17 dependency lists and graph. WB-18 Problems (dialog and counter). WB-19 sources inventory (UI now in, see below). WB-21 find and replace. WB-22 macro outline and per-procedure revert. WB-23 structure checks (no UI). WB-24 call graph (no UI). WB-25 macro to query links with "Run these queries". WB-26 step-level change summary. WB-27 budgets for what exists, with `many-queries.xlsx`.
-- WB-14/15 (part): F10 step cursor, drag reorder, Insert step after and the narrow Steps sheet in `steps-panel.js` and `Workspace`, `tests/e2e/step-ops.spec.js`.
-- WB-16 (first slice): `src/ui/wb/dock.js`, `dock-views.js`, `problems-view.js`, `graph-view.js` (`mountGraph`), `src/core/wb/compare-results.js`, pin and tab handling in `Workspace`, `tests/e2e/dock.spec.js`.
-- WB-19 (Sources UI): `unboundFor` in `src/core/wb/sources.js`, `src/ui/wb/sources-dialog.js`, `Workspace.openSources` and `preflightSources`, `tests/e2e/sources.spec.js`.
-- WB-10 (layout presets): `src/core/wb/layout-presets.js`, `Workspace.applyPreset`, the More actions menu in the top bar, four palette commands, `tests/e2e/layout-presets.spec.js`.
-- WB-14 and WB-15 (fourth part): `src/core/wb/step-delta.js`, delta chips, peek, Pin this result on a step, the Count rows and Auto-run settings, `tests/e2e/step-delta.spec.js`.
-- WB-16 view as steps and WB-15 operation history: `src/core/wb/view-steps.js`, `src/core/wb/op-history.js`, Add as steps on the chip, Undo and History in the steps panel head, `tests/e2e/step-history.spec.js`.
-- WB-16 (third slice): result header line, verdict chip, `Get a file` per result id, Changes tab (`changesBody` shared with the dialog), side by side compare; `tests/e2e/result-head.spec.js`, `tests/e2e/changes-tab.spec.js`.
-- WB-16 (second slice, the column header menu): `src/core/wb/profile.js`, `src/core/wb/view-ops.js`, `view` and `profile` worker messages, `src/ui/wb/column-tools.js` (filter dialog, Add as a step dialog, profile sheet), `grid.columnTools`, view state in `Workspace`, `tests/e2e/column-tools.spec.js`.
-- WB-10 (part): `src/ui/wb/panes.js`, collapse rails, inspector resizer, F6, the 390 px bottom bar and Steps sheet, the run menu, `tests/e2e/layout.spec.js`.
-- WB-12 tabs and split: `src/core/wb/tabs-model.js` (unit tests), `src/ui/wb/tabs.js`, tab and group handling in `Workspace` (`select`, `present`, `applyTabState`, `addGroup`), the five tab commands, `tests/e2e/tabs.spec.js`.
-- WB-11 the navigator: `src/core/wb/nav-model.js` (unit tests) and `src/ui/wb/navigator.js` (virtualised tree, search with `code:` and `step:`, Group by, Sort by, chips, multi-select, selection bar, row menu), wired from `Workspace.renderRail`, with `tests/e2e/navigator.spec.js`. Deviations and changed expectations are in `PROGRESS.md`.
-
-Commits on `beta` from this series (newest first): `1534321` WB-19 Sources UI, `59e72b3` WB-10 layout presets and More menu, `31395e5` WB-14 and WB-15 delta chips, peek, Pin a step, settings, `8b7bc06` WB-16 and WB-15 Add as steps and operation history, `d60b350` WB-16 header line, verdict chip, Get a file, Changes tab, side by side compare, `a9ebc40` WB-16 column header menu, `94e52b1` WB-14/15 part, `d6bace6` WB-16 first slice, `8d96afd` WB-10 part, `1772374` WB-12, `424b9de` WB-11. Nothing is uncommitted.
-
-Last verified: lint 0 findings; unit 1128 pass (5 skipped by design); browser suite 289 pass, 0 fail on the code as committed (excluding `T-P-14b`, `T-E-12`, `T-I-04`); the visual spec run alone, 40 pass; visual baselines regenerated after each UI change and looked at. Not run: `T-E-12`, `T-P-14b`, the manual browser matrix in `05_TEST_PLAN.md` §4.
-
-## What is left, in the order to do it
-
-1. **WB-10** is done except two deliberate omissions (Run stays in the run bar, no Changes split button; see `PROGRESS.md`). Collapse, resize, F6, the mobile bottom bar, the layout presets and the More actions menu are in.
-2. **WB-16** is done except a view sort in the column menu (decided against, see `PROGRESS.md`). It covers: tabs, Pin, Pinned, Compare (schema, rows, cells, side by side), Queue, Problems, Graph, Changes, the column header menu, the result header line and verdict chip, Get a file (see `PROGRESS.md`).
-3. **WB-14 and WB-15 remainder**: Invoke for function queries, the multi-step preview popover with Apply and Cancel, the editor gutter band. F10 cursor, drag with per-gap checks, Insert step after, the 640 to 1099 px sheet, the operation history with Undo and History, Add as steps, delta chips, peek, Pin a step and the Count rows and Auto-run settings are done (see `PROGRESS.md`).
-4. **WB-19** is done (Sources dialog, binding up front, the check before a batch run); see `PROGRESS.md`.
-5. **WB-20 editor intelligence**: completion (library names from `lib-names.js`, steps, queries, VBA), signature help, go to definition and find references (`refs.js` for VBA, `deps.js` for queries), the "no callers" note. Show `structure.js` problems as gutter markers and in the Download tooltip.
-6. **WB-27 remainder**: `vba-big.xlsm` cannot be generated; measure the VBA outline on synthetic text in a unit test instead and say so.
-7. **WB-28 acceptance story** from `06_WORKBENCH.md`: write the e2e that follows it step by step on `many-queries.xlsx`, regenerate the visual baselines for Phase 6 (32 extra), complete `PROGRESS.md`, and fill the manual matrix in `docs/observations.md` with *not run* where it was not run.
-
-Definition of done: every item above built, `npm test` green (excluding what cannot run here, stated plainly), baselines reviewed by eye, `PROGRESS.md` complete. Only then tell the owner it is finished and that they may revoke the token.
-
-## How to start in a fresh chat (about ten minutes)
-
-1. Clone `beta` only: `git -c http.extraHeader=... clone --single-branch --branch beta https://github.com/datakid/power-query-manager.git quoin`, set the local identity, `npm install`, `git checkout package-lock.json`.
-2. Write `/home/claude/pw.local.config.js` (above). `npm run test:lint`, `npm run test:unit`, then one detached browser run to see the baseline: 289 pass (a long detached run can vanish; start it again).
-3. Read `PROGRESS.md` from the bottom up (newest sections first) to learn what each module is called and where the tests are, then `06_WORKBENCH.md` for the item you take.
-4. Suggested order: WB-20, WB-27, WB-28, then the WB-14 and WB-15 leftovers.
-5. Each item: build, unit tests for the pure part, an e2e spec, lint, build the manifest, regenerate baselines if the UI changed, full browser run, document in `PROGRESS.md` (changed expectations, deviations, not done), commit with explicit paths, push `beta`, one line to the owner.
-
-Observed and not fixed: at 390 px the top bar still gives the file name almost no room (the overflow menu of 02B §4.1 is not built).
+In one paragraph: the whole workbench phase is built on `beta`, written in two lines (the first by the first agent, the second by another agent from `95676d4`, delivered as a git bundle), reviewed, merged and corrected. What remains is review, the open deviations, the final gate and the honest summary, all listed in `FINISH_PLAN.md`.
 
 ## Plan files (read in this order)
 

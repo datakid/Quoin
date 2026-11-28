@@ -210,7 +210,7 @@ export class App {
     this.changesBtn.hidden = true;
     this.changesSplit.hidden = true;
     this.runSlot.hidden = true;
-    this.moreBtn.hidden = true;
+    this.moreBtn.hidden = false;
     this.zone = h('div', { class: 'dropzone' }, h('p', { class: 'item-meta' }, S.emptyPrompt), h('button', { class: 'btn btn-primary', type: 'button', onclick: () => this.input.click() }, S.chooseFile));
     this.mainEl.append(h('div', { class: 'empty' }, h('div', { class: 'empty-inner' },
       markImg('mark', 64),
@@ -440,11 +440,29 @@ export class App {
 
   openMore() {
     const ws = this.ws;
-    if (!ws) return;
     const count = this.session ? this.session.editCount : 0;
-    const wide = ws.presetsAvailable();
+    const wide = ws ? ws.presetsAvailable() : false;
     const theme = this.settings.theme === 'dark' ? S.themeDark : this.settings.theme === 'light' ? S.themeLight : S.themeSystem;
     const density = this.settings.density === 'compact' ? S.densityCompact : S.densityComfortable;
+    if (!ws) {
+      menu(this.moreBtn, [
+        { label: S.moreOpenFile, run: () => this.input.click() },
+        { label: S.moreTheme(theme), run: () => {
+          const next = this.settings.theme === 'system' ? 'light' : this.settings.theme === 'light' ? 'dark' : 'system';
+          Object.assign(this.settings, { theme: next });
+          applyTheme(next);
+        } },
+        { label: S.moreDensity(density), run: () => {
+          const next = this.settings.density === 'comfortable' ? 'compact' : 'comfortable';
+          Object.assign(this.settings, { density: next });
+          applyDensity(next);
+        } },
+        { label: S.settings, run: () => this.openSettings() },
+        { label: S.moreShortcuts, run: () => this.openShortcuts() },
+        { label: S.moreAbout, run: () => this.openAbout() }
+      ]);
+      return;
+    }
     menu(this.moreBtn, [
       { label: S.moreOpenFile, run: () => this.input.click() },
       { label: S.moreDetails, run: () => this.showDetails() },

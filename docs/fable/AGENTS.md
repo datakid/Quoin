@@ -49,13 +49,13 @@ Milestones done are marked in the brief's own table in the notes (id, commit, ho
 
 ## Status of each agent
 
-Updated by the integrator at each merge. As of `fable` `88c2764` (2026-11-28).
+Updated by the integrator at each merge. As of `fable` `a9422d3` (2026-11-28).
 
 | Agent | Done and merged | In progress or next | Waiting on |
 |---|---|---|---|
-| Integrator | merges of Writer `eb9c403`, Scope `2c9d212` (squashed, F3-08 and F3-09 history kept out), trunk harness `00c322c`; strings for Scope's codes; closing run message; Open XML check fix; ownership, roadmap, decisions, this file | merge trunk's UI work when U1 finishes; CI loop; I4 check of `FINAL-GATE.md` | trunk U1, D3 |
+| Integrator | merges of Writer `8dc0644`, Scope `1ab7281` (squashed, F3-08 and F3-09 history kept out), trunk harness `00c322c`; strings for Scope's codes; closing run message; Open XML check fix; ownership, roadmap, decisions, this file | merge trunk's UI work when U1 finishes; CI loop; I4 check of `FINAL-GATE.md` | trunk U1, D3 |
 | Trunk agent | harness lane (browsers CI summary, skip helpers, specs; `NOTES-harness.md`) | U1: probe commit `bc5d5c9` on its branch ("temporary, removed next"); then U2 to U6, then D1 to D4 | nothing |
-| Writer | queue items 1 to 5 (pack split, check audit, corpus tests, one-page Excel README) | W1 to W5 in `lanes/writer.md`; item "review of Scope's S1" is unblocked now that S1 is on `fable` | nothing |
-| Scope | S1 (`940a3b8`: sheet-write trust gate, numFmts refusal fixed, UTF-16 sheet names) | S2 to S5 in `lanes/scope.md` | nothing |
+| Writer | queue items 1 to 5 (pack split, check audit, corpus tests, one-page Excel README); W1 kit and results reader (`9be5a03`) | the second pack's zip (`DECIDED.md` item 13), then W2, W3, W4 (S1 is on `fable`), W5 | nothing |
+| Scope | S1 (`940a3b8`: sheet-write trust gate, numFmts refusal fixed, UTF-16 sheet names), S2 (`1ab7281`: Transform over the whole corpus) | S3 to S5 in `lanes/scope.md` | nothing |
 
 Needs a person, and blocks no agent: the Excel sitting with Writer's kit (`DECIDED.md` item 5). Everything else the user used to be asked is decided in `DECIDED.md`.

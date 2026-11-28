@@ -1,5 +1,7 @@
 # Start here: checking Quoin's files in desktop Excel
 
+If you were given `quoin-excel-kit.zip`, read the `START-HERE.md` inside it and not this page. This page is for the two zips when they are given to you separately.
+
 This page is for a person who has desktop Excel and nothing else. You do not need Node, the repository or an agent. Someone gives you two zip files and you need only this page and the checklist inside each zip.
 
 ## The two zips, in this order
@@ -11,14 +13,14 @@ Unzip each zip into its own folder and open the files from there, not from insid
 
 ## Write down your Excel first
 
-Before case 01, write at the top of the checklist:
+Before case 01, write down:
 
 - Windows or Mac.
 - The edition and version: on Windows, File > Account > About Excel; on a Mac, Excel > About Excel.
 - Whether the Data tab has Get Data and Refresh All (that is Power Query).
 - Whether the VBA editor opens: Alt+F11 on Windows, Tools > Macro > Visual Basic Editor on a Mac.
 
-These decide which lines of the checklists you can do. If a line cannot be done on your Excel, leave its box empty and write "cannot do on this Excel". Do not guess.
+These decide which lines of the checklists you can do.
 
 ## What "no repair message" looks like
 
@@ -34,7 +36,8 @@ If you see a repair message, take a screenshot before you click anything, then c
 
 ## What to write down
 
-- Your Excel line, once, at the top.
+- Your Excel line, once, at the top of the first checklist.
+- If a line cannot be done on your Excel (no Power Query, no VBA editor), leave its box empty and write "cannot do on this Excel". Do not guess.
 - In `quoin-excel-pack.zip`, each case has a pass box and a fail box. Tick pass only when every line of the case was true. Otherwise tick fail and write one line on what you saw.
 - In `quoin-excel-pack-scope.zip`, each line has its own box. Tick a line only when you saw it happen, and write what you saw under the case if something differs.
 - Send back the checklists with your notes, the numbers of the cases that failed, and the screenshots.
@@ -53,7 +56,16 @@ Quoin writes Excel files itself, and its own reader and checks cannot say whethe
 node scripts/make-excel-pack.mjs [path/to/quoin-excel-pack.zip]
 ```
 
-The second zip is Scope's: `node scripts/make-excel-pack-scope.mjs` writes `quoin-excel-pack-scope.zip` and `CHECKLIST-SCOPE.md` (cases X01, X02, X03: Excel compute and in place). That script is on `fable-scope` and not yet on `fable`.
+The second zip is Scope's: `node scripts/make-excel-pack-scope.mjs --out <folder>` writes `quoin-excel-pack-scope.zip` and `CHECKLIST-SCOPE.md` (cases X01, X02, X03: Excel compute and in place). The script is on `fable`, but it can only build where the in-place and Excel-compute code exists, and `b01773e` took that code out of the tree. Build it on `fable-scope` at `a73dd99` (the commit before that one). Built there it is 3 cases and 12 files, and its SHA-256 is `27a45271929445eb3ee6c9c29dd998585a03247b3c289d6d480648573aa7cd9d`.
+
+## Build the kit and read the results
+
+```
+node scripts/make-excel-kit.mjs /tmp/kit.zip --scope-zip path/to/quoin-excel-pack-scope.zip
+node scripts/read-excel-results.mjs path/to/RESULTS.csv
+```
+
+The kit is one zip: `START-HERE.md`, one `CHECKLIST.md` with all 25 cases in the order to open them, one folder per case under `cases/`, and an empty `RESULTS.csv`. Without `--scope-zip` the kit runs `scripts/make-excel-pack-scope.mjs` itself, which fails on `fable` for the reason above. `read-excel-results.mjs` reads the filled file and prints the wording for `docs/observations.md` and the README, claiming only what the filled cells justify: an empty cell is "not checked", never "yes".
 
 With no path it writes `quoin-excel-pack.zip` in the current folder (ignored by git). `--only=a,b` builds just the named cases (case names are the folder names without the number); `--only=writer-added` builds the nine cases Writer added (the query, module and signed-project cases that cover Writer's paths), which are the ones nobody has opened in Excel yet. That smaller pack is numbered from 01 and has its own checklist. The clock is frozen, so building twice gives the same zip, byte for byte. The script runs every case through the path the app will use (`parseRecipe`, `resolvePlan`, `executeFile`, `combineOutputs`, `applyChangeSet`) and stops with an error if a case does not give a verified change, so a pack that builds is a pack whose files Quoin itself verified.
 

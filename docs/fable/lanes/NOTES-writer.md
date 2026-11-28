@@ -1,6 +1,36 @@
 # Notes: writer lane
 
-## Queue
+## Milestones
+
+| milestone | commit | evidence |
+|---|---|---|
+| W1 Excel sitting kit | `9be5a03` | `scripts/make-excel-kit.mjs`, `scripts/read-excel-results.mjs`, `excel-kit.test.js` and `excel-kit-results.test.js`: 21 tests pass, 1 todo; nine mutations of the two scripts all caught; lint 0; unit 1853 tests, 1847 pass, 0 fail, 5 skipped, 1 todo. Read as a person with only desktop Excel, using the real first pack and the real second pack: see below |
+| W2 writer sequences, randomized | not started | |
+| W3 hostile inputs | not started | |
+| W4 review of the sheet gate | waits for S1 | |
+| W5 close the loop | partly | the table of every check and its test is under Item 3 below; the W2 and W3 findings are not in yet |
+
+### W1: what I found, and what I changed in START-HERE.md after reading the kit
+
+The kit built with the real first pack and the real second pack reads as one list: 25 cases, one `CHECKLIST.md`, one `RESULTS.csv`. What I changed after reading it as someone with only desktop Excel:
+
+- The text shared with the README said to write the Excel line "at the top of the checklist" and to "leave its box empty" for a step that cannot be done. In the kit the answer goes in `RESULTS.csv`, so those two sentences contradicted it. The shared text is now neutral, and the kit says where to write: the `note` cell of the row `excel-edition-and-version`, and `cannot` in the cell.
+- The combined checklist still carried the pass and fail boxes of the first pack, the per-line boxes of the second and its `Saw:` lines: two places to record. They are gone; each case ends with "Record the result in `RESULTS.csv`, row `<case>`", and a test checks that every case names its row exactly once and that no box is left.
+- Scope's note on which Excel can do what (what `[needs refresh]` and `[needs VBA editor]` mean) lived in the header the kit drops. It is carried over from Scope's own checklist, with its last sentence pointed at `RESULTS.csv`.
+- Added how to save the file: CSV under the same name, keep the CSV format if Excel asks.
+
+### W1: the second pack cannot be built on `fable`
+
+`node scripts/make-excel-kit.mjs /tmp/kit.zip` stops on `fable` with `make-excel-pack-scope.mjs failed: Error: X01: not a verified change: [["refused","refused.excelComputeHeld",false]]`. The cause is a conflict between two decisions, not a one-line bug:
+
+- `b01773e` (Scope's branch, "Take in place and Excel compute out of the tree") removed the in-place writer and Excel compute. `executeTransform` now refuses both unconditionally (`transform.js` line 94) and refuses any other output mode as "not supported yet" (line 101).
+- `scripts/make-excel-pack-scope.mjs` builds X01 to X03 with exactly that code, so it cannot run on any tree without it. No test builds this pack, so it went unnoticed. I tried the obvious repair in a scratch copy (flags `allowExcelCompute` and `allowInPlace` through `executeFile` and `executeTransform`); the script then stops at "inPlace output is not supported yet", because the writer is gone.
+- The second pack exists to test that code in Excel, so it has to be built where the code is: `fable-scope` at `a73dd99`, the commit before `b01773e`. Built there it gives 3 cases and 12 files, SHA-256 `27a45271929445eb3ee6c9c29dd998585a03247b3c289d6d480648573aa7cd9d`, and the kit builds from it with `--scope-zip`. The real kit then has 25 cases and 67 files.
+- What I did: the kit takes `--scope-zip`; without it, it runs the script and says how to pass the zip when the script fails. The test that builds the kit with the real script is marked `todo` with this reason.
+
+Request to the integrator (a decision, not a code change): the sitting needs the second pack's zip. Either Scope builds it at `a73dd99` and commits the zip (about 63 KB; `docs/fable/excel-pack/` is in the writer row, so I can commit it on your word), or you hand the zip to the user outside the repository. The README says how to build it. Until then the acceptance command in the brief cannot pass as written; `node scripts/make-excel-kit.mjs /tmp/kit.zip --scope-zip <zip>` does.
+
+## Earlier queue (done before the milestones replaced it)
 
 | item | commit | verified |
 |---|---|---|
@@ -320,4 +350,4 @@ index 2833207..1dbae4b 100644
 - Safety lane: apply the `save.js` fix and add the test above; Finding 5 is the one open defect that stops a sheet from being added to an XlsxWriter workbook.
 - The `Claude-Session` trailer is left off these commits; this session has no session URL.
 
-HAND BACK 0062158
+HAND BACK 9be5a03

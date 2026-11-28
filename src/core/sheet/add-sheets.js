@@ -33,6 +33,8 @@ function nextNumber(used, start) {
   return n;
 }
 
+const fragmentOf = (base, edit) => (edit.start === edit.end ? edit.replacement : { from: base.slice(edit.start, edit.end), to: edit.replacement });
+
 async function appendStyles(pkg, stylesPart) {
   const text = await pkg.text(stylesPart);
   const doc = parseXml(text.text, stylesPart);
@@ -56,17 +58,27 @@ async function appendStyles(pkg, stylesPart) {
   const fontId = fonts.childrenNamed('font').length;
   const base = cellXfs.childrenNamed('xf').length;
   const xf = (numFmt, font = 0) => `<xf numFmtId="${numFmt}" fontId="${font}" fillId="0" borderId="0" xfId="0"${numFmt ? ' applyNumberFormat="1"' : ''}${font ? ' applyFont="1"' : ''}/>`;
-  const edits = [
+  const inserts = [
     { start: fonts.closeStart, end: fonts.closeStart, replacement: '<font><b/><sz val="11"/><name val="Calibri"/></font>' },
-    attributeEdit(fonts, 'count', String(fontId + 1)),
-    { start: cellXfs.closeStart, end: cellXfs.closeStart, replacement: [xf(14), xf(datetimeFormat), xf(21), xf(durationFormat), xf(0, fontId)].join('') },
-    attributeEdit(cellXfs, 'count', String(base + 5))
+    { start: cellXfs.closeStart, end: cellXfs.closeStart, replacement: [xf(14), xf(datetimeFormat), xf(21), xf(durationFormat), xf(0, fontId)].join('') }
   ];
-  if (created.length && numFmts && !numFmts.selfClosing) edits.push({ start: numFmts.closeStart, end: numFmts.closeStart, replacement: created.join('') }, attributeEdit(numFmts, 'count', String(known.length + created.length)));
-  else if (created.length && numFmts) edits.push({ start: numFmts.start, end: numFmts.end, replacement: `<numFmts count="${known.length + created.length}">${created.join('')}</numFmts>` });
-  else if (created.length) edits.push({ start: fonts.start, end: fonts.start, replacement: `<numFmts count="${created.length}">${created.join('')}</numFmts>` });
-  await pkg.setText(stylesPart, applyEdits(text.text, edits), text);
-  return { date: base, datetime: base + 1, time: base + 2, duration: base + 3, header: base + 4 };
+  const counts = [attributeEdit(fonts, 'count', String(fontId + 1)), attributeEdit(cellXfs, 'count', String(base + 5))];
+  const countElements = ['fonts', 'cellXfs'];
+  if (created.length && numFmts && !numFmts.selfClosing) {
+    inserts.push({ start: numFmts.closeStart, end: numFmts.closeStart, replacement: created.join('') });
+    counts.push(attributeEdit(numFmts, 'count', String(known.length + created.length)));
+    countElements.push('numFmts');
+  } else if (created.length && numFmts) {
+    inserts.push({ start: numFmts.start, end: numFmts.end, replacement: `<numFmts count="${known.length + created.length}">${created.join('')}</numFmts>` });
+    countElements.push('numFmts');
+  } else if (created.length) inserts.push({ start: fonts.start, end: fonts.start, replacement: `<numFmts count="${created.length}">${created.join('')}</numFmts>` });
+  const next = applyEdits(text.text, [...inserts, ...counts]);
+  await pkg.setText(stylesPart, next, text);
+  return {
+    ids: { date: base, datetime: base + 1, time: base + 2, duration: base + 3, header: base + 4 },
+    text: next,
+    insertion: { base: text.text, fragments: inserts.map((e) => fragmentOf(text.text, e)), countElements }
+  };
 }
 
 export async function addSheetsToPackage(wb, pkg, adds) {
@@ -76,7 +88,10 @@ export async function addSheetsToPackage(wb, pkg, adds) {
   const rels = await readRelationships(pkg, wb.workbookPart);
   const stylesRel = rels.items.find((r) => r.type === TYPE_STYLES && !r.external);
   if (!stylesRel) throw new QuoinError('check.part', 'no styles part', wb.workbookPart);
-  const styles = await appendStyles(pkg, stylesRel.target);
+  const written = await appendStyles(pkg, stylesRel.target);
+  const styles = written.ids;
+  const texts = new Map([[stylesRel.target, written.text]]);
+  const insertions = new Map([[stylesRel.target, written.insertion]]);
   touched.add(stylesRel.target);
 
   const dir = wb.workbookPart.slice(0, wb.workbookPart.lastIndexOf('/') + 1);
@@ -115,24 +130,38 @@ export async function addSheetsToPackage(wb, pkg, adds) {
     relTags.push(`<Relationship Id="${rid}" Type="${TYPE_WORKSHEET}" Target="worksheets/sheet${number}.xml"/>`);
     typeTags.push(`<Override PartName="/${part}" ContentType="${CT_WORKSHEET}"/>`);
   }
-  await pkg.setText(wb.workbookPart, applyEdits(wbText.text, [{ start: sheetsEl.closeStart, end: sheetsEl.closeStart, replacement: sheetTags.join('') }]), wbText);
+  const sheetsInsert = sheetTags.join('');
+  const wbNext = applyEdits(wbText.text, [{ start: sheetsEl.closeStart, end: sheetsEl.closeStart, replacement: sheetsInsert }]);
+  await pkg.setText(wb.workbookPart, wbNext, wbText);
+  texts.set(wb.workbookPart, wbNext);
+  insertions.set(wb.workbookPart, { base: wbText.text, fragments: [sheetsInsert], countElements: [] });
   touched.add(wb.workbookPart);
 
-  const relEdit = { start: rels.doc.root.closeStart, end: rels.doc.root.closeStart, replacement: relTags.map((t) => t.replace('<Relationship ', `<${prefixOf(rels.doc.root)}Relationship `)).join('') };
-  await pkg.setText(rels.part, applyEdits(rels.text.text, [relEdit]), rels.text);
+  const relInsert = relTags.map((t) => t.replace('<Relationship ', `<${prefixOf(rels.doc.root)}Relationship `)).join('');
+  const relNext = applyEdits(rels.text.text, [{ start: rels.doc.root.closeStart, end: rels.doc.root.closeStart, replacement: relInsert }]);
+  await pkg.setText(rels.part, relNext, rels.text);
+  texts.set(rels.part, relNext);
+  insertions.set(rels.part, { base: rels.text.text, fragments: [relInsert], countElements: [] });
   touched.add(rels.part);
 
   const ct = await readContentTypes(pkg);
-  await pkg.setText('[Content_Types].xml', applyEdits(ct.text.text, [{ start: ct.doc.root.closeStart, end: ct.doc.root.closeStart, replacement: typeTags.map((t) => t.replace('<Override ', `<${prefixOf(ct.doc.root)}Override `)).join('') }]), ct.text);
+  const ctInsert = typeTags.map((t) => t.replace('<Override ', `<${prefixOf(ct.doc.root)}Override `)).join('');
+  const ctNext = applyEdits(ct.text.text, [{ start: ct.doc.root.closeStart, end: ct.doc.root.closeStart, replacement: ctInsert }]);
+  await pkg.setText('[Content_Types].xml', ctNext, ct.text);
+  texts.set('[Content_Types].xml', ctNext);
+  insertions.set('[Content_Types].xml', { base: ct.text.text, fragments: [ctInsert], countElements: [] });
   touched.add('[Content_Types].xml');
-  return { touched, addedParts };
+  return { touched, addedParts, texts, insertions };
 }
 
 export async function verifyAddedSheets(back, wb, adds) {
   const want = [...wb.sheets.map((s) => s.name), ...adds.map((a) => a.name)];
   if (JSON.stringify(back.sheets.map((s) => s.name)) !== JSON.stringify(want)) throw new QuoinError('check.part', 'sheet list differs after write', 'xl/workbook.xml');
+  const types = await readContentTypes(back.pkg);
   for (const add of adds) {
     const grid = await readUsedGrid(back, add.name);
     if (!sameGrid(expectedGrid(add.table, add.culture || 'en-US'), grid)) throw new QuoinError('check.part', 'sheet differs after write', add.name);
+    const sheet = back.sheets.find((x) => x.name === add.name);
+    if (!sheet || !sheet.part || types.overrides.get(`/${sheet.part}`) !== CT_WORKSHEET) throw new QuoinError('check.part', 'new sheet has no content type', sheet && sheet.part ? sheet.part : add.name);
   }
 }

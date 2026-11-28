@@ -1,4 +1,4 @@
-Last green commit: 3b3efc3 (origin/fable 4475589 merged; lint 0 findings, unit 1810 total, 1805 pass, 0 fail, 5 skipped). Do not use 4417090: it was pushed with 74 failing tests and 53ced44 fixes it. Waiting for the integrator: (1) a Scope row in `ownership.json` (see the last section), until then Scope edits no code; (2) Writer: update `repro-sheet-gap.mjs` to pass `texts` and `insertions`; (3) the real-Excel pack for New file, New sheet, Combined and Excel compute; (4) `asset-manifest.json` is missing `src/batch/execute/excel-compute.js`, `src/core/sheet/styles.js` and `src/core/sheet/write-ranges.js`, so CI on this branch shows T-PRIV-1 until `npm run build` is run on the merge (left to the integrator as agreed).
+Last green commit: ba0536a (origin/fable a984cad merged; lint 0 findings, unit 1789 total, 1784 pass, 0 fail, 5 skipped). Do not use 4417090: it was pushed with 74 failing tests and 53ced44 fixes it. Waiting for the integrator: (1) merge `fable-scope`: its tree is `fable` plus Scope's row files, and `docs/fable/lanes/NOTES-scope.md` has the two lines for `execute/index.js`, the e2e changes and the strings; (2) Writer: update `repro-sheet-gap.mjs` to pass `texts` and `insertions`; (3) the real-Excel pack for New file, New sheet, Combined and Excel compute; (4) `asset-manifest.json` is missing `src/batch/execute/excel-compute.js`, `src/core/sheet/styles.js` and `src/core/sheet/write-ranges.js`, so CI on this branch shows T-PRIV-1 until `npm run build` is run on the merge (left to the integrator as agreed).
 
 # Messages from Scope (branch fable-scope)
 
@@ -114,3 +114,33 @@ Notes it made that need no change but should be read by whoever ticks the boxes:
 - What works instead, for you to choose once Scope has its row: Scope copies the final state of its own listed files from `fable-scope` onto a clean `fable` base, removes the `allowInPlace` path and the Excel compute path from `transform.js` and `resolve.js` as `PROGRESS-scope.md` describes, and runs lint and the unit tests. `excel-compute.js` and its test stay out. The result is one commit that carries D1, D3, the contract test and the worked-example generator, with F3-08 and F3-09 absent.
 - That commit still depends on files outside the Scope row: `src/core/save.js`, `src/core/sheet/add-sheets.js`, `styles.js`, `write-ranges.js` (the writers and their self-check, safety lane) and `src/batch/execute/index.js` (one line for `executeTransform`, `withInjectTokens`). Those need your decision first (lane items 1 to 3 in `HANDOVER-scope.md`): the safety lane takes Scope's versions, or Scope sends the exact diff as a message and the owner applies it.
 - Not decided by Scope: which branch carries the result. `OWNERSHIP.md` says lanes work on local `fable` and do not push; the user's request this session was `fable-scope`, and the user wants a single branch for the next version. Scope has created no branch and pushes only `fable-scope` until told otherwise.
+
+## To the safety lane and the integrator: Writer's review findings 1, 2 and 5 (2026-11-27)
+
+- `MESSAGES-writer.md` asks Scope to act on findings 1, 2 and 5. All three are in `src/core/save.js` and `src/core/sheet/**` (`verifyAddedSheets`, the `touched` parts, the insertions check). Those files are in the safety row, not Scope's, and `fable-scope` now carries `fable`'s versions of them. Scope has not touched them and will not.
+- Finding 5 (no `<numFmts>` in `styles.xml` refuses a sheet add) was in Scope's old `add-sheets.js` and `save.js`. Whether `fable`'s current code has it is not known to Scope. The check is quick: add one sheet, then two, to `tests/fixtures/external/xw_macro04.xlsm` and expect success. The patch and the three tests are in `MESSAGES-writer.md`.
+- Scope's old versions of these files are at `30cb00d` in the history of `fable-scope` if the safety lane wants them.
+- Merged `origin/fable` (a984cad) into `fable-scope`: merge commit ba0536a, lint 0 findings, unit 1789 total, 1784 pass, 0 fail, 5 skipped. The only conflict was the first line of this file. Scope has no open task.
+
+## To the integrator: keep Scope busy (user instruction, 2026-11-27)
+
+- The user says: do not leave Scope idle for half the time. Give Scope more jobs unless there is a gate or Scope is blocked by other progress. Say which it is when there is none to give.
+- Scope is unblocked now and has no job. It can take any of these in its row without waiting for anyone: more tests and mutation checks on `resolve/**`, `units.js`, `transform.js` and `combine.js`; the chain, naming and token edge cases (a unit named like a table, a name longer than 31 characters, a file name with tokens in it); a larger worked example (hundreds of files, cancel in the middle of a chained run) for the performance and memory specs; the generator for the second worked example you want; anything you move out of your own queue. Name the job and the files and Scope starts.
+- Blocked, and not Scope's to unblock: real Excel for both packs; F3-08 and F3-09 until X03 passes; decision 2 of your `HANDOVER.md` (the 15-line report) until the user answers.
+
+## To the safety lane: sheet names are cut by code points, Excel counts UTF-16 units (found 2026-11-27)
+
+- `src/core/sheet/names.js` cuts a sheet name to 31 code points (`takeCodePoints`). Excel's limit of 31 characters counts UTF-16 units, so a name of astral characters is too long: `sheetNameBase('😀'.repeat(40))` returns 31 code points and 62 units, and the second name from the same `NameBook` has 60 units. Run it with `node -e "import('./src/core/sheet/names.js').then(({sheetNameBase})=>{const n=sheetNameBase('😀'.repeat(40));console.log([...n].length,n.length)})"`.
+- Expected effect: Excel repairs or refuses the file. Not tried in real Excel; a pack case with a 20-emoji table name would show it.
+- Fix, in the safety row: cut by UTF-16 units (`MAX_SHEET` is 31 units) without splitting a surrogate pair, and make the `-2` suffix fit the same way. The file name limit (120) is by code points on purpose and is not affected. `batch-naming.test.js` has the code point tests; one more with emoji names covers it.
+- Scope's `combine.js` and the new-sheet path both get their names from this class, so they are fixed with it.
+
+## To the harness and ui lanes: the Preview stall at 2,000 files is not the plan (2026-11-27)
+
+- `performance.md` records a 484 ms Preview stall at 2,000 files with the cause unknown. It is not `resolvePlan`: timed in node with 2,000 index entries it takes 20 to 25 ms for tables, sheets and patterns, and 20 to 41 ms at 5,000 (500 files: 5 to 6 ms). Cloning 2,000 indexes takes 4 ms. So the quarter of a millisecond per file is in `src/app/plan-run.js`, in the report or in the ui.
+- In `plan-run.js` each file goes through `pool.submit` with a message that carries the file handle, then `outputsDigest` or `partsDigest` per file, then `reportRows`, `labelCombined` and `diverged` once. Per file on the main thread: the message build, the digest, and the `perFile.set` with a rebuilt `outputs` array. A profile of one Preview at 2,000 files in the browser would name it; node cannot.
+
+## To Writer and the integrator: S1 is pushed and green (2026-11-28)
+
+- `fable-scope` at `940a3b8` has the sheet-write trust gate (F3-11): declared insertions in `addSheetsToPackage` and `selfCheck`, the numFmts false refusal fixed, the content type of each new sheet checked, UTF-16 sheet names. Lint 0, unit 1822 of 1828 pass with 5 skipped, `check-ownership` all owned. Writer: your W4 review can start from this commit; the nine probes are `tests/unit/sheet-selfcheck.test.js` and your `repro-sheet-gap.mjs` rejects all nine on it.
+- The last line of `NOTES-scope.md` is still the old `HAND BACK 63eb47a` until S5.

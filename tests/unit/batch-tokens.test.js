@@ -111,3 +111,8 @@ test('without file metadata the tokens use the name of the workbook itself and t
   const back = await openWorkbook(result.bytes, 'pq_simple.xlsx');
   assert.equal(normalizeQueryText(back.queries.find((q) => q.name === 'Where').original), 'let Source = "pq_simple" in Source');
 });
+
+test('recipeTokens reads a transform recipe whose query is not inline text without failing and finds only the tokens of its output name', () => {
+  assert.deepEqual(recipeTokens({ recipe: 'transform', query: { source: 'file' }, output: { name: 'x' } }), { used: [], unknown: [] });
+  assert.deepEqual(recipeTokens({ recipe: 'transform', query: { source: 'file' }, output: { name: '{file.name}-{unit.index}' } }), { used: ['{file.name}', '{unit.index}'], unknown: [] });
+});

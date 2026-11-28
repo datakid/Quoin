@@ -15,12 +15,13 @@ test('a name with nothing left becomes Sheet', () => {
   assert.equal(sheetNameBase(undefined), 'Sheet');
 });
 
-test('a sheet name is cut to 31 code points, not 31 UTF-16 units', () => {
-  assert.equal([...sheetNameBase('x'.repeat(40))].length, 31);
-  const emoji = '\u{1F600}'.repeat(40);
-  const cut = sheetNameBase(emoji);
-  assert.equal([...cut].length, 31);
-  assert.equal(cut, '\u{1F600}'.repeat(31));
+test('a sheet name is cut to 31 UTF-16 units and a character is never split', () => {
+  assert.equal(sheetNameBase('x'.repeat(40)).length, 31);
+  const cut = sheetNameBase('\u{1F600}'.repeat(40));
+  assert.equal(cut, '\u{1F600}'.repeat(15));
+  assert.equal(cut.length, 30);
+  assert.equal(sheetNameBase(`${'a'.repeat(30)}\u{1F600}`), 'a'.repeat(30));
+  assert.equal(sheetNameBase(`${'a'.repeat(29)}\u{1F600}`), `${'a'.repeat(29)}\u{1F600}`);
 });
 
 test('a taken sheet name gets -2, -3 and so on, compared without case', () => {
@@ -32,14 +33,17 @@ test('a taken sheet name gets -2, -3 and so on, compared without case', () => {
   assert.equal(book.sheet('fresh'), 'fresh-2');
 });
 
-test('the suffix is made to fit by shortening the base, counted by code points', () => {
+test('the suffix is made to fit by shortening the base, counted by UTF-16 units', () => {
   const base = 'A'.repeat(31);
   const book = new NameBook({ sheets: [base] });
   const next = book.sheet(base);
   assert.equal(next, `${'A'.repeat(29)}-2`);
-  assert.equal([...next].length, 31);
-  const wide = new NameBook({ sheets: ['\u{1F600}'.repeat(31)] });
-  assert.equal(wide.sheet('\u{1F600}'.repeat(31)), `${'\u{1F600}'.repeat(29)}-2`);
+  assert.equal(next.length, 31);
+  const wide = new NameBook({ sheets: ['\u{1F600}'.repeat(15)] });
+  const second = wide.sheet('\u{1F600}'.repeat(31));
+  assert.equal(second, `${'\u{1F600}'.repeat(14)}-2`);
+  assert.equal(second.length, 30);
+  assert.equal(wide.sheet('\u{1F600}'.repeat(31)), `${'\u{1F600}'.repeat(14)}-3`);
   const ten = new NameBook({ sheets: ['B'.repeat(31)] });
   for (let i = 0; i < 9; i++) ten.sheet('B'.repeat(31));
   assert.equal(ten.sheet('B'.repeat(31)), `${'B'.repeat(28)}-11`);

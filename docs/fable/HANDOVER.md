@@ -58,7 +58,9 @@ Saved to `docs/fable/handover/wip-2026-11-26.patch` (apply with `git apply`). No
 
 Local Chromium result for the changed specs: `apply-worker`, `collect-worker`, `intake`, `drop` all pass (20 + 6 tests).
 
-## Open decisions for the user (do not decide these yourself)
+## Open decisions for the user (closed on 2026-11-28: see `DECIDED.md`)
+
+This list is history. A new chat starts from `docs/fable/AGENTS.md`.
 
 Section 9 differences in `PROGRESS.md`:
 1. Rows with a missing column read `failed`, not "skipped".

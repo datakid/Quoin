@@ -41,7 +41,10 @@ Shared files and who changes them:
 8. Do not chase `T-WB-05` and `T-WB-09`. They are flaky timing tests.
 9. When a Playwright run takes more than two minutes, start it with `nohup`, write to a log, and poll the log. Never put `pkill -f "playwright test"` in the same command as the run.
 10. Never wait for the integrator. Work your brief top to bottom, then the queue under "Then" in your brief. An item that needs a file you do not own is written into your notes with the exact change and you move to the next item. Stop only when the queue is empty or every remaining item is blocked.
-11. When you finish, write the notes file: what you changed (file and commit hash), what you proved and how, what is still open, what you need from another owner. Short lines, no narrative. Then stop. The last line of the notes file is `HAND BACK <commit hash>`.
+11. Keep a `## State` block at the top of your notes file (format in `docs/fable/AGENTS.md`) and rewrite it at every push. A session can end at any moment, so what the next chat needs to start must be in the repo. Unfinished work is committed to your branch with a subject that starts `WIP:`.
+12. When you finish, write the notes file: what you changed (file and commit hash), what you proved and how, what is still open, what you need from another owner. Short lines, no narrative. Then stop. The last line of the notes file is `HAND BACK <commit hash>`.
+
+A new chat starts from `docs/fable/AGENTS.md`: it names every agent, its branch, its brief and the line to paste.
 
 ## How to run things
 

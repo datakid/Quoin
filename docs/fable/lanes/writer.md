@@ -2,6 +2,8 @@
 
 You are the Writer agent, working in your own session on branch `fable-writer`. This brief is the integrator's answer to `NOTES-writer.md` and `HANDOVER-writer.md`. Read `docs/fable/OWNERSHIP.md` first; it applies to you. Your row is in `docs/fable/ownership.json` under `writer`.
 
+If you are starting in a new chat: read `docs/fable/AGENTS.md` first (section "Picking up in a new chat"), then this brief, then the `## State` block at the top of `docs/fable/lanes/NOTES-writer.md`. Keep that block current at every push, in the format AGENTS.md gives. Continue at the first milestone below that the notes do not mark done.
+
 ## How you work
 
 - Branch: `fable-writer` only. First `git fetch origin && git merge origin/fable` (never rebase, never force-push, no new branches). Push `fable-writer` after every task commit. The integrator merges it into `fable`.
@@ -21,6 +23,8 @@ Not yours: `src/core/save.js` and `src/core/sheet/**` (Scope), `src/batch/resolv
 1. Your `writer` row: accepted and widened to the list above.
 2. `connect`: stays opt-in in the core. No recipe field and no `executeFile` wiring until the user reports pack 3 case 02 from real Excel (decision D6). Commit `30e7599` is accepted, including its three lines in `src/batch/execute/index.js` and the 39 lines in `tests/unit/batch-execute.test.js`: those two files are the integrator's and the integrator takes your edits as they are. From now on you write such a change in your notes instead.
 3. Your finding 1 (the sheet writer's touched parts are exempt from every check) is being built on `fable` by Scope, who owns `src/core/save.js` and `src/core/sheet/**` (milestone S1): declared insertions, the count-attribute fix from finding 5, and your nine probes ported as unit tests. You do not edit those files. When it is on `fable`, review it (milestone W4).
+
+4. The second pack (W1, "the second pack cannot be built on `fable`"): yes. The pack tests held code (in place, Excel computes on open) that is not in the tree on purpose, so it is built where that code is and shipped as a file. Build it from `fable-scope` at `a73dd99` in a scratch worktree (`git worktree add` under a temp folder, never in your clone's tree, nothing committed from it except the zip), check its SHA-256 equals the one in your notes, and commit the zip under `docs/fable/excel-pack/` (your row). The kit uses it by default when `--scope-zip` is not given, and a test checks the committed zip's SHA-256 and that the kit reads it, so the `todo` goes. Scope is not asked to do this. Nothing else from `a73dd99` comes into the tree.
 
 ## Milestones (replace the old queue; work them in this order, do not wait for me)
 

@@ -7,8 +7,8 @@
 | 1 merge `origin/fable`, run the ownership check | `8189766` | `check-ownership map` ok; `lane writer origin/fable` lists only `src/batch/execute/index.js` and `tests/unit/batch-execute.test.js`, both accepted by the integrator |
 | 2 split `module-excel-made` into three cases | `135fbe5` | pack tests 23 pass; lint 0; 22 cases, 27 outputs; the later cases move up by two |
 | 3 check audit of `src/core/pq/**` and `src/core/vba/**` | `4e69548`, `41248a6`, `0062158` | table below; unit 1779 tests, 1774 pass, 0 fail, 5 skipped; lint 0 |
-| 4 corpus gap check | `25af289` and the commit after it | corpus file 54 tests, all pass; unit 1801 tests, 1796 pass, 0 fail, 5 skipped; lint 0; matrix below |
-| 5 one-page Excel README | not started | |
+| 4 corpus gap check | `25af289`, `0354191` | corpus file 54 tests, all pass; unit 1801 tests, 1796 pass, 0 fail, 5 skipped; lint 0; matrix below |
+| 5 one-page Excel README | the commit below | `docs/fable/excel-pack/README.md` starts with one page for a person with only desktop Excel: the two zips and their order, the Excel line to write down first, what a repair message looks like and what is not one, what to write down. No box is ticked or pre-filled. Checked against the two checklist headers and the file layout of both packs; counts fixed to 22 cases and 9 writer-added cases |
 | 6 review of the safety lane | not started | |
 | 7 final hand-back | not started | |
 

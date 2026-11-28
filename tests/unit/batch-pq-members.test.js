@@ -684,3 +684,25 @@ test('F2-02: a connection that already refreshes on open is not rewritten', asyn
   assert.equal((await second.pkg.text(again.connections.part)).text, again.connections.text.text);
 });
 
+const addOnly = (name, connect = false) => {
+  const cs = emptyChangeSet();
+  cs.queries.add.set(name, NEW_M);
+  if (connect) cs.queries.connect = new Set([name]);
+  return cs.queries;
+};
+
+const refusedWrite = (wb, queries, message) => assert.rejects(() => writeDirect(wb, queries), (e) => e.code === 'pq.format' && message.test(e.message));
+
+test('F2-03: query data that does not split cleanly, or has no item list or connections end, is refused by name', async () => {
+  const wb = await openSimple();
+  const split = { ...wb, mashup: { ...wb.mashup, split: { ...wb.mashup.split, errors: [{ code: 'm.member' }] } } };
+  await refusedWrite(split, replaceOnly('StudentResults'), /section did not split cleanly/);
+  const metadata = { ...wb, mashup: { ...wb.mashup, model: { ...wb.mashup.model, metadata: { ...wb.mashup.model.metadata, xml: '<LocalPackageMetadataFile></LocalPackageMetadataFile>' } } } };
+  await refusedWrite(metadata, addOnly('Extra'), /metadata has no item list/);
+  const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const connections = { ...wb, connections: { ...wb.connections, text: { ...wb.connections.text, text: `<connections xmlns="${ns}"/>` } } };
+  await refusedWrite(connections, addOnly('Extra', true), /connections part has no end/);
+  const ok = await writeDirect(wb, addOnly('Extra', true));
+  assert.ok(ok.result.touched.includes(wb.connections.part));
+});
+

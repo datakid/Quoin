@@ -78,7 +78,7 @@ for (const f of queryFiles) {
     for (const q of wb.queries.filter((x) => x.connection || x.load.kind !== 'connection')) {
       const cs = emptyChangeSet();
       cs.queries.remove.add(q.name);
-      await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), TypeError, q.name);
+      await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW }), (e) => e instanceof TypeError && /^refused\.(loaded|usedBy): /.test(e.message), q.name);
     }
   });
 }
@@ -126,5 +126,124 @@ for (const f of binFiles) {
   test(`corpus: ${f.name}: an Excel-made vbaProject.bin takes a module and gives it back`, async () => {
     const project = readVbaProject(read(f));
     await checkModuleCycle(project, f.name);
+  });
+}
+
+const entryNames = (wb) => wb.pkg.zip.entries.map((e) => e.name);
+const partBytes = async (wb) => {
+  const parts = new Map();
+  for (const name of entryNames(wb)) parts.set(name, Buffer.from(await wb.pkg.bytes(name)));
+  return parts;
+};
+
+async function reopenAndCompare(before, outBytes, name, expected, label) {
+  const back = await openWorkbook(outBytes, name);
+  const a = await partBytes(before);
+  const b = await partBytes(back);
+  const got = { changed: [], removed: [], added: [] };
+  for (const [part, bytes] of a) {
+    if (!b.has(part)) got.removed.push(part);
+    else if (!bytes.equals(b.get(part))) got.changed.push(part);
+  }
+  for (const part of b.keys()) if (!a.has(part)) got.added.push(part);
+  const sorted = (o) => ({ changed: [...(o.changed || [])].sort(), removed: [...(o.removed || [])].sort(), added: [...(o.added || [])].sort() });
+  assert.deepEqual(sorted(got), sorted(expected), label);
+  assert.deepEqual(back.warnings, before.warnings, label);
+  return back;
+}
+
+const vbaPartOf = (wb) => entryNames(wb).find((n) => /vbaProject\.bin$/.test(n));
+const signatureParts = (wb) => entryNames(wb).filter((n) => /vbaProjectSignature\.bin$/.test(n));
+
+function moduleParts(wb) {
+  const vba = vbaPartOf(wb);
+  const signatures = signatureParts(wb);
+  if (!signatures.length) return { changed: [vba] };
+  return { changed: [vba, '[Content_Types].xml'], removed: [...signatures, `${vba.replace(/[^/]+$/, '_rels/')}${vba.split('/').pop()}.rels`] };
+}
+
+const queryParts = (wb, query, refresh = true) => ({ changed: [wb.mashup.part, ...(refresh && query && query.connection && !query.connection.refreshOnLoad ? [wb.connections.part] : [])] });
+
+async function runChange(wb, change, options = {}) {
+  const cs = emptyChangeSet();
+  change(cs);
+  cs.acknowledgeSignature = true;
+  return (await applyChangeSet(wb, cs, { now: NOW, checkSection, ...options })).bytes;
+}
+
+for (const f of queryFiles) {
+  test(`corpus: ${f.name}: a query change touches only the query data and, for a replace, the connection`, async () => {
+    const wb = await open(f);
+    const added = await reopenAndCompare(wb, await runChange(wb, (cs) => cs.queries.add.set('Corpus Added', NEW_M)), f.name, queryParts(wb, null), `${f.name} add`);
+    assert.ok(added.queries.some((q) => q.name === 'Corpus Added'));
+    for (const q of wb.queries) {
+      const text = `${q.original}\n// corpus ${q.name}`;
+      const replaced = await reopenAndCompare(wb, await runChange(wb, (cs) => cs.queries.replace.set(q.name, text)), f.name, queryParts(wb, q), `${f.name} replace ${q.name}`);
+      assert.equal(replaced.queries.find((x) => x.name === q.name).original, text, q.name);
+      for (const other of wb.queries.filter((x) => x.name !== q.name)) assert.equal(replaced.queries.find((x) => x.name === other.name).original, other.original, `${q.name} / ${other.name}`);
+      await reopenAndCompare(wb, await runChange(wb, (cs) => cs.queries.replace.set(q.name, text), { refreshOnLoad: false }), f.name, queryParts(wb, q, false), `${f.name} replace ${q.name} without refresh`);
+    }
+    const removed = await openWorkbook(await runChange(added, (cs) => cs.queries.remove.add('Corpus Added')), f.name);
+    assert.deepEqual(removed.queries.map((q) => q.name), wb.queries.map((q) => q.name));
+    assert.equal(removed.mashup.section.text, wb.mashup.section.text);
+    const renamed = await runChange(added, (cs) => cs.queries.rename.set('Corpus Added', 'Corpus Renamed'));
+    await reopenAndCompare(added, renamed, f.name, { changed: [wb.mashup.part] }, `${f.name} rename`);
+  });
+}
+
+for (const f of macroFiles) {
+  test(`corpus: ${f.name}: a module change touches only the project part, and a signature goes with it`, async () => {
+    const wb = await open(f);
+    const project = wb.vba.project;
+    const expected = moduleParts(wb);
+    const withNames = async (bytes, label) => (await reopenAndCompare(wb, bytes, f.name, expected, label)).vba.project;
+    const added = await withNames(await runChange(wb, (cs) => cs.modules.add.set('Corpus1', CODE)), `${f.name} add`);
+    assert.deepEqual(names(added), [...names(project), 'Corpus1']);
+    assert.equal(added.modules.find((m) => m.name === 'Corpus1').model.visible, CODE);
+    for (const m of project.modules.filter((x) => x.model)) {
+      const text = `${m.model.visible}\n' corpus ${m.name}`;
+      const replaced = await withNames(await runChange(wb, (cs) => cs.modules.replace.set(m.name, text)), `${f.name} replace ${m.name}`);
+      assert.deepEqual(names(replaced), names(project), m.name);
+      assert.equal(replaced.modules.find((x) => x.name === m.name).model.visible, text, m.name);
+      for (const other of project.modules.filter((x) => x.name !== m.name)) assert.equal(replaced.modules.find((x) => x.name === other.name).text, other.text, `${m.name} / ${other.name}`);
+    }
+    for (const m of project.modules.filter((x) => !moduleRemovalProblem(project, x.name))) {
+      const gone = await withNames(await runChange(wb, (cs) => cs.modules.remove.add(m.name)), `${f.name} remove ${m.name}`);
+      assert.deepEqual(names(gone), names(project).filter((n) => n !== m.name), m.name);
+      for (const other of gone.modules) assert.equal(other.text, project.modules.find((x) => x.name === other.name).text, `${m.name} / ${other.name}`);
+    }
+    const back = await openWorkbook(await runChange(wb, (cs) => cs.modules.add.set('Corpus1', CODE)), f.name);
+    assert.equal(signatureParts(back).length, 0);
+    assert.ok(!(await back.pkg.text('[Content_Types].xml')).text.includes('vbaProjectSignature'));
+  });
+}
+
+for (const f of macroFiles.filter((x) => /xw_macro04|signed/.test(x.name))) {
+  test(`corpus: ${f.name}: a signed project is not changed unless the loss of the signature is confirmed`, async () => {
+    const wb = await open(f);
+    assert.ok(signatureParts(wb).length > 0);
+    const module = wb.vba.project.modules.find((m) => m.model);
+    const removable = wb.vba.project.modules.find((m) => !moduleRemovalProblem(wb.vba.project, m.name));
+    const changes = [(cs) => cs.modules.add.set('Corpus1', CODE), (cs) => cs.modules.replace.set(module.name, `${module.model.visible}\n' corpus`)];
+    if (removable) changes.push((cs) => cs.modules.remove.add(removable.name));
+    for (const change of changes) {
+      const cs = emptyChangeSet();
+      change(cs);
+      await assert.rejects(() => applyChangeSet(wb, cs, { now: NOW, checkSection }), (e) => e.code === 'vba.signature' && /not confirmed/.test(e.message));
+    }
+  });
+}
+
+for (const f of macroFiles.filter((x) => queryFiles.some((q) => q.name === x.name))) {
+  test(`corpus: ${f.name}: a query change and a module change in one run touch only the query data, the connection-free project part and what the signature needs`, async () => {
+    const wb = await open(f);
+    const bytes = await runChange(wb, (cs) => {
+      cs.queries.add.set('Corpus Added', NEW_M);
+      cs.modules.add.set('Corpus1', CODE);
+    });
+    const parts = moduleParts(wb);
+    const back = await reopenAndCompare(wb, bytes, f.name, { ...parts, changed: [...parts.changed, wb.mashup.part] }, f.name);
+    assert.ok(back.queries.some((q) => q.name === 'Corpus Added'));
+    assert.ok(back.vba.project.modules.some((m) => m.name === 'Corpus1'));
   });
 }

@@ -59,14 +59,19 @@ test('fable tokens: a recipe with only known tokens has no token note and previe
   await expect(matrix(page)).toBeVisible();
 });
 
-test('fable tokens: Copy puts the token on the clipboard and says so', async ({ page, context }) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+test('fable tokens: Copy puts the token on the clipboard and says so', async ({ page, context, browserName }) => {
+  if (browserName === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  else await page.addInitScript(() => {
+    window.__copied = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (text) => { window.__copied.push(text); return Promise.resolve(); } } });
+  });
   await openSet(page, book);
   await give(page, transform('{file.name}.xlsx'));
   await tokens(page).locator('summary').click();
   await page.getByRole('button', { name: 'Copy {unit.name}', exact: true }).click();
   await expect(tokens(page).getByRole('status')).toHaveText('Copied {unit.name}.');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('{unit.name}');
+  if (browserName === 'chromium') expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('{unit.name}');
+  else expect(await page.evaluate(() => window.__copied)).toEqual(['{unit.name}']);
 });
 
 test('fable tokens: the token list is reachable from the keyboard', async ({ page }) => {

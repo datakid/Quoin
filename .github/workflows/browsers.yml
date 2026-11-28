@@ -4,6 +4,11 @@ on:
     branches: [fable]
     paths: ['src/**', 'styles/**', 'index.html', 'tests/**', 'playwright.config.js', '.github/workflows/browsers.yml']
   workflow_dispatch:
+    inputs:
+      spec:
+        description: Optional spec path to run instead of the whole suite
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -23,9 +28,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Browser tests
+        env:
+          SPEC_ARGS: ${{ inputs.spec }}
         run: |
           set +e
-          npx playwright test --project=${{ matrix.browser }} 2>&1 | tee browser.log
+          PLAYWRIGHT_JSON_OUTPUT_NAME=playwright-report.json PLAYWRIGHT_HTML_OPEN=never npx playwright test --project=${{ matrix.browser }} --reporter=list,json,html --trace=retain-on-failure $SPEC_ARGS 2>&1 | tee browser.log
           code=${PIPESTATUS[0]}
           sh scripts/ci-annotate.sh "${{ matrix.browser }} totals" browser.log -E '^ +[0-9]+ (passed|failed|flaky|skipped|did not run)'
           grep -E '^ +✘' browser.log | sed -E 's/^ +✘ +[0-9]+ \[[a-z]+\] › //' | sort -u > failures.log
@@ -33,9 +40,59 @@ jobs:
           awk '/^ +[0-9]+\) \[/ {n=0} n<12 {print; n++}' browser.log > details.log
           sh scripts/ci-annotate.sh "${{ matrix.browser }} failure details" details.log -E '.'
           exit $code
+      - name: Report failed tests
+        if: always()
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          node - <<'EOF'
+          const fs = require('node:fs');
+          const name = process.env.BROWSER_NAME;
+          const clean = (text) => String(text || '').replace(/\u001b\[[0-9;]*m/g, '');
+          const cell = (text) => clean(text).replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
+          const message = (text) => String(text).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+          const property = (text) => message(text).replace(/:/g, '%3A').replace(/,/g, '%2C');
+          const out = [];
+          const failed = [];
+          let stats = {};
+          if (!fs.existsSync('playwright-report.json')) {
+            out.push(`## ${name}`, '', 'No report was written.');
+          } else {
+            const report = JSON.parse(fs.readFileSync('playwright-report.json', 'utf8'));
+            const walk = (suite) => {
+              for (const spec of suite.specs || []) {
+                for (const t of spec.tests || []) {
+                  const last = t.results[t.results.length - 1];
+                  if (!last || ['passed', 'skipped'].includes(last.status)) continue;
+                  const err = (last.error && last.error.message) || (last.errors && last.errors[0] && last.errors[0].message) || last.status;
+                  const lines = clean(err).split('\n').map((l) => l.trimEnd()).filter((l) => l.trim());
+                  failed.push({ file: spec.file, line: spec.line, title: spec.title, lines });
+                }
+              }
+              for (const child of suite.suites || []) walk(child);
+            };
+            for (const suite of report.suites || []) walk(suite);
+            stats = report.stats || {};
+            out.push(`## ${name}: ${failed.length} failed, ${stats.expected || 0} passed, ${stats.flaky || 0} flaky, ${stats.skipped || 0} skipped`, '');
+            if (failed.length) {
+              out.push('| File | Line | Test | First error line |', '|---|---|---|---|');
+              for (const f of failed) out.push(`| tests/${cell(f.file)} | ${f.line} | ${cell(f.title)} | ${cell(f.lines[0])} |`);
+            }
+          }
+          const markdown = out.join('\n') + '\n';
+          if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+          console.log(`::notice title=${property(name + ' summary')}::${message(markdown)}`);
+          for (const f of failed.slice(0, 10)) {
+            console.log(`::error file=${property('tests/' + f.file)},line=${f.line},title=${property(name + ': ' + f.title)}::${message(f.lines.slice(0, 12).join('\n'))}`);
+          }
+          if (failed.length > 10) console.log(`::notice title=${property(name)}::${failed.length - 10} more failed tests are listed in the job summary`);
+          EOF
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-results
-          path: test-results
+          path: |
+            test-results
+            playwright-report
+            playwright-report.json
           if-no-files-found: ignore
